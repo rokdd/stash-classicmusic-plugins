@@ -38,7 +38,14 @@ buildPlugin()
     popd > /dev/null
 
     name=$(grep "^name:" "$f" | head -n 1 | cut -d' ' -f2- | sed -e 's/\r//' -e 's/^"\(.*\)"$/\1/')
-    description=$(grep "^description:" "$f" | head -n 1 | cut -d' ' -f2- | sed -e 's/\r//' -e 's/^"\(.*\)"$/\1/')
+    # description may be a folded/literal block scalar (>- or |) spanning several lines; join into one line
+    description=$(awk '
+        /^description:/ { sub(/^description:[ \t]*/, ""); if ($0 ~ /^[>|][-+]?[ \t]*$/) { blk=1; next } else { out=$0; exit } }
+        blk && /^[ \t]+[^ \t]/ { sub(/^[ \t]+/, ""); out = (out=="" ? $0 : out " " $0); next }
+        blk { exit }
+        END { print out }' "$f" | sed -e 's/\r//' -e 's/^"\(.*\)"$/\1/')
+    # quote for YAML (descriptions may contain ": " and other special chars)
+    description=$(printf '%s' "$description" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
     ymlVersion=$(grep "^version:" "$f" | head -n 1 | cut -d' ' -f2- | sed -e 's/\r//' -e 's/^"\(.*\)"$/\1/')
     version="$ymlVersion-$version"
     IFS=$'\n' dep=$(grep "^# requires:" "$f" | cut -c 12- | sed -e 's/\r//')
@@ -47,11 +54,11 @@ buildPlugin()
     echo "- id: $plugin_id
   name: $name
   metadata:
-    description: $description
+    description: \"$description\"
   version: $version
   date: $updated
   path: $plugin_id.zip
-  sha256: $(sha256sum "$zipfile" | cut -d' ' -f1)" >> "$outdir"/index.yml
+  sha256: $( (sha256sum "$zipfile" 2>/dev/null || shasum -a 256 "$zipfile") | cut -d' ' -f1)" >> "$outdir"/index.yml
 
     # handle dependencies
     if [ ! -z "$dep" ]; then
