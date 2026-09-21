@@ -4,7 +4,7 @@ description: >-
   that marker's exact timestamp. Hidden until you hover the scrubber, so
   it stays out of the way otherwise. Click an icon to jump to that marker.
   A tag with no image uploaded gets a small default pin instead.
-version: 1.0.0
+version: 0.0.1
 url: https://github.com/yourname/stash-marker-improvements
 ui:
   javascript:

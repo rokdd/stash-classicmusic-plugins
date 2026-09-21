@@ -10,7 +10,7 @@ description: >-
   (3) Repair — detects a corrupt file by decoding it end to end, fixes it
   with a lossless remux first and a tolerant re-encode as a fallback, and
   is safe to run on a healthy file (reports nothing to do).
-version: 1.0.0
+version: 0.0.1
 url: https://github.com/yourname/stash-advanced-file-operations
 exec:
   - python
