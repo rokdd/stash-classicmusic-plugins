@@ -3,8 +3,11 @@
 Advanced File Operations — a Stash plugin.
 
 Three video tools for your Stash library:
-  - H265 conversion: re-encodes non-HEVC video to H.265 at a "visually
-    lossless" CRF setting, per-scene or across the whole library.
+  - H265 conversion: re-encodes non-HEVC video to H.265 at a chosen
+    quality (a preset or custom CRF), per-scene or across the whole
+    library. Per-scene, with "keep original" checked (the default), the
+    source file is never deleted — the new file is attached to the same
+    scene and set as its primary file, original kept as a secondary file.
   - Split at markers: cuts a scene's file into one new scene per chosen
     marker, carrying metadata and markers into each part.
   - Repair: detects corrupt files and fixes them, lossless remux first,
@@ -19,8 +22,8 @@ Install:
     3. `pip install requests` in the Python environment Stash calls
        (see requirements.txt).
     4. Reload plugins in Settings > Plugins. The H265 library tasks show
-       up under Settings > Tasks > Plugin Tasks; the per-scene buttons
-       (Convert to H265 / Split at Markers / Repair File) show up on each
+       up under Settings > Tasks > Plugin Tasks; a "File Operations" menu
+       (Convert to H265 / Split at Markers / Repair File) shows up on each
        scene's page.
 
 Notes on "without losing quality":
@@ -50,7 +53,20 @@ import requests
 
 # x265 CRF: 0 = lossless (huge files), ~18 = visually lossless, 23 = default,
 # 28 = noticeably softer. 18-20 is a good "don't lose quality" target.
+# Used when a conversion is triggered without a quality choice (e.g. the
+# library-wide Settings > Tasks entries, which have no per-run UI).
 CRF_VALUE = 18
+
+# Named quality presets offered by the "Convert to H265" dialog in
+# h265-ui.js (sent back as the `quality` arg) and by resolve_crf() below.
+# Keep these keys in sync with the <select> options in h265-ui.js.
+QUALITY_PRESETS = {
+    "highest": 16,             # largest files, essentially lossless to the eye
+    "visually_lossless": 18,   # recommended default — matches CRF_VALUE above
+    "balanced": 20,            # smaller files, minimal visible difference
+    "smaller": 23,             # x265's own default, noticeably more compression
+    "smallest": 28,            # maximum compression, visibly softer
+}
 
 # x265 preset: slower presets squeeze more quality/size out of the same CRF.
 # "slow" is a good quality/time tradeoff; use "medium" if conversions take
@@ -346,6 +362,53 @@ class StashClient:
             else:
                 raise
 
+    # -- multi-file scenes ------------------------------------------------
+    # Used to fold a "keep original" conversion's new file back onto the
+    # original scene (as its primary file) instead of leaving it stranded
+    # in the separate, metadata-less scene Stash auto-creates for any file
+    # it scans in that it doesn't already recognize.
+
+    def assign_file_to_scene(self, scene_id, file_id):
+        self.call(
+            """
+            mutation($scene_id: ID!, $file_id: ID!) {
+              sceneAssignFile(input: { scene_id: $scene_id, file_id: $file_id })
+            }
+            """,
+            {"scene_id": scene_id, "file_id": file_id},
+        )
+
+    def set_primary_file(self, scene_id, file_id):
+        self.call(
+            """
+            mutation($id: ID!, $file_id: ID!) {
+              sceneUpdate(input: { id: $id, primary_file_id: $file_id }) { id }
+            }
+            """,
+            {"id": scene_id, "file_id": file_id},
+        )
+
+    def cleanup_empty_scene(self, scene_id):
+        """
+        Best-effort delete of the now-fileless placeholder scene left behind
+        once its one file has been reassigned elsewhere. delete_file is
+        always False here — by this point the file already belongs to the
+        destination scene, so this only ever removes a DB row, never data.
+        Not fatal if it fails (already gone, unsupported schema, etc.) — a
+        stray empty scene is harmless clutter, not data loss.
+        """
+        try:
+            self.call(
+                """
+                mutation($id: ID!) {
+                  sceneDestroy(input: { id: $id, delete_file: false, delete_generated: true })
+                }
+                """,
+                {"id": scene_id},
+            )
+        except Exception as exc:  # noqa: BLE001
+            log_warn(f"Couldn't clean up empty placeholder scene {scene_id}: {exc}")
+
     def create_marker(self, scene_id, seconds, title, primary_tag_id, tag_ids):
         data = self.call(
             """
@@ -480,13 +543,44 @@ def probe_ok(path):
         return False
 
 
-def transcode_to_h265(src_path):
+def resolve_crf(args):
+    """
+    Resolves the CRF to encode at from plugin args. A named quality preset
+    (`quality`, one of QUALITY_PRESETS) takes precedence; a raw numeric
+    override (`crf`, 0-51) is used if there's no preset; otherwise falls
+    back to CRF_VALUE. An invalid value logs a warning and falls back
+    rather than failing the whole run.
+    """
+    quality = (args.get("quality") or "").strip().lower()
+    if quality:
+        if quality in QUALITY_PRESETS:
+            return QUALITY_PRESETS[quality]
+        log_warn(f"Unknown quality preset '{quality}', falling back to default CRF {CRF_VALUE}")
+        return CRF_VALUE
+
+    crf_arg = args.get("crf")
+    if crf_arg not in (None, ""):
+        try:
+            crf_value = int(crf_arg)
+            if 0 <= crf_value <= 51:
+                return crf_value
+            log_warn(f"crf value {crf_value} out of range (0-51), falling back to default CRF {CRF_VALUE}")
+        except (TypeError, ValueError):
+            log_warn(f"Invalid crf value '{crf_arg}', falling back to default CRF {CRF_VALUE}")
+
+    return CRF_VALUE
+
+
+def transcode_to_h265(src_path, crf=None):
     """
     Encodes src_path to H.265 in a temp file, then returns that temp path.
     Raises on failure. Caller is responsible for moving/cleaning up.
+    `crf` overrides CRF_VALUE for this encode (see resolve_crf()).
     """
     if not os.path.isfile(src_path):
         raise FileNotFoundError(src_path)
+
+    crf_value = CRF_VALUE if crf is None else crf
 
     tmp_dir = tempfile.gettempdir()
     fd, tmp_path = tempfile.mkstemp(suffix=OUTPUT_EXT, dir=tmp_dir)
@@ -498,7 +592,7 @@ def transcode_to_h265(src_path):
         "-map", "0:v:0", "-map", "0:a?", "-map", "0:s?",
         "-c:v", "libx265",
         "-preset", X265_PRESET,
-        "-crf", str(CRF_VALUE),
+        "-crf", str(crf_value),
         "-tag:v", "hvc1",          # keeps QuickTime/Apple players happy
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
@@ -506,7 +600,7 @@ def transcode_to_h265(src_path):
         tmp_path,
     ]
 
-    log_info(f"Transcoding: {src_path}")
+    log_info(f"Transcoding at CRF {crf_value}: {src_path}")
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0 or not os.path.isfile(tmp_path) or os.path.getsize(tmp_path) == 0:
         # Common fallback: source has a subtitle stream ffmpeg can't copy
@@ -516,7 +610,7 @@ def transcode_to_h265(src_path):
         cmd_no_subs = [
             FFMPEG_BIN, "-y", "-i", src_path,
             "-map", "0:v:0", "-map", "0:a?",
-            "-c:v", "libx265", "-preset", X265_PRESET, "-crf", str(CRF_VALUE),
+            "-c:v", "libx265", "-preset", X265_PRESET, "-crf", str(crf_value),
             "-tag:v", "hvc1", "-pix_fmt", "yuv420p",
             "-c:a", "copy",
             tmp_path,
@@ -559,12 +653,60 @@ def finalize_output(src_path, tmp_path, keep_original):
     return final_path, src_path
 
 
-def process_scene(client, scene, keep_original, done_tag_id):
+def link_converted_file_to_scene(client, scene, new_path):
+    """
+    After a "keep original" conversion, the new H265 file at new_path was
+    just scanned in as its own auto-created scene — Stash makes a fresh
+    scene for any file it scans that it doesn't already recognize, since a
+    re-encode has a different hash than the source. This finds that
+    placeholder scene, reassigns its file onto the *original* scene (so it
+    keeps its title/tags/markers/O-counter/etc.), sets that file as the
+    original scene's primary file, and cleans up the now-empty placeholder.
+
+    Returns True if the file ended up attached as the primary file, False
+    if anything went wrong — in which case the converted file is still
+    safely on disk and already scanned in (just as its own bare scene), so
+    nothing is lost; it only needs a manual "Set as primary" in Stash.
+    """
+    new_scene_id = client.find_scene_by_path(new_path)
+    if not new_scene_id:
+        log_warn(f"Converted file was scanned in, but couldn't find its placeholder scene to link it: {new_path}")
+        return False
+
+    try:
+        new_scene = client.get_scene(new_scene_id)
+        new_files = new_scene.get("files") or []
+        new_file_id = new_files[0]["id"] if new_files else None
+        if not new_file_id:
+            log_warn(f"Placeholder scene {new_scene_id} has no file id to link")
+            return False
+
+        client.assign_file_to_scene(scene["id"], new_file_id)
+        client.set_primary_file(scene["id"], new_file_id)
+        client.cleanup_empty_scene(new_scene_id)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log_warn(
+            f"Converted file is on disk and scanned in (as scene {new_scene_id}), but couldn't "
+            f"automatically attach it to scene {scene['id']} as the primary file ({exc}). "
+            f"Attach it yourself in Stash: open scene {scene['id']}'s editor, Files tab, "
+            f"add the file from scene {new_scene_id}, and set it as primary."
+        )
+        return False
+
+
+def process_scene(client, scene, keep_original, done_tag_id, crf=None):
     """
     Converts one scene's primary video file to H265 if it needs it.
     Returns a short status string: "converted" / "skipped" / "failed: <why>".
     Raises nothing — failures are reported in the return value so a batch
-    run can keep going.
+    run can keep going. `crf` overrides CRF_VALUE (see resolve_crf()).
+
+    keep_original never deletes the source file. When set, the new H265
+    file is written alongside it, attached to this same scene, and made
+    the scene's primary file (so playback/thumbnails switch to it) — the
+    original stays right where it was, just as a secondary file on the
+    scene rather than the primary one.
     """
     tag_names = {t["name"] for t in scene.get("tags", [])}
     if done_tag_id and tag_names and DONE_TAG_NAME in tag_names:
@@ -580,7 +722,7 @@ def process_scene(client, scene, keep_original, done_tag_id):
 
     src_path = video_file["path"]
     try:
-        tmp_path = transcode_to_h265(src_path)
+        tmp_path = transcode_to_h265(src_path, crf=crf)
         final_path, removed_path = finalize_output(src_path, tmp_path, keep_original)
 
         existing_tag_ids = [t["id"] for t in scene.get("tags", [])]
@@ -589,9 +731,22 @@ def process_scene(client, scene, keep_original, done_tag_id):
         rescan_paths = [final_path]
         if removed_path and removed_path != final_path:
             rescan_paths.append(os.path.dirname(removed_path))
-        client.rescan_paths(rescan_paths)
 
-        log_info(f"Converted scene {scene['id']}: {os.path.basename(src_path)}")
+        link_note = ""
+        if keep_original:
+            # Need the scan to actually finish before we can look up the
+            # placeholder scene it creates for the new file.
+            scan_and_wait(client, rescan_paths)
+            linked = link_converted_file_to_scene(client, scene, final_path)
+            link_note = (
+                " (new file set as primary; original kept as a secondary file)"
+                if linked
+                else " (converted file needs manual linking — see warning above)"
+            )
+        else:
+            client.rescan_paths(rescan_paths)
+
+        log_info(f"Converted scene {scene['id']}: {os.path.basename(src_path)}{link_note}")
         return "converted"
     except Exception as exc:  # noqa: BLE001
         log_error(f"Failed on scene {scene['id']} ({src_path}): {exc}")
@@ -998,7 +1153,8 @@ def run_convert_scene(client, args, done_tag_id):
         write_plugin_output(error="convert_scene mode requires a scene_id argument")
         return
 
-    log_info(f"Converting single scene {scene_id} to H265...")
+    crf = resolve_crf(args)
+    log_info(f"Converting single scene {scene_id} to H265 at CRF {crf}...")
     scene = client.get_scene(scene_id)
     if not scene:
         write_plugin_output(error=f"No scene found with id {scene_id}")
@@ -1006,7 +1162,7 @@ def run_convert_scene(client, args, done_tag_id):
 
     keep_original = str(args.get("keep_original", "false")).lower() == "true"
     log_progress(0.1)
-    status = process_scene(client, scene, keep_original, done_tag_id)
+    status = process_scene(client, scene, keep_original, done_tag_id, crf=crf)
     log_progress(1.0)
 
     if status == "converted":
@@ -1019,9 +1175,10 @@ def run_convert_scene(client, args, done_tag_id):
 
 def run_convert_library(client, args, done_tag_id):
     keep_original = str(args.get("keep_original", "false")).lower() == "true"
+    crf = resolve_crf(args)
 
     total = client.count_scenes()
-    log_info(f"Scanning {total} scenes for non-H265 video...")
+    log_info(f"Scanning {total} scenes for non-H265 video (CRF {crf})...")
 
     converted, skipped, failed = 0, 0, 0
     page, per_page = 1, 50
@@ -1037,7 +1194,7 @@ def run_convert_library(client, args, done_tag_id):
             if total:
                 log_progress(processed / total)
 
-            status = process_scene(client, scene, keep_original, done_tag_id)
+            status = process_scene(client, scene, keep_original, done_tag_id, crf=crf)
             if status == "converted":
                 converted += 1
             elif status == "skipped":

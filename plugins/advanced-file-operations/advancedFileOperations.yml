@@ -16,7 +16,7 @@ tasks:
       mode: convert_library
       keep_original: "false"
   - name: Convert Library to H265 (keep originals)
-    description: Same scan, but writes each converted file as "<name>.h265.mp4" next to the original instead of overwriting it.
+    description: Same scan, but writes each converted file as "<name>.h265.mp4" next to the original, attaches it to the same scene as the new primary file, and leaves the original in place as a secondary file — nothing is deleted.
     defaultArgs:
       mode: convert_library
       keep_original: "true"

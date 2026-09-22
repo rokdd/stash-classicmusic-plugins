@@ -25,13 +25,12 @@ database in sync afterward.
 
 Run either one. Progress and a running log show up in the task UI.
 
-## Converting a single scene from its page
+## The File Operations menu
 
-Besides the two library-wide tasks, opening any scene now shows a
-**Convert to H265** button. Click it to queue a conversion for just that
-one file (it defaults to "replace original"; edit `keep_original` in
-`h265-ui.js`'s `runConvertScene` call if you'd rather keep both files for
-manual, one-off conversions too).
+Besides the two library-wide tasks, opening any scene now shows a single
+**File Operations** button (scissors icon) in the scene toolbar. Click it
+to open a dropdown with three actions: **Convert to H265**, **Split at
+Markers…**, and **Repair File** — described individually below.
 
 The button tries to slot itself into Stash's own toolbar. Since Stash's
 internal page structure can differ by version, if you only ever see it as a
@@ -41,10 +40,40 @@ element wrapping Stash's own toolbar buttons, and add its CSS selector to
 `TOOLBAR_SELECTORS` near the top of `h265-ui.js`. Either way, clicking it
 works the same — it's purely cosmetic which container it ends up in.
 
+## Converting a single scene from its page
+
+Choose **Convert to H265…** from the File Operations menu. A dialog opens
+first, letting you pick:
+
+- **Quality** — a preset (Highest / Visually lossless / Balanced / Smaller
+  / Smallest, each mapping to an x265 CRF value) or **Custom CRF…** to type
+  an exact 0-51 value.
+- **Keep original file** — checked by default. With it checked, the
+  original is never deleted: the new H265 file is written alongside it,
+  attached to the *same* scene, and set as that scene's primary file —
+  everything else (title, tags, performers, markers, O-counter, rating,
+  galleries) stays put since it's still the same scene, just with a
+  different file now used for playback. Unchecking it goes back to the
+  old "replace" behavior: the original is overwritten in place and gone
+  for good.
+
+The item is greyed out ("already H265") if the scene's file already reports
+codec `hevc`/`h265`/`x265`, or already carries the `H265 Converted` tag —
+there's nothing for it to do in that case. (This is a client-side
+shortcut for convenience; the task itself re-checks the same thing
+server-side regardless.)
+
+If the automatic "set as primary" linking ever fails (an older Stash
+version without multi-file-scene support, a schema mismatch, etc.), the
+task log says so explicitly — the converted file is always safely on disk
+and already scanned into Stash by that point, it just needs one manual
+"Set as primary" click in the scene's Files tab instead of happening on
+its own.
+
 ## Splitting a scene at its markers
 
-Every scene page also gets a **Split at Markers…** button. Clicking it
-opens a small dialog listing every marker on the scene as a checkbox —
+Choose **Split at Markers…** from the File Operations menu. It opens a
+small dialog listing every marker on the scene as a checkbox —
 check the ones you want to cut at, leave the rest unchecked. Markers you
 leave unchecked aren't lost: they're still carried over into whichever
 part they land in, just not used as a cut point. The dialog also has
@@ -86,9 +115,9 @@ Two things worth knowing:
 
 ## Repairing a corrupt file
 
-Every scene page also gets a **Repair File** button. It's safe to click on
-anything — it always checks first, and if the file decodes cleanly it just
-reports "nothing to repair" and stops there.
+Choose **Repair File** from the File Operations menu. It's safe to click
+on anything — it always checks first, and if the file decodes cleanly it
+just reports "nothing to repair" and stops there.
 
 If it finds decode errors, it tries two things in order:
 
@@ -113,28 +142,36 @@ step decodes the entire file, so it can take a while on a long video.
 
 ## What it does
 
-- Pages through every scene in your library.
+- Pages through every scene in your library (or just the one scene, for a
+  per-scene conversion).
 - Skips a scene if its first video file already reports codec `hevc`/`h265`,
   or if the scene already carries the `H265 Converted` tag.
-- Otherwise runs:
+- Otherwise runs (CRF 18 shown; the actual value depends on the quality
+  you picked, or `CRF_VALUE` below for the library-wide tasks, which have
+  no per-run quality picker):
   ```
   ffmpeg -i <src> -c:v libx265 -preset slow -crf 18 -tag:v hvc1 \
          -pix_fmt yuv420p -c:a copy -c:s copy <output>
   ```
-- On success, either overwrites the original file or writes
-  `<name>.h265.mp4` alongside it (your choice of task), tags the scene
-  `H265 Converted`, and triggers a rescan so Stash re-reads the new file's
-  metadata.
+- On success, tags the scene `H265 Converted`, then either:
+  - **replaces the original** (overwrites it in place), or
+  - **keeps the original**: writes `<name>.h265.mp4` alongside it, scans
+    it in, attaches it to the same scene, and sets it as that scene's
+    primary file — the original stays on the scene as a secondary file,
+    never deleted.
 - Logs a per-file error and moves on if a given file fails, rather than
   aborting the whole run.
 
 ## Tuning
 
-Open `h265_transcode.py` and adjust the constants near the top:
+For a one-off scene, quality is a menu away — no editing needed (see
+above). For everything else, open `h265_transcode.py` and adjust the
+constants near the top:
 
 | Constant | Effect |
 |---|---|
-| `CRF_VALUE` | Lower = closer to source quality, bigger files. 18 is a good "don't lose quality" target; try 20-22 if you want more compression and can tolerate a very slight softness. |
+| `CRF_VALUE` | Default CRF used by the library-wide Settings > Tasks entries (which have no per-run quality picker) and as the fallback if a `quality`/`crf` arg is missing or invalid. 18 is a good "don't lose quality" target; try 20-22 if you want more compression and can tolerate a very slight softness. |
+| `QUALITY_PRESETS` | The named presets offered in the "Convert to H265…" dialog's quality dropdown. Add, remove, or re-tune entries here — just keep the `QUALITY_OPTIONS` list in `h265-ui.js` in sync with the keys. |
 | `X265_PRESET` | Slower presets (`slow`, `veryslow`) squeeze more quality out of the same CRF but take longer. `medium` is faster if your hardware is the bottleneck. |
 | `DONE_TAG_NAME` | Change the marker tag name if you want something else. |
 
