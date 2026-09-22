@@ -1,15 +1,5 @@
 name: Advanced File Operations
-description: >-
-  Per-scene and library video tools for Stash. Functions:
-  (1) H265 conversion — re-encodes non-HEVC video to H.265 at a visually
-  lossless CRF, run against the whole library or a single scene, skipping
-  anything already converted;
-  (2) Split at markers — cuts one scene's file into a new scene per chosen
-  marker, carrying title, details, date, studio, performers, tags,
-  URLs/StashDB IDs and the relevant markers into each part;
-  (3) Repair — detects a corrupt file by decoding it end to end, fixes it
-  with a lossless remux first and a tolerant re-encode as a fallback, and
-  is safe to run on a healthy file (reports nothing to do).
+description: "Per-scene and library video tools for Stash — H265 conversion (re-encodes non-HEVC video to H.265 at a visually lossless CRF, skipping anything already converted), Split at markers (cuts a scene's file into a new scene per chosen marker, carrying title, details, date, studio, performers, tags, URLs/StashDB IDs and the relevant markers into each part), and Repair (detects a corrupt file by decoding it end to end, fixes it with a lossless remux or a tolerant re-encode, and is safe to run on a healthy file)."
 version: 0.0.1
 url: https://github.com/yourname/stash-advanced-file-operations
 exec:
