@@ -12,7 +12,7 @@ _This assumes you already know how to create plugins for Stash. If you don't, fi
 
 Now add your plugins to [plugins](/plugins) directory and they will be automatically published to the source index.
 
-Source index URL: [`https://<your-username>.github.io/<repository-name>/main/index.yml`](https://<your-username>.github.io/<repository-name>/main/index.yml)
+Source index URL: [`https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml`](https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml)
 
 ## Share your plugins
 
