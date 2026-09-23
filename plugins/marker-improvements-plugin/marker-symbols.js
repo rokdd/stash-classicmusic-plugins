@@ -49,7 +49,7 @@
 (function () {
   "use strict";
 
-  const ICON_SIZE_PX = 22;
+  const ICON_SIZE_PX = 44;
   const MARKER_RANGE_SELECTOR = ".vjs-marker-range";
 
   const MAX_PLACEMENT_RETRIES = 20;
@@ -195,6 +195,7 @@
       "transform:translateX(-50%)",
       "margin-bottom:6px",
       "display:flex",
+      "flex-direction:column",
       "align-items:center",
       "gap:2px",
       "padding:3px 4px",
@@ -247,6 +248,7 @@
         "object-fit:cover",
         "border-radius:4px",
         "border:1px solid rgba(255,255,255,0.85)",
+        "mix-blend-mode:multiply",
       ].join(";");
       img.addEventListener("click", jumpToMarker);
       // If this particular tag's image fails to load, just drop it — the
