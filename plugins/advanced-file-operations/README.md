@@ -5,6 +5,8 @@ split a scene at its markers, and repair a corrupt file. ffmpeg does all
 the work; this plugin drives it from inside Stash and keeps Stash's
 database in sync afterward.
 
+Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/advanced-file-operations
+
 ## Install
 
 1. Copy the whole `advanced-file-operations` folder into your Stash `plugins`
