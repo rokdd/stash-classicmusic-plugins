@@ -199,7 +199,11 @@
       "align-items:center",
       "gap:2px",
       "padding:3px 4px",
-      "background:rgba(20,20,20,0.92)",
+      // Light background: mix-blend-mode:multiply on the images (below)
+      // only reads correctly against a light backdrop — a white/light
+      // area behind an image blends away cleanly, while a dark one just
+      // crushes the whole image toward black.
+      "background:rgba(255,255,255,0.92)",
       "border-radius:8px",
       "box-shadow:0 2px 6px rgba(0,0,0,0.55)",
       // Always visible/interactive — this is a real child of the marker's
@@ -223,7 +227,7 @@
       "width:8px",
       "height:8px",
       "margin:-4px 0 0 -4px",
-      "background:rgba(20,20,20,0.92)",
+      "background:rgba(255,255,255,0.92)",
       "transform:rotate(45deg)",
       "pointer-events:none",
     ].join(";");
@@ -247,7 +251,7 @@
         `height:${ICON_SIZE_PX}px`,
         "object-fit:cover",
         "border-radius:4px",
-        "border:1px solid rgba(255,255,255,0.85)",
+        "border:1px solid rgba(0,0,0,0.2)",
         "mix-blend-mode:multiply",
       ].join(";");
       img.addEventListener("click", jumpToMarker);
