@@ -7,6 +7,8 @@ marker. Pure frontend — no Python, no ffmpeg, nothing to configure
 server-side or in a settings dialog: the icons come straight from
 whatever images you've already got on each tag in Stash.
 
+Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
+
 ## Install
 
 1. Copy the whole `marker-improvements-plugin` folder into your Stash `plugins`

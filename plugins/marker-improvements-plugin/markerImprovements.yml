@@ -1,7 +1,7 @@
 name: Marker Improvements
-description: "Shows each scene marker's tag image on the video scrubber, positioned at that marker's exact timestamp. Hidden until you hover the scrubber, so it stays out of the way otherwise. Click an icon to jump to that marker. A tag with no image uploaded gets a small default pin instead."
+description: "Shows every one of a scene marker's tags that has an image, positioned at that marker's exact timestamp on the video scrubber. Hidden until the scrubber is hovered, dragged, touched, or focused, so it stays out of the way otherwise. Click an icon to jump to that marker."
 version: 0.0.1
-url: https://github.com/yourname/stash-marker-improvements
+url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 ui:
   javascript:
     - marker-symbols.js
