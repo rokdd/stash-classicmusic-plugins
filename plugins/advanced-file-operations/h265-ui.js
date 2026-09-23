@@ -429,9 +429,9 @@
   // asset/CDN dependency. currentColor means it follows Stash's own
   // toolbar button text color in both light and dark themes.
   const SCISSORS_ICON_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" ' +
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" ' +
     'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
-    'style="vertical-align:-2px;margin-right:6px;flex:none;">' +
+    'style="display:block;flex:none;">' +
     '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle>' +
     '<line x1="20" y1="4" x2="8.12" y2="15.88"></line>' +
     '<line x1="14.47" y1="14.48" x2="20" y2="20"></line>' +
@@ -508,7 +508,9 @@
     toggle.id = "h265-ops-toggle";
     toggle.className = "btn btn-secondary";
     toggle.title = "File operations — convert to H265, split at markers, or repair this scene's file";
-    toggle.innerHTML = SCISSORS_ICON_SVG + "File Operations";
+    toggle.setAttribute("aria-label", "File operations");
+    toggle.style.cssText = "display:inline-flex;align-items:center;justify-content:center;padding-left:10px;padding-right:10px;";
+    toggle.innerHTML = SCISSORS_ICON_SVG;
 
     const menu = document.createElement("div");
     menu.id = "h265-ops-menu";
@@ -552,7 +554,7 @@
       .then((info) => {
         if (!info.hasFile || !isAlreadyH265(info) || convertItem.disabled) return;
         convertItem.disabled = true;
-        convertItem.textContent = "Convert to H265 (already H265)";
+        convertItem.textContent = "Already H265";
         convertItem.title = "This scene's file is already H265/HEVC (or already tagged \"H265 Converted\") — nothing to convert.";
         convertItem.style.opacity = "0.5";
         convertItem.style.cursor = "not-allowed";
