@@ -1,11 +1,11 @@
 # Marker Improvements (Stash plugin)
 
-Puts each scene marker's tag images on the video scrubber, at that
-marker's exact timestamp, hidden until you hover, drag, touch, or
-keyboard-focus the scrubber. Click an icon to jump straight to that
-marker. Pure frontend — no Python, no ffmpeg, nothing to configure
-server-side or in a settings dialog: the icons come straight from
-whatever images you've already got on each tag in Stash.
+Puts each scene marker's tag images directly inside Stash's own colored
+marker indicator on the video scrubber, hidden until you hover, drag,
+touch, or keyboard-focus that specific indicator. Click an icon to jump
+straight to that marker. Pure frontend — no Python, no ffmpeg, nothing to
+configure server-side or in a settings dialog: the icons come straight
+from whatever images you've already got on each tag in Stash.
 
 Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 
@@ -15,7 +15,8 @@ Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/ma
    directory (same place as any other plugin — Settings → Plugins shows
    the exact path).
 2. Settings → Plugins → **Reload plugins**.
-3. Open any scene with markers and hover (or drag/touch) the scrubber.
+3. Open any scene with markers and hover (or drag/touch) one of the
+   colored marker indicators on the scrubber.
 
 ## Icons
 
@@ -28,65 +29,66 @@ have an image (or it has no tags at all) gets no icon at all — there's no
 generic placeholder pin. If one particular tag's image URL fails to load,
 just that one icon is dropped — its other tag icons are unaffected.
 
-## Hidden until the scrubber is in use
+## Where the symbols show up
 
-The icons are invisible during normal playback and appear when the
-scrubber is:
+Directly inside Stash's own colored marker indicator for that marker —
+the small tinted bar (class `.vjs-marker-range`) Stash itself draws on
+the scrubber at each marker's timestamp. The icon is an actual child of
+that element, not a separate overlay layered on top, and its border/glow
+is tinted to match that indicator's own color so it reads as part of the
+colored bar.
+
+A `.vjs-marker-range` element is usually only a few px tall, and can clip
+its own content (`overflow: hidden`) for a rounded-track look — which
+would otherwise cut a 22px icon down to an invisible sliver. Rather than
+avoiding that by rendering somewhere else, this forces
+`overflow: visible` on it and any clipping ancestor up to the player
+(restored on navigating away), so the icon genuinely lives inside that
+bar and just pokes slightly above/below its thin box.
+
+### How markers are matched to their indicator
+
+Stash doesn't expose which `.vjs-marker-range` belongs to which marker by
+id or attribute, so this pairs them up by left-to-right order: every
+`.vjs-marker-range` found, sorted by its own position along the bar,
+against every marker from GraphQL, sorted by timestamp — index 0 of one
+with index 0 of the other, and so on. Both lists are normally in the same
+order and the same length once the player's finished setting up, so this
+works reliably in practice.
+
+If the counts don't match — the player hasn't drawn its marker ranges yet
+when this first runs, or a future Stash version changes how these are
+exposed — the console warns about it and only pairs up the matching
+prefix; the plugin also waits and retries (up to 20 times, 500ms apart)
+if it finds zero `.vjs-marker-range` elements at all rather than giving
+up immediately. If Stash ever renames the class, update
+`MARKER_RANGE_SELECTOR` near the top of `marker-symbols.js`.
+
+## Hidden until that marker's indicator is in use
+
+Each icon is invisible during normal playback and appears when its own
+`.vjs-marker-range` is:
 
 - **hovered** — mouse enters it,
 - **actively dragged** — mouse/touch held down, even if the drag continues
-  past the edge of the bar itself,
+  past its edge,
 - **touched** — touch devices have no hover state at all, so this is what
-  makes the icons reachable on mobile, or
+  makes the icon reachable on mobile, or
 - **keyboard-focused** — tabbing to it.
 
-They fade back out once none of those are true anymore. While hidden,
-they also don't intercept clicks, so the icons being gone doesn't change
-how seeking on the bar behaves.
+It fades back out once none of those are true anymore for that
+indicator. While hidden, it also doesn't intercept clicks, so the icon
+being gone doesn't change how seeking on the bar behaves.
 
-## Where the symbols show up
+## Diagnostics
 
-Directly inside the real video scrubber — the icons are appended as
-actual children of it, positioned proportionally along it by each
-marker's timestamp, not a separate element merely layered on top. Which
-exact element counts as "the scrubber" varies a little by Stash version,
-so this tries a short list of known selectors first; if none of them
-match yours, it falls back to drawing its own thin hover-reveal bar
-directly under the video instead (still clickable, still correctly
-positioned, just not part of Stash's own control bar).
-
-If you get the fallback bar and want it merged into your actual scrubber:
-open devtools on a scene page, click into the seek bar's element in the
-inspector to find the right container, and add its CSS selector to
-`SCRUBBER_SELECTORS` near the top of `marker-symbols.js`. The console logs
-which one it's using (`[Marker Symbols] Rendering directly on the real
-scrubber` or a warning about the fallback), so you can check that instead
-of guessing from what you see on screen.
-
-The real scrubber's own track is usually only a few px tall, and some
-themes clip its content (`overflow: hidden`) for a rounded-track look —
-which would otherwise cut a 22px icon down to an invisible sliver. Rather
-than avoiding that by rendering somewhere else, this forces
-`overflow: visible` on the scrubber and any clipping ancestor up to the
-player (restored on navigating away), so the icons genuinely live inside
-the seek bar and just poke slightly above/below its own thin box.
-
-### Mounted onto Stash's own colored marker indicators
-
-Stash draws its own small colored marker indicator per marker on the
-scrubber (class `.vjs-marker-range`, a thin tinted bar positioned at its
-timestamp). Each tag icon is mounted directly inside the matching
-indicator — matched by comparing positions, since both are computed from
-the same seconds/duration math — and its border/glow is tinted to that
-indicator's own color, so it reads as part of the colored bar rather than
-something dropped on top of it. A marker whose indicator can't be matched
-(or on a player version that doesn't draw these at all, or if the class
-name changes in a future Stash version) still gets its icon positioned by
-percentage along the scrubber as before, so nothing's ever silently
-dropped — update `NATIVE_MARKER_SELECTORS` near the top of
-`marker-symbols.js` if that ever happens. The console line says how many
-it found: `(N/M icon(s) mounted onto Stash's own .vjs-marker-range
-indicators)`.
+Every time markers are placed, the console logs a table
+(`[Marker Symbols] Tag image plan — ...`) of every marker's tags and
+whether each one qualifies for an icon — check that against what actually
+renders if something looks off (a tag showing `false` there has no real
+custom image, so it's correctly excluded, not a bug). A second line says
+how many `.vjs-marker-range` elements were found vs. how many markers
+came back from Stash, and how many icons actually got mounted.
 
 ## Notes
 
