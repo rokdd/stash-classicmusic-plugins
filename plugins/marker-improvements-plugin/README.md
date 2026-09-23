@@ -1,10 +1,11 @@
 # Marker Improvements (Stash plugin)
 
-Puts each scene marker's tag image on the video scrubber, at that marker's
-exact timestamp, hidden until you hover the scrubber. Click an icon to
-jump straight to that marker. Pure frontend — no Python, no ffmpeg,
-nothing to configure server-side or in a settings dialog: the icons come
-straight from whatever image you've already got on each tag in Stash.
+Puts each scene marker's tag images on the video scrubber, at that
+marker's exact timestamp, hidden until you hover, drag, touch, or
+keyboard-focus the scrubber. Click an icon to jump straight to that
+marker. Pure frontend — no Python, no ffmpeg, nothing to configure
+server-side or in a settings dialog: the icons come straight from
+whatever images you've already got on each tag in Stash.
 
 ## Install
 
@@ -12,22 +13,34 @@ straight from whatever image you've already got on each tag in Stash.
    directory (same place as any other plugin — Settings → Plugins shows
    the exact path).
 2. Settings → Plugins → **Reload plugins**.
-3. Open any scene with markers and hover the scrubber.
+3. Open any scene with markers and hover (or drag/touch) the scrubber.
 
 ## Icons
 
-Each marker's icon is its primary tag's own image — the one you can
-upload from that tag's page in Stash. A marker whose tag has no image
-(or has no primary tag at all) gets a small default 📍 instead of nothing.
-If a tag's image URL fails to load for some reason, it falls back to that
-same default pin rather than showing a broken-image icon.
+Each marker shows one icon per tag on it that actually has an image
+uploaded — the one you can upload from that tag's page in Stash — not
+just its primary tag. If a marker has three tags and two of them have
+images, you get two icons clustered together at that marker's position;
+hover each one to see which tag it is. A marker where none of its tags
+have an image (or it has no tags at all) gets no icon at all — there's no
+generic placeholder pin. If one particular tag's image URL fails to load,
+just that one icon is dropped — its other tag icons are unaffected.
 
-## Hover to reveal
+## Hidden until the scrubber is in use
 
-The icons are invisible until your mouse enters the scrubber, and fade
-back out when it leaves — this is deliberate, so they don't clutter the
-player during normal playback. While hidden, they also don't intercept
-clicks, so hovering away doesn't change how seeking on the bar behaves.
+The icons are invisible during normal playback and appear when the
+scrubber is:
+
+- **hovered** — mouse enters it,
+- **actively dragged** — mouse/touch held down, even if the drag continues
+  past the edge of the bar itself,
+- **touched** — touch devices have no hover state at all, so this is what
+  makes the icons reachable on mobile, or
+- **keyboard-focused** — tabbing to it.
+
+They fade back out once none of those are true anymore. While hidden,
+they also don't intercept clicks, so the icons being gone doesn't change
+how seeking on the bar behaves.
 
 ## Where the symbols show up
 
@@ -42,7 +55,16 @@ bar).
 If you get the fallback bar and want it merged into your actual scrubber:
 open devtools on a scene page, click into the seek bar's element in the
 inspector to find the right container, and add its CSS selector to
-`SCRUBBER_SELECTORS` near the top of `marker-symbols.js`.
+`SCRUBBER_SELECTORS` near the top of `marker-symbols.js`. The console logs
+which one it's using (`[Marker Symbols] Rendering on the real scrubber`
+or a warning about the fallback), so you can check that instead of
+guessing from what you see on screen.
+
+On the real scrubber, the icon cluster is sized/positioned to match the
+scrubber's own bounding box, but tall enough to fit full-size icons even
+if the actual track is only a few px tall — it's not appended as a child
+of the track itself, so a short and/or `overflow:hidden` track can't clip
+the icons down to invisible slivers.
 
 ## Notes
 
