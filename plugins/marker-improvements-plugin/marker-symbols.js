@@ -1,14 +1,21 @@
 // Marker Improvements — UI addon
 //
-// For each scene marker, shows one small image per tag on it that has a
-// real custom image uploaded (Settings on a tag page lets you upload
-// one) — mounted directly inside Stash's own colored marker indicator on
-// the video scrubber (class `.vjs-marker-range`, one per marker) and
-// tinted to match its color. It's a real, permanent child of that
-// indicator, so it shows and hides right along with it — whatever Stash
-// itself does to reveal that indicator (e.g. hovering the scrubber) is
-// what reveals the icon too, no separate interaction of its own needed.
-// Click an icon to jump straight to that marker.
+// For each scene marker, shows a small "bubble" — one image per tag on it
+// that has a real custom image uploaded (Settings on a tag page lets you
+// upload one) — floating centered above Stash's own colored marker
+// indicator on the video scrubber (class `.vjs-marker-range`, one per
+// marker), with a little tail pointing back down at it and tinted to
+// match its color. It's a real, permanent child of that indicator, so it
+// shows and hides right along with it — whatever Stash itself does to
+// reveal that indicator (e.g. hovering the scrubber) is what reveals the
+// bubble too, no separate interaction of its own needed. Click an icon to
+// jump straight to that marker.
+//
+// Since a .vjs-marker-range is React-managed and knows nothing about the
+// icon manually injected into it, a seek (which clicking an icon causes)
+// can trigger Stash to re-render its marker overlay and wipe that icon
+// out as a side effect. ensureSeekRecovery() watches for that per <video>
+// element and re-mounts whenever an icon has actually gone missing.
 //
 // How markers are matched to their indicator:
 //   Stash draws one `.vjs-marker-range` element per scene marker on the
@@ -110,6 +117,10 @@
   // {el, prop, original} for every inline overflow style unclipAncestors()
   // overrode, so clearOverlay() can put each one back exactly as found.
   let overflowOverrides = [];
+  // Last markers fetched for the current scene, kept around so the seek
+  // recovery below (see ensureSeekRecovery) can re-mount without another
+  // GraphQL round trip.
+  let lastMarkers = null;
 
   function clearOverlay() {
     mountedIcons.forEach((el) => el.remove());
@@ -163,13 +174,12 @@
     return dedupedTags(marker).filter(hasCustomImage);
   }
 
-  // Builds the little cluster of icons for one marker: one image per tag
-  // on it that has an image uploaded (primary tag included). Returns null
-  // if none of its tags have an image — that marker just gets no icon,
-  // rather than a generic placeholder. Always mounted at the very start
-  // (left:0%) of whatever .vjs-marker-range it ends up inside, since a
-  // "range" extends rightward from the marker's own timestamp — its own
-  // translate(-50%,-50%) centers the icon symmetrically over that point.
+  // Builds a small "bubble" for one marker: one image per tag on it that
+  // has an image uploaded (primary tag included), floating centered above
+  // its .vjs-marker-range container with a little tail pointing back down
+  // at it — like a tooltip callout rather than plain icons sitting flush
+  // on the bar. Returns null if none of its tags have an image — that
+  // marker just gets no bubble, rather than a generic placeholder.
   function makeMarkerIcons(marker, video) {
     const tags = tagsWithImages(marker);
     if (tags.length === 0) return null;
@@ -177,15 +187,20 @@
     const primaryName = (marker.primary_tag && marker.primary_tag.name) || "";
     const baseLabel = `${formatTime(marker.seconds)} — ${marker.title || primaryName || "marker"}`;
 
-    const group = document.createElement("div");
-    group.style.cssText = [
+    const bubble = document.createElement("div");
+    bubble.style.cssText = [
       "position:absolute",
-      "left:0",
-      "top:50%",
-      "transform:translate(-50%,-50%)",
+      "left:50%",
+      "bottom:100%",
+      "transform:translateX(-50%)",
+      "margin-bottom:6px",
       "display:flex",
       "align-items:center",
       "gap:2px",
+      "padding:3px 4px",
+      "background:rgba(20,20,20,0.92)",
+      "border-radius:8px",
+      "box-shadow:0 2px 6px rgba(0,0,0,0.55)",
       // Always visible/interactive — this is a real child of the marker's
       // own .vjs-marker-range now, so it shows and hides right along with
       // that indicator (however Stash itself decides to show it) rather
@@ -196,6 +211,22 @@
       // otherwise make this unclickable too.
       "pointer-events:auto",
     ].join(";");
+
+    // The tail: a small square rotated 45° so one corner points straight
+    // down at the marker, half-overlapping the bubble's own bottom edge.
+    const tail = document.createElement("div");
+    tail.style.cssText = [
+      "position:absolute",
+      "left:50%",
+      "top:100%",
+      "width:8px",
+      "height:8px",
+      "margin:-4px 0 0 -4px",
+      "background:rgba(20,20,20,0.92)",
+      "transform:rotate(45deg)",
+      "pointer-events:none",
+    ].join(";");
+    bubble.appendChild(tail);
 
     const jumpToMarker = (e) => {
       e.stopPropagation();
@@ -216,16 +247,15 @@
         "object-fit:cover",
         "border-radius:4px",
         "border:1px solid rgba(255,255,255,0.85)",
-        "box-shadow:0 0 4px rgba(0,0,0,0.85)",
       ].join(";");
       img.addEventListener("click", jumpToMarker);
       // If this particular tag's image fails to load, just drop it — the
       // marker's other tag images (if any) are unaffected.
       img.addEventListener("error", () => img.remove());
-      group.appendChild(img);
+      bubble.appendChild(img);
     });
 
-    return group;
+    return bubble;
   }
 
   // A .vjs-marker-range element — and sometimes an ancestor of it too —
@@ -309,6 +339,26 @@
     tick.appendChild(iconGroupEl);
   }
 
+  // .vjs-marker-range is a React-managed element that knows nothing about
+  // the icon we manually injected into it. Clicking an icon seeks the
+  // video (see jumpToMarker in makeMarkerIcons), and Stash re-rendering
+  // its marker overlay in response to that (e.g. to update which marker
+  // is "active") can wipe our injected children out from under us as a
+  // side effect, even though nothing we did asked for that. This binds a
+  // one-time "seeked" listener per <video> element that re-mounts
+  // whenever any of our icons has actually gone missing from the DOM.
+  function ensureSeekRecovery(video) {
+    if (video.__markerSymbolsSeekBound) return;
+    video.__markerSymbolsSeekBound = true;
+    video.addEventListener("seeked", () => {
+      if (!lastMarkers || !lastMarkers.length) return;
+      if (mountedIcons.length && mountedIcons.some((el) => !el.isConnected)) {
+        clearOverlay();
+        mountIconsOnMarkerRanges(video, lastMarkers);
+      }
+    });
+  }
+
   // Pairs every .vjs-marker-range found (sorted left-to-right) against
   // every marker from Stash (sorted by timestamp), index for index, and
   // mounts each marker's icon(s) into its matched element.
@@ -385,6 +435,8 @@
       return;
     }
 
+    lastMarkers = markers;
+    ensureSeekRecovery(video);
     clearOverlay();
     mountIconsOnMarkerRanges(video, markers);
   }

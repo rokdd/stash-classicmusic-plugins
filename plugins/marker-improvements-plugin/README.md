@@ -1,12 +1,12 @@
 # Marker Improvements (Stash plugin)
 
-Puts each scene marker's tag images directly inside Stash's own colored
-marker indicator on the video scrubber — a real child of that indicator,
-so it shows and hides right along with it, however Stash itself reveals
-markers on the scrubber. Click an icon to jump straight to that marker.
-Pure frontend — no Python, no ffmpeg, nothing to configure server-side or
-in a settings dialog: the icons come straight from whatever images you've
-already got on each tag in Stash.
+Puts each scene marker's tag images in a small bubble floating above
+Stash's own colored marker indicator on the video scrubber — a real child
+of that indicator, so it shows and hides right along with it, however
+Stash itself reveals markers on the scrubber. Click an icon to jump
+straight to that marker. Pure frontend — no Python, no ffmpeg, nothing to
+configure server-side or in a settings dialog: the icons come straight
+from whatever images you've already got on each tag in Stash.
 
 Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 
@@ -35,10 +35,11 @@ are unaffected.
 
 Directly inside Stash's own colored marker indicator for that marker —
 the small tinted bar (class `.vjs-marker-range`) Stash itself draws on
-the scrubber at each marker's timestamp. The icon is an actual child of
-that element, not a separate overlay layered on top, and its border/glow
-is tinted to match that indicator's own color so it reads as part of the
-colored bar.
+the scrubber at each marker's timestamp. The bubble is an actual child of
+that element (not a separate overlay layered on top), floats centered
+above it with a small tail pointing back down at it, and each icon's
+border/glow is tinted to match that indicator's own color so it reads as
+belonging to that colored bar.
 
 A `.vjs-marker-range` element is usually only a few px tall, and can clip
 its own content (`overflow: hidden`) for a rounded-track look — which
@@ -74,6 +75,18 @@ prefix; the plugin also waits and retries (up to 20 times, 500ms apart)
 if it finds zero `.vjs-marker-range` elements at all rather than giving
 up immediately. If Stash ever renames the class, update
 `MARKER_RANGE_SELECTOR` near the top of `marker-symbols.js`.
+
+## If an icon disappears after clicking it
+
+Clicking an icon seeks the video to that marker's timestamp. Since
+`.vjs-marker-range` is a React-managed element that knows nothing about
+the icon manually injected into it, Stash re-rendering its marker overlay
+in response to that seek (e.g. to update which marker is "active") can
+wipe the icon out as a side effect — not because this plugin removed it.
+A `seeked` listener on the video watches for exactly that and re-mounts
+automatically whenever an icon has actually gone missing from the DOM, so
+this should self-heal within a moment; if it doesn't, that's worth
+reporting.
 
 ## Diagnostics
 
