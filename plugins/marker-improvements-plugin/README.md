@@ -73,17 +73,20 @@ the seek bar and just poke slightly above/below its own thin box.
 
 ### Mounted onto Stash's own colored marker indicators
 
-If your Stash version draws its own small colored marker indicators on
-the scrubber (a thin tinted bar per marker, positioned at its timestamp),
-each tag icon is mounted directly inside the matching indicator — matched
-by comparing positions, since both are computed from the same
-seconds/duration math — and its border/glow is tinted to that indicator's
-own color, so it reads as part of the colored bar rather than something
-dropped on top of it. A marker whose indicator can't be matched (or on a
-player version that doesn't draw these at all) still gets its icon
-positioned by percentage along the scrubber as before, so nothing's ever
-silently dropped. The console line says how many it found:
-`(N/M icon(s) mounted onto Stash's own native marker indicators)`.
+Stash draws its own small colored marker indicator per marker on the
+scrubber (class `.vjs-marker-range`, a thin tinted bar positioned at its
+timestamp). Each tag icon is mounted directly inside the matching
+indicator — matched by comparing positions, since both are computed from
+the same seconds/duration math — and its border/glow is tinted to that
+indicator's own color, so it reads as part of the colored bar rather than
+something dropped on top of it. A marker whose indicator can't be matched
+(or on a player version that doesn't draw these at all, or if the class
+name changes in a future Stash version) still gets its icon positioned by
+percentage along the scrubber as before, so nothing's ever silently
+dropped — update `NATIVE_MARKER_SELECTORS` near the top of
+`marker-symbols.js` if that ever happens. The console line says how many
+it found: `(N/M icon(s) mounted onto Stash's own .vjs-marker-range
+indicators)`.
 
 ## Notes
 
