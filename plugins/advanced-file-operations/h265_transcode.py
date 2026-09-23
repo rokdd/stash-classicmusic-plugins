@@ -39,6 +39,7 @@ Notes on "without losing quality":
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -543,6 +544,76 @@ def probe_ok(path):
         return False
 
 
+_FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
+
+
+def _is_ffmpeg_stats_line(line):
+    """
+    True if this looks like one of ffmpeg's own periodic progress lines
+    (`frame=... time=... bitrate=... speed=...`) rather than an actual
+    error/warning. Used to filter those back out where a caller (namely
+    detect_corruption) needs to tell real stderr content apart from the
+    stats output it had to turn on just to get progress out of `-v error`.
+    """
+    return "speed=" in line and "bitrate=" in line and "time=" in line
+
+
+def run_ffmpeg_tracking_progress(cmd, duration=None, on_progress=None, timeout=None):
+    """
+    Runs an ffmpeg command, streaming its stderr line by line instead of
+    blocking on subprocess.run() until it exits. If `duration` (seconds)
+    and `on_progress` (a callable taking a 0.0-1.0 fraction) are given,
+    parses each "...time=01:23:45.67..." status line ffmpeg prints as it
+    works and reports how far through the source that timestamp is — this
+    is what lets a long single-file operation actually move the task's
+    progress bar instead of sitting frozen until the whole thing finishes.
+
+    `timeout`, if given, kills the process and raises
+    subprocess.TimeoutExpired once that many seconds of wall-clock time
+    have passed — matching subprocess.run(timeout=...)'s behavior so
+    existing callers don't need to change their handling.
+
+    Returns (returncode, stderr_text) — stderr_text is ffmpeg's full
+    stderr, same as subprocess.run(capture_output=True) would have given,
+    for existing error-message handling to keep using unchanged.
+    """
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        text=True, bufsize=1,
+    )
+    stderr_lines = []
+    last_reported = -1.0
+    start_time = time.monotonic()
+    timed_out = False
+    try:
+        for line in proc.stderr:
+            stderr_lines.append(line)
+            if timeout is not None and (time.monotonic() - start_time) > timeout:
+                timed_out = True
+                proc.kill()
+                break
+            if not (duration and on_progress):
+                continue
+            match = _FFMPEG_TIME_RE.search(line)
+            if not match:
+                continue
+            h, m, s = match.groups()
+            elapsed = int(h) * 3600 + int(m) * 60 + float(s)
+            fraction = max(0.0, min(1.0, elapsed / duration))
+            # Throttle: ffmpeg prints a status line multiple times a
+            # second, and log_progress writes a line every call — only
+            # report on a real (>=1%) change so the plugin log doesn't
+            # fill up with near-duplicate progress lines.
+            if fraction - last_reported >= 0.01 or fraction >= 1.0:
+                on_progress(fraction)
+                last_reported = fraction
+    finally:
+        proc.wait()
+    if timed_out:
+        raise subprocess.TimeoutExpired(cmd, timeout, output=None, stderr="".join(stderr_lines))
+    return proc.returncode, "".join(stderr_lines)
+
+
 def resolve_crf(args):
     """
     Resolves the CRF to encode at from plugin args. A named quality preset
@@ -571,16 +642,26 @@ def resolve_crf(args):
     return CRF_VALUE
 
 
-def transcode_to_h265(src_path, crf=None):
+def transcode_to_h265(src_path, crf=None, on_progress=None):
     """
     Encodes src_path to H.265 in a temp file, then returns that temp path.
     Raises on failure. Caller is responsible for moving/cleaning up.
     `crf` overrides CRF_VALUE for this encode (see resolve_crf()).
+    `on_progress`, if given, is called with a 0.0-1.0 fraction as ffmpeg
+    works through the source, based on the source's known duration —
+    without this the task's progress bar would otherwise sit frozen for
+    the entire length of the encode.
     """
     if not os.path.isfile(src_path):
         raise FileNotFoundError(src_path)
 
     crf_value = CRF_VALUE if crf is None else crf
+
+    try:
+        duration = get_duration_seconds(src_path)
+    except Exception as exc:  # noqa: BLE001
+        log_warn(f"Couldn't read source duration, progress won't be reported for this file: {exc}")
+        duration = None
 
     tmp_dir = tempfile.gettempdir()
     fd, tmp_path = tempfile.mkstemp(suffix=OUTPUT_EXT, dir=tmp_dir)
@@ -601,12 +682,11 @@ def transcode_to_h265(src_path, crf=None):
     ]
 
     log_info(f"Transcoding at CRF {crf_value}: {src_path}")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0 or not os.path.isfile(tmp_path) or os.path.getsize(tmp_path) == 0:
+    returncode, stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
+    if returncode != 0 or not os.path.isfile(tmp_path) or os.path.getsize(tmp_path) == 0:
         # Common fallback: source has a subtitle stream ffmpeg can't copy
         # into mp4 (e.g. PGS). Retry once without subtitles.
         log_warn("First encode attempt failed, retrying without subtitle copy...")
-        cmd_no_subs = [c for c in cmd if c not in ("-s", "copy")]
         cmd_no_subs = [
             FFMPEG_BIN, "-y", "-i", src_path,
             "-map", "0:v:0", "-map", "0:a?",
@@ -615,11 +695,11 @@ def transcode_to_h265(src_path, crf=None):
             "-c:a", "copy",
             tmp_path,
         ]
-        proc = subprocess.run(cmd_no_subs, capture_output=True, text=True)
-        if proc.returncode != 0 or not os.path.isfile(tmp_path) or os.path.getsize(tmp_path) == 0:
+        returncode, stderr = run_ffmpeg_tracking_progress(cmd_no_subs, duration=duration, on_progress=on_progress)
+        if returncode != 0 or not os.path.isfile(tmp_path) or os.path.getsize(tmp_path) == 0:
             if os.path.isfile(tmp_path):
                 os.remove(tmp_path)
-            raise RuntimeError(f"ffmpeg failed on {src_path}: {proc.stderr[-2000:]}")
+            raise RuntimeError(f"ffmpeg failed on {src_path}: {stderr[-2000:]}")
 
     if not probe_ok(tmp_path):
         os.remove(tmp_path)
@@ -695,12 +775,13 @@ def link_converted_file_to_scene(client, scene, new_path):
         return False
 
 
-def process_scene(client, scene, keep_original, done_tag_id, crf=None):
+def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progress=None):
     """
     Converts one scene's primary video file to H265 if it needs it.
     Returns a short status string: "converted" / "skipped" / "failed: <why>".
     Raises nothing — failures are reported in the return value so a batch
     run can keep going. `crf` overrides CRF_VALUE (see resolve_crf()).
+    `on_progress`, if given, is forwarded to transcode_to_h265 (see there).
 
     keep_original never deletes the source file. When set, the new H265
     file is written alongside it, attached to this same scene, and made
@@ -722,7 +803,7 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None):
 
     src_path = video_file["path"]
     try:
-        tmp_path = transcode_to_h265(src_path, crf=crf)
+        tmp_path = transcode_to_h265(src_path, crf=crf, on_progress=on_progress)
         final_path, removed_path = finalize_output(src_path, tmp_path, keep_original)
 
         existing_tag_ids = [t["id"] for t in scene.get("tags", [])]
@@ -775,11 +856,12 @@ def get_duration_seconds(path):
     return float(result.stdout.strip())
 
 
-def cut_segment(src_path, start, end, out_path, accurate):
+def cut_segment(src_path, start, end, out_path, accurate, on_progress=None):
     duration = end - start
     if accurate:
         # Re-encodes so the cut lands exactly on the marker, at the cost of
-        # time and a second generation of lossy compression.
+        # time and a second generation of lossy compression. Slow enough on
+        # a long segment that it's worth reporting progress for.
         cmd = [
             FFMPEG_BIN, "-y",
             "-i", src_path, "-ss", str(start), "-t", str(duration),
@@ -787,20 +869,23 @@ def cut_segment(src_path, start, end, out_path, accurate):
             "-c:a", "aac", "-b:a", "192k",
             out_path,
         ]
+        returncode, stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
     else:
         # Stream-copy: no re-encode, no quality loss, but the cut snaps to
         # the nearest keyframe so it can land a little before/after the
-        # exact marker time.
+        # exact marker time. Fast enough (bounded by disk I/O, not decode
+        # speed) that per-segment progress isn't worth tracking.
         cmd = [
             FFMPEG_BIN, "-y",
             "-ss", str(start), "-i", src_path, "-t", str(duration),
             "-c", "copy", "-avoid_negative_ts", "make_zero",
             out_path,
         ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        returncode, stderr = proc.returncode, proc.stderr
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
-        raise RuntimeError(f"ffmpeg failed cutting [{start:.2f}s, {end:.2f}s): {proc.stderr[-1500:]}")
+    if returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
+        raise RuntimeError(f"ffmpeg failed cutting [{start:.2f}s, {end:.2f}s): {stderr[-1500:]}")
 
 
 def run_split_scene(client, args):
@@ -869,9 +954,15 @@ def run_split_scene(client, args):
     out_paths = []
     try:
         for idx, (start, end) in enumerate(segments, start=1):
-            log_progress((idx - 1) / len(segments) * 0.5)
+            base = (idx - 1) / len(segments) * 0.5
+            slice_size = 0.5 / len(segments)
+            log_progress(base)
+
+            def on_progress(fraction, base=base, slice_size=slice_size):
+                log_progress(base + fraction * slice_size)
+
             out_path = os.path.join(base_dir, f"{base_name}.part{idx}{ext}")
-            cut_segment(src_path, start, end, out_path, accurate)
+            cut_segment(src_path, start, end, out_path, accurate, on_progress=on_progress)
             out_paths.append((out_path, start, end))
     except Exception as exc:  # noqa: BLE001
         for p, _, _ in out_paths:
@@ -963,7 +1054,7 @@ def make_temp_output(ext=OUTPUT_EXT):
     return tmp_path
 
 
-def detect_corruption(path, timeout=1800):
+def detect_corruption(path, timeout=1800, on_progress=None):
     """
     Decodes the whole file (video, audio, everything) through ffmpeg,
     throwing the output away, and watches for decode errors. This is the
@@ -971,20 +1062,36 @@ def detect_corruption(path, timeout=1800):
     opening the file (which only reads the container), but it's the only
     reliable way to catch mid-file corruption rather than just a broken
     header. Returns (is_corrupt, detail_message).
+
+    `on_progress`, if given, is called with a 0.0-1.0 fraction as the
+    check proceeds — this step alone can take as long as the file's full
+    runtime, so without it the task's progress bar would sit frozen for
+    the entire check. `-stats` is added explicitly to get those periodic
+    "time=..." lines out of ffmpeg despite `-v error` (which suppresses
+    them by default); they're filtered back out of the real stderr text
+    below so a healthy file still reports a clean, error-free result.
     """
-    cmd = [FFMPEG_BIN, "-v", "error", "-xerror", "-i", path, "-map", "0", "-f", "null", "-"]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        duration = get_duration_seconds(path)
+    except Exception as exc:  # noqa: BLE001
+        log_warn(f"Couldn't read duration for corruption-check progress: {exc}")
+        duration = None
+
+    cmd = [FFMPEG_BIN, "-v", "error", "-stats", "-xerror", "-i", path, "-map", "0", "-f", "null", "-"]
+    try:
+        returncode, stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress, timeout=timeout)
     except subprocess.TimeoutExpired:
         return True, "Corruption check timed out (very large or very slow file) — treating it as needing repair"
 
-    stderr = proc.stderr.strip()
-    if proc.returncode != 0 or stderr:
-        return True, (stderr or f"ffmpeg exited with code {proc.returncode}")
+    real_stderr = "\n".join(
+        line for line in stderr.splitlines() if line.strip() and not _is_ffmpeg_stats_line(line)
+    ).strip()
+    if returncode != 0 or real_stderr:
+        return True, (real_stderr or f"ffmpeg exited with code {returncode}")
     return False, ""
 
 
-def remux_repair(src_path):
+def remux_repair(src_path, on_progress=None):
     """
     Attempts a lossless container remux: copies every stream as-is into a
     fresh, cleanly-indexed file. This alone fixes most "won't seek", "wrong
@@ -995,6 +1102,11 @@ def remux_repair(src_path):
     container, and a re-encode repair is needed instead).
     """
     tmp_path = make_temp_output()
+    try:
+        duration = get_duration_seconds(src_path)
+    except Exception:  # noqa: BLE001
+        duration = None
+
     cmd = [
         FFMPEG_BIN, "-y",
         "-err_detect", "ignore_err",
@@ -1005,9 +1117,9 @@ def remux_repair(src_path):
         "-movflags", "faststart",
         tmp_path,
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    returncode, _stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
     ok = (
-        proc.returncode == 0
+        returncode == 0
         and os.path.isfile(tmp_path)
         and os.path.getsize(tmp_path) > 0
         and probe_ok(tmp_path)
@@ -1019,7 +1131,7 @@ def remux_repair(src_path):
     return tmp_path
 
 
-def reencode_repair(src_path):
+def reencode_repair(src_path, on_progress=None):
     """
     Last-resort repair: fully re-decodes and re-encodes, telling ffmpeg to
     ignore and skip corrupt packets rather than aborting. This recovers as
@@ -1030,6 +1142,11 @@ def reencode_repair(src_path):
     actually gone.
     """
     tmp_path = make_temp_output()
+    try:
+        duration = get_duration_seconds(src_path)
+    except Exception:  # noqa: BLE001
+        duration = None
+
     cmd = [
         FFMPEG_BIN, "-y",
         "-err_detect", "ignore_err",
@@ -1040,9 +1157,9 @@ def reencode_repair(src_path):
         "-c:a", "aac", "-b:a", "192k",
         tmp_path,
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    returncode, stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
     ok = (
-        proc.returncode == 0
+        returncode == 0
         and os.path.isfile(tmp_path)
         and os.path.getsize(tmp_path) > 0
         and probe_ok(tmp_path)
@@ -1050,7 +1167,7 @@ def reencode_repair(src_path):
     if not ok:
         if os.path.isfile(tmp_path):
             os.remove(tmp_path)
-        raise RuntimeError(f"Re-encode repair failed: {proc.stderr[-1500:]}")
+        raise RuntimeError(f"Re-encode repair failed: {stderr[-1500:]}")
     return tmp_path
 
 
@@ -1096,7 +1213,11 @@ def run_repair_scene(client, args, repair_tag_id):
 
     log_info(f"Checking '{os.path.basename(src_path)}' for corruption (this decodes the whole file, so it can take a while)...")
     log_progress(0.05)
-    is_corrupt, detail = detect_corruption(src_path)
+
+    def on_check_progress(fraction):
+        log_progress(0.05 + fraction * 0.45)
+
+    is_corrupt, detail = detect_corruption(src_path, on_progress=on_check_progress)
 
     if not is_corrupt and not force:
         write_plugin_output(output="No corruption detected — the file decodes cleanly, nothing to repair.")
@@ -1105,10 +1226,14 @@ def run_repair_scene(client, args, repair_tag_id):
         log_warn(f"Corruption detected: {detail[:800]}")
     else:
         log_info("No corruption detected, but repairing anyway since force was requested.")
-    log_progress(0.15)
+    log_progress(0.5)
 
     log_info("Attempting a lossless remux repair first...")
-    tmp_path = remux_repair(src_path)
+
+    def on_remux_progress(fraction):
+        log_progress(0.5 + fraction * 0.05)
+
+    tmp_path = remux_repair(src_path, on_progress=on_remux_progress)
     method = "lossless remux"
 
     if tmp_path is None:
@@ -1117,15 +1242,19 @@ def run_repair_scene(client, args, repair_tag_id):
             "data itself, not just the container. Falling back to a tolerant re-encode "
             "(this re-compresses the video and may skip truly unrecoverable stretches)..."
         )
-        log_progress(0.3)
+        log_progress(0.55)
+
+        def on_reencode_progress(fraction):
+            log_progress(0.55 + fraction * 0.4)
+
         try:
-            tmp_path = reencode_repair(src_path)
+            tmp_path = reencode_repair(src_path, on_progress=on_reencode_progress)
             method = "re-encode (lossy, best-effort)"
         except Exception as exc:  # noqa: BLE001
             write_plugin_output(error=f"Both repair attempts failed — the file may be too badly damaged to recover: {exc}")
             return
 
-    log_progress(0.8)
+    log_progress(0.95)
     final_path, removed_path = finalize_repaired_output(src_path, tmp_path, keep_original)
 
     rescan_target = [final_path]
@@ -1161,8 +1290,14 @@ def run_convert_scene(client, args, done_tag_id):
         return
 
     keep_original = str(args.get("keep_original", "false")).lower() == "true"
-    log_progress(0.1)
-    status = process_scene(client, scene, keep_original, done_tag_id, crf=crf)
+    log_progress(0.05)
+
+    def on_progress(fraction):
+        # Reserve the tail end for tagging/rescanning/linking after the
+        # encode itself finishes.
+        log_progress(0.05 + fraction * 0.8)
+
+    status = process_scene(client, scene, keep_original, done_tag_id, crf=crf, on_progress=on_progress)
     log_progress(1.0)
 
     if status == "converted":
@@ -1190,11 +1325,21 @@ def run_convert_library(client, args, done_tag_id):
             break
 
         for scene in scenes:
+            # Give this scene its own slice of the overall bar so a long
+            # encode moves the progress bar smoothly instead of it sitting
+            # frozen at the previous scene's boundary until this one ends.
+            base = (processed / total) if total else 0.0
+            slice_size = (1.0 / total) if total else 0.0
+
+            def on_progress(fraction, base=base, slice_size=slice_size):
+                if total:
+                    log_progress(base + fraction * slice_size)
+
+            status = process_scene(client, scene, keep_original, done_tag_id, crf=crf, on_progress=on_progress)
             processed += 1
             if total:
                 log_progress(processed / total)
 
-            status = process_scene(client, scene, keep_original, done_tag_id, crf=crf)
             if status == "converted":
                 converted += 1
             elif status == "skipped":
