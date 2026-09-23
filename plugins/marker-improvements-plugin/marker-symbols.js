@@ -20,20 +20,21 @@
 //
 //   When the real scrubber IS found, the icons are appended as actual
 //   children of it — not a separately-positioned overlay layered on top —
-//   so they're truly part of the seek bar's own DOM. Since the real track
-//   is usually only a few px tall (and sometimes clips its content with
-//   overflow:hidden for a rounded look), unclipAncestors() forces
+//   so they're truly part of the seek bar's own DOM, positioned by
+//   percentage along it based on each marker's timestamp. Since the real
+//   track is usually only a few px tall (and sometimes clips its content
+//   with overflow:hidden for a rounded look), unclipAncestors() forces
 //   `overflow: visible` on the scrubber and any clipping ancestor up to
 //   the player, so a 22px icon isn't cut down to an invisible sliver by a
 //   track a fraction of that height.
 //
-//   If Stash draws its own small colored marker indicators on the
-//   scrubber (one per marker, tinted with that marker's tag color) and
-//   NATIVE_MARKER_SELECTORS finds them, each icon is mounted directly
-//   inside the matching indicator (matched by position — see
-//   findClosestTick) and tinted to match its color, instead of floating
-//   in our own overlay. A marker with no matching indicator (or if none
-//   are found at all) still gets its icon positioned by percentage in the
+//   Stash draws its own small colored marker indicator per marker
+//   (class `.vjs-marker-range`) on the scrubber, tinted with that
+//   marker's tag color. When NATIVE_MARKER_SELECTORS finds one at
+//   (roughly) the same position as a marker — see findClosestTick — that
+//   marker's icon is mounted directly inside it and tinted to match its
+//   color, instead of floating separately in our own overlay. A marker
+//   with no matching indicator still gets positioned by percentage in the
 //   overlay as before, so nothing silently disappears.
 //
 // Icons:
@@ -61,13 +62,16 @@
     '[class*="scrubber"]',
   ];
 
-  // Stash draws its own small colored marker indicators on the scrubber —
-  // one per scene marker, tinted with that marker's tag color. Tried in
-  // order, scoped to inside the scrubber only, so a broad guess here can't
-  // accidentally match something unrelated elsewhere on the page.
+  // Stash's own small colored marker indicators on the scrubber — one per
+  // scene marker, tinted with that marker's tag color. `.vjs-marker-range`
+  // is the confirmed class; the rest are fallback guesses in case it
+  // changes in a future Stash version. Tried in order, scoped to inside
+  // the scrubber only, so a guess here can't match something unrelated
+  // elsewhere on the page.
   const NATIVE_MARKER_SELECTORS = [
+    ".vjs-marker-range",
     ".vjs-marker",
-    '[class*="marker"]',
+    '[class*="marker-range"]',
   ];
 
   // How close (as a % of the scrubber's width) a native marker indicator's
@@ -174,11 +178,27 @@
   // A marker's primary tag plus its other tags, deduped, filtered down to
   // just the ones that actually have an image uploaded — these are what
   // get shown for that marker (see makeMarkerIcons below).
+  // A tag with no custom image uploaded still returns a non-empty
+  // `image_path` from Stash — it just points at Stash's own generic
+  // placeholder icon, marked with a `default=true` query param (the same
+  // convention Stash uses for performers/studios). Without checking for
+  // that, every tag would look like it "has an image".
+  function hasCustomImage(tag) {
+    if (!tag || !tag.image_path) return false;
+    try {
+      return new URL(tag.image_path, window.location.origin).searchParams.get("default") !== "true";
+    } catch (e) {
+      // Not a parseable URL for some reason — fall back to a plain
+      // substring check rather than assuming it's a real image.
+      return !/[?&]default=true\b/.test(tag.image_path);
+    }
+  }
+
   function tagsWithImages(marker) {
     const seen = new Set();
     const result = [];
     const consider = (tag) => {
-      if (!tag || !tag.image_path) return;
+      if (!hasCustomImage(tag)) return;
       const key = tag.id != null ? `id:${tag.id}` : `name:${tag.name}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -321,6 +341,9 @@
   // Finds Stash's own native per-marker indicators on the scrubber, if
   // any — scoped to inside `scrubber` only, so a broad guess here can't
   // match something unrelated elsewhere on the page.
+  // Finds Stash's own native per-marker indicators on the scrubber, if
+  // any — scoped to inside `scrubber` only, so a broad guess here can't
+  // match something unrelated elsewhere on the page.
   function findNativeMarkerTicks(scrubber) {
     for (const selector of NATIVE_MARKER_SELECTORS) {
       const found = Array.from(scrubber.querySelectorAll(selector));
@@ -332,9 +355,7 @@
   // Which of `ticks` sits at roughly `pct` along `scrubber` — both should
   // land at (very close to) the same position, since both are derived
   // from the same seconds/duration formula. Returns null if the closest
-  // one still isn't within TICK_MATCH_TOLERANCE_PCT (unrecognized marker
-  // indicator markup, or this player doesn't draw per-marker indicators
-  // at all despite NATIVE_MARKER_SELECTORS matching something else).
+  // one still isn't within TICK_MATCH_TOLERANCE_PCT.
   function findClosestTick(ticks, scrubber, pct) {
     const scrubberRect = scrubber.getBoundingClientRect();
     if (!scrubberRect.width) return null;
@@ -353,9 +374,10 @@
   }
 
   // Mounts `iconGroupEl` as an actual child of `tick` — Stash's own native
-  // marker indicator — instead of leaving it floating in our overlay, and
-  // tints its icon(s) with that indicator's own color so they read as
-  // part of the colored bar rather than something dropped on top of it.
+  // marker indicator (`.vjs-marker-range`) — instead of leaving it
+  // floating in our overlay, and tints its icon(s) with that indicator's
+  // own color so they read as part of the colored bar rather than
+  // something dropped on top of it.
   function mountIconOnTick(tick, iconGroupEl) {
     const computed = getComputedStyle(tick);
     if (computed.position === "static") {
@@ -417,7 +439,7 @@
     wireVisibility(scrubber, groups);
     console.info(
       `[Marker Symbols] Rendering directly on the real scrubber (${mountedOnTicks}/${groups.length} ` +
-      "icon(s) mounted onto Stash's own native marker indicators):",
+      "icon(s) mounted onto Stash's own .vjs-marker-range indicators):",
       scrubber
     );
   }
