@@ -110,12 +110,13 @@
 
   let overlayEl = null;
   let placementTimer = null;
-  let resizeObserver = null;
-  let windowResizeHandler = null;
   // {target, type, handler} for every listener wireVisibility() registered
   // (some on `document`, not just the scrubber), so clearOverlay() can
   // undo all of them without needing a fixed set of named variables.
   let visibilityListeners = [];
+  // {el, prop, original} for every inline overflow style unclipAncestors()
+  // overrode, so clearOverlay() can put each one back exactly as found.
+  let overflowOverrides = [];
 
   function clearOverlay() {
     if (overlayEl) {
@@ -124,17 +125,17 @@
     }
     visibilityListeners.forEach(({ target, type, handler }) => target.removeEventListener(type, handler));
     visibilityListeners = [];
+    overflowOverrides.forEach(({ el, prop, original }) => {
+      if (original) {
+        el.style[prop] = original;
+      } else {
+        el.style.removeProperty(prop === "overflow" ? "overflow" : prop.replace(/([A-Z])/g, "-$1").toLowerCase());
+      }
+    });
+    overflowOverrides = [];
     if (placementTimer) {
       clearTimeout(placementTimer);
       placementTimer = null;
-    }
-    if (resizeObserver) {
-      resizeObserver.disconnect();
-      resizeObserver = null;
-    }
-    if (windowResizeHandler) {
-      window.removeEventListener("resize", windowResizeHandler);
-      windowResizeHandler = null;
     }
   }
 
