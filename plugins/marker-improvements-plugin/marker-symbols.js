@@ -25,12 +25,10 @@
 //   runs.
 //
 // Diagnostics:
-//   logMarkerImagePlan() prints a console.table of every marker's tags
-//   and whether each qualifies for an icon — check that against what
-//   actually renders when something looks off. The scrubber-rendering
-//   summary line (see mountIconsOnMarkerRanges) says how many
-//   `.vjs-marker-range` elements were found vs. how many markers came
-//   back from Stash, and how many icons actually got mounted.
+//   mountIconsOnMarkerRanges() logs a console.table of the pairing
+//   itself — each marker, its matched .vjs-marker-range's measured
+//   position/class/pointer-events, and whether an icon was built for it
+//   — check that against what actually renders when something looks off.
 //
 // A tag with no custom image still returns a non-empty `image_path` from
 // Stash — it just points at Stash's own generic placeholder, marked with
@@ -149,10 +147,7 @@
     }
   }
 
-  // A marker's primary tag plus its other tags, deduped — unfiltered, so
-  // both tagsWithImages() and logMarkerImagePlan() (which needs to show
-  // excluded tags too, not just the ones that qualify) share one
-  // definition of "this marker's tags" instead of drifting apart.
+  // A marker's primary tag plus its other tags, deduped.
   function dedupedTags(marker) {
     const seen = new Set();
     const result = [];
@@ -170,36 +165,6 @@
 
   function tagsWithImages(marker) {
     return dedupedTags(marker).filter(hasCustomImage);
-  }
-
-  // Logs a table of every marker's tags and whether each one qualifies
-  // for an icon, so what's actually fetched/decided can be checked
-  // against what's on screen without guessing.
-  function logMarkerImagePlan(markers) {
-    const rows = [];
-    markers.forEach((marker) => {
-      const label = marker.title || (marker.primary_tag && marker.primary_tag.name) || `marker ${marker.id}`;
-      const markerLabel = `${formatTime(marker.seconds)} ${label}`;
-      const tags = dedupedTags(marker);
-      if (tags.length === 0) {
-        rows.push({ marker: markerLabel, tag: "(no tags)", "will show icon": false, image_path: "" });
-        return;
-      }
-      tags.forEach((tag) => {
-        rows.push({
-          marker: markerLabel,
-          tag: tag.name,
-          "will show icon": hasCustomImage(tag),
-          image_path: tag.image_path || "(none)",
-        });
-      });
-    });
-    console.info(
-      `[Marker Symbols] Tag image plan — ${markers.length} marker(s), ${rows.length} tag row(s). ` +
-      '"will show icon": false means that tag has no custom image (just Stash\'s default ' +
-      "placeholder, filtered out) — it's excluded on purpose, not a bug."
-    );
-    console.table(rows);
   }
 
   // Builds the little cluster of icons for one marker: one image per tag
@@ -361,6 +326,16 @@
       overflowOverrides.push({ el: tick, prop: "position", original: tick.style.position });
       tick.style.position = "relative";
     }
+    // Decorative marker indicators like this are commonly styled
+    // pointer-events:none by the player so they don't interfere with
+    // dragging the real seek handle underneath. If that's the case here,
+    // our hover/focus/drag listeners bound to it (see wireVisibility)
+    // would never fire at all — the icon would be correctly mounted and
+    // positioned, just permanently invisible.
+    if (computed.pointerEvents === "none") {
+      overflowOverrides.push({ el: tick, prop: "pointerEvents", original: tick.style.pointerEvents });
+      tick.style.pointerEvents = "auto";
+    }
     unclipAncestors(tick, unclipRoot);
 
     const tickColor = computed.backgroundColor;
@@ -391,20 +366,38 @@
       );
     }
 
+    const pairingLog = [];
     let mountedCount = 0;
     for (let i = 0; i < pairCount; i++) {
-      const iconGroup = makeMarkerIcons(sortedMarkers[i], video);
+      const marker = sortedMarkers[i];
+      const tick = ticks[i];
+      const computed = getComputedStyle(tick);
+      const iconGroup = makeMarkerIcons(marker, video);
+      const label = `${formatTime(marker.seconds)} ${marker.title || (marker.primary_tag && marker.primary_tag.name) || marker.id}`;
+      pairingLog.push({
+        i,
+        marker: label,
+        "tick left%": tickLeftPct(tick).toFixed(2),
+        "tick class": tick.className,
+        "tick pointer-events": computed.pointerEvents,
+        "icon built": !!iconGroup,
+      });
       if (!iconGroup) continue;
-      mountIconOnTick(ticks[i], iconGroup, root);
-      wireVisibility(ticks[i], [iconGroup]);
+      // console.table can't show a live, clickable DOM node — this can:
+      // click the element in devtools to jump straight to it in Elements.
+      console.log(`[Marker Symbols] #${i} "${label}" → attaching into:`, tick);
+      mountIconOnTick(tick, iconGroup, root);
+      wireVisibility(tick, [iconGroup]);
       mountedIcons.push(iconGroup);
       mountedCount++;
     }
 
     console.info(
-      `[Marker Symbols] Mounted ${mountedCount} icon(s) directly onto ${MARKER_RANGE_SELECTOR} ` +
-      `containers (${ticks.length} found for ${sortedMarkers.length} marker(s) with data).`
+      `[Marker Symbols] Paired ${pairCount} marker(s) to ${MARKER_RANGE_SELECTOR} element(s) ` +
+      `by left-to-right order; mounted ${mountedCount} icon(s) ("icon built": false means that ` +
+      "marker has no tag with a real custom image). Pairing detail:"
     );
+    console.table(pairingLog);
   }
 
   async function placeSymbols(sceneId, attempt) {
@@ -424,8 +417,6 @@
     }
     if (currentSceneId() !== sceneId) return; // navigated away while fetching
     if (!markers.length) return;
-
-    logMarkerImagePlan(markers);
 
     const root = video.closest(".video-js, .vjs-container") || document;
     if (!findMarkerRangeElements(root).length) {

@@ -46,6 +46,14 @@ avoiding that by rendering somewhere else, this forces
 (restored on navigating away), so the icon genuinely lives inside that
 bar and just pokes slightly above/below its thin box.
 
+A `.vjs-marker-range` is also often styled `pointer-events: none` by the
+player, so it doesn't interfere with dragging the real seek handle
+underneath it — but that would also silently block the hover/drag/touch/
+focus listeners this plugin binds to it (see below), leaving the icon
+correctly mounted and positioned but never actually shown. If that's the
+case here, it's forced to `pointer-events: auto` too (also restored on
+navigating away).
+
 ### How markers are matched to their indicator
 
 Stash doesn't expose which `.vjs-marker-range` belongs to which marker by
@@ -83,12 +91,12 @@ being gone doesn't change how seeking on the bar behaves.
 ## Diagnostics
 
 Every time markers are placed, the console logs a table
-(`[Marker Symbols] Tag image plan — ...`) of every marker's tags and
-whether each one qualifies for an icon — check that against what actually
-renders if something looks off (a tag showing `false` there has no real
-custom image, so it's correctly excluded, not a bug). A second line says
-how many `.vjs-marker-range` elements were found vs. how many markers
-came back from Stash, and how many icons actually got mounted.
+(`[Marker Symbols] Paired N marker(s) to .vjs-marker-range element(s)...`)
+showing, for each pairing: the marker, that `.vjs-marker-range`'s measured
+position, its class, its `pointer-events` value, and whether an icon was
+actually built for it. Useful for checking the left-to-right pairing
+itself is landing where expected, or whether a marker was skipped because
+none of its tags have a real custom image.
 
 ## Notes
 
