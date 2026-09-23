@@ -171,7 +171,64 @@
   }
 
   function tagsWithImages(marker) {
-    return dedupedTags(marker).filter(hasCustomImage);
+    const seenPaths = new Set();
+    return dedupedTags(marker).filter((tag) => {
+      if (!hasCustomImage(tag) || seenPaths.has(tag.image_path)) return false;
+      seenPaths.add(tag.image_path);
+      return true;
+    });
+  }
+
+  // Two different tags can have the very same picture uploaded, but Stash
+  // serves each from its own URL (/tag/<id>/image), so the path check in
+  // tagsWithImages() can't catch that. This fingerprints the actual image
+  // bytes instead. FNV-1a rather than crypto.subtle, since the latter only
+  // exists in secure contexts and Stash is often reached over plain http.
+  // Cached per URL so seek recovery re-mounts don't refetch anything.
+  const imageFingerprints = new Map();
+
+  function imageFingerprint(url) {
+    if (!imageFingerprints.has(url)) {
+      const promise = fetch(url, { credentials: "include" })
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.arrayBuffer();
+        })
+        .then((buf) => {
+          const bytes = new Uint8Array(buf);
+          let hash = 0x811c9dc5;
+          for (let i = 0; i < bytes.length; i++) {
+            hash ^= bytes[i];
+            hash = Math.imul(hash, 0x01000193);
+          }
+          return `${bytes.length}:${(hash >>> 0).toString(16)}`;
+        })
+        .catch(() => null);
+      imageFingerprints.set(url, promise);
+    }
+    return imageFingerprints.get(url);
+  }
+
+  // Drops every image in `bubble` whose bytes match one earlier in it, so
+  // the same picture only shows once per marker. The kept image's tooltip
+  // gets the dropped tag's name added, so no tag silently disappears.
+  async function removeDuplicateImages(bubble) {
+    const imgs = Array.from(bubble.querySelectorAll("img"));
+    const fingerprints = await Promise.all(imgs.map((img) => imageFingerprint(img.src)));
+    const keptByFingerprint = new Map();
+    imgs.forEach((img, i) => {
+      const fp = fingerprints[i];
+      if (!fp) return; // couldn't fetch — keep it rather than guess
+      const kept = keptByFingerprint.get(fp);
+      if (!kept) {
+        keptByFingerprint.set(fp, img);
+        return;
+      }
+      if (img.alt) {
+        kept.title = kept.title.replace(/\)$/, `, ${img.alt})`);
+      }
+      img.remove();
+    });
   }
 
   // Builds a small "bubble" for one marker: one image per tag on it that
@@ -260,6 +317,8 @@
       img.addEventListener("error", () => img.remove());
       bubble.appendChild(img);
     });
+
+    if (tags.length > 1) removeDuplicateImages(bubble);
 
     return bubble;
   }
