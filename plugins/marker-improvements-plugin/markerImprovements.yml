@@ -1,5 +1,5 @@
 name: Marker Improvements
-description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video scrubber. Hidden until that indicator is hovered, dragged, touched, or focused, so it stays out of the way otherwise. Click an icon to jump to that marker."
+description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video scrubber, so it shows and hides right along with that indicator. Click an icon to jump to that marker."
 version: 0.0.1
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 ui:

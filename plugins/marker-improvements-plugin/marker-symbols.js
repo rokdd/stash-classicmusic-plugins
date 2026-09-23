@@ -4,9 +4,11 @@
 // real custom image uploaded (Settings on a tag page lets you upload
 // one) — mounted directly inside Stash's own colored marker indicator on
 // the video scrubber (class `.vjs-marker-range`, one per marker) and
-// tinted to match its color. Hidden until that specific indicator is
-// hovered, actively dragged/touched, or keyboard-focused. Click an icon
-// to jump straight to that marker.
+// tinted to match its color. It's a real, permanent child of that
+// indicator, so it shows and hides right along with it — whatever Stash
+// itself does to reveal that indicator (e.g. hovering the scrubber) is
+// what reveals the icon too, no separate interaction of its own needed.
+// Click an icon to jump straight to that marker.
 //
 // How markers are matched to their indicator:
 //   Stash draws one `.vjs-marker-range` element per scene marker on the
@@ -105,10 +107,6 @@
   // marker-range elements themselves.
   let mountedIcons = [];
   let placementTimer = null;
-  // {target, type, handler} for every listener wireVisibility() registered
-  // (some on `document`, not just a marker-range element), so
-  // clearOverlay() can undo all of them without a fixed set of variables.
-  let visibilityListeners = [];
   // {el, prop, original} for every inline overflow style unclipAncestors()
   // overrode, so clearOverlay() can put each one back exactly as found.
   let overflowOverrides = [];
@@ -116,8 +114,6 @@
   function clearOverlay() {
     mountedIcons.forEach((el) => el.remove());
     mountedIcons = [];
-    visibilityListeners.forEach(({ target, type, handler }) => target.removeEventListener(type, handler));
-    visibilityListeners = [];
     // `original` is whatever that inline style property held before we
     // touched it — including "" if it wasn't set at all, which correctly
     // clears our override back to "nothing" rather than "visible".
@@ -190,9 +186,15 @@
       "display:flex",
       "align-items:center",
       "gap:2px",
-      "opacity:0",
-      "pointer-events:none",
-      "transition:opacity 0.15s ease",
+      // Always visible/interactive — this is a real child of the marker's
+      // own .vjs-marker-range now, so it shows and hides right along with
+      // that indicator (however Stash itself decides to show it) rather
+      // than needing a separate hover trigger of its own. pointer-events
+      // is set explicitly since it's an inherited CSS property — a
+      // .vjs-marker-range styled pointer-events:none (common, so it
+      // doesn't interfere with dragging the real seek handle) would
+      // otherwise make this unclickable too.
+      "pointer-events:auto",
     ].join(";");
 
     const jumpToMarker = (e) => {
@@ -224,46 +226,6 @@
     });
 
     return group;
-  }
-
-  // Shows every element in `groups` on hover, but also while `container`
-  // is actively being used: mouse/touch held down (which can continue
-  // after the pointer leaves the element itself — mouseup/touchend are
-  // watched on the whole document so it doesn't get stuck visible), or
-  // keyboard-focused. Touch devices have no hover at all, so without the
-  // touch handling here the icons would never show up on them. Each
-  // group's opacity/pointer-events are set directly (rather than relying
-  // on CSS inheritance) since `groups` can span multiple containers.
-  function wireVisibility(container, groups) {
-    let hovering = false;
-    let active = false;
-
-    const sync = () => {
-      const visible = hovering || active;
-      groups.forEach((el) => {
-        el.style.opacity = visible ? "1" : "0";
-        el.style.pointerEvents = visible ? "auto" : "none";
-      });
-    };
-    const onEnter = () => { hovering = true; sync(); };
-    const onLeave = () => { hovering = false; sync(); };
-    const onActivate = () => { active = true; sync(); };
-    const onDeactivate = () => { active = false; sync(); };
-
-    const bind = (target, type, handler, opts) => {
-      target.addEventListener(type, handler, opts);
-      visibilityListeners.push({ target, type, handler });
-    };
-
-    bind(container, "mouseenter", onEnter);
-    bind(container, "mouseleave", onLeave);
-    bind(container, "mousedown", onActivate);
-    bind(container, "touchstart", onActivate, { passive: true });
-    bind(container, "focus", onActivate);
-    bind(container, "blur", onDeactivate);
-    bind(document, "mouseup", onDeactivate);
-    bind(document, "touchend", onDeactivate);
-    bind(document, "touchcancel", onDeactivate);
   }
 
   // A .vjs-marker-range element — and sometimes an ancestor of it too —
@@ -328,14 +290,12 @@
     }
     // Decorative marker indicators like this are commonly styled
     // pointer-events:none by the player so they don't interfere with
-    // dragging the real seek handle underneath. If that's the case here,
-    // our hover/focus/drag listeners bound to it (see wireVisibility)
-    // would never fire at all — the icon would be correctly mounted and
-    // positioned, just permanently invisible.
-    if (computed.pointerEvents === "none") {
-      overflowOverrides.push({ el: tick, prop: "pointerEvents", original: tick.style.pointerEvents });
-      tick.style.pointerEvents = "auto";
-    }
+    // dragging the real seek handle underneath — but that's harmless
+    // here, since the icon group explicitly sets its own
+    // pointer-events:auto (see makeMarkerIcons), which — being an
+    // inherited CSS property — takes over for its own subtree regardless
+    // of what the tick itself is set to. No need to touch the tick's own
+    // pointer-events at all.
     unclipAncestors(tick, unclipRoot);
 
     const tickColor = computed.backgroundColor;
@@ -387,7 +347,6 @@
       // click the element in devtools to jump straight to it in Elements.
       console.log(`[Marker Symbols] #${i} "${label}" → attaching into:`, tick);
       mountIconOnTick(tick, iconGroup, root);
-      wireVisibility(tick, [iconGroup]);
       mountedIcons.push(iconGroup);
       mountedCount++;
     }
