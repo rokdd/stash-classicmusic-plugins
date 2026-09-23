@@ -11,12 +11,21 @@
 //   known scrubber/progress-bar selectors (SCRUBBER_SELECTORS below). If
 //   none match on your version, it falls back to drawing its own thin bar
 //   directly under the video instead (still clickable, still positioned
-//   correctly, still hover-to-reveal — just not layered pixel-for-pixel
-//   on Stash's own control bar).
+//   correctly, still hover-to-reveal — just not on Stash's own control
+//   bar). The console says which one is active — see placeSymbols().
 //   If you want it precisely on your real scrubber and the fallback bar
 //   is showing instead, open devtools on a scene page, find the element
 //   that is the actual seek/progress bar, and add its selector to
 //   SCRUBBER_SELECTORS.
+//
+//   When the real scrubber IS found, the icons are appended as actual
+//   children of it — not a separately-positioned overlay layered on top —
+//   so they're truly part of the seek bar's own DOM. Since the real track
+//   is usually only a few px tall (and sometimes clips its content with
+//   overflow:hidden for a rounded look), unclipAncestors() forces
+//   `overflow: visible` on the scrubber and any clipping ancestor up to
+//   the player, so a 22px icon isn't cut down to an invisible sliver by a
+//   track a fraction of that height.
 //
 // Icons:
 //   Shows one icon per tag on the marker that actually has an image
@@ -125,12 +134,11 @@
     }
     visibilityListeners.forEach(({ target, type, handler }) => target.removeEventListener(type, handler));
     visibilityListeners = [];
+    // `original` is whatever that inline style property held before we
+    // touched it — including "" if it wasn't set at all, which correctly
+    // clears our override back to "nothing" rather than "visible".
     overflowOverrides.forEach(({ el, prop, original }) => {
-      if (original) {
-        el.style[prop] = original;
-      } else {
-        el.style.removeProperty(prop === "overflow" ? "overflow" : prop.replace(/([A-Z])/g, "-$1").toLowerCase());
-      }
+      el.style[prop] = original;
     });
     overflowOverrides = [];
     if (placementTimer) {
@@ -269,56 +277,46 @@
     bind(document, "touchcancel", onDeactivate);
   }
 
-  // Positions `overlay` (parented to `player`, not `scrubber`) so it sits
-  // exactly over `scrubber`'s own bounding box, but tall enough to fit a
-  // full-size icon regardless of how thin the real scrubber track is.
-  function positionOverlayOverScrubber(scrubber, player, overlay) {
-    const scrubberRect = scrubber.getBoundingClientRect();
-    const playerRect = player.getBoundingClientRect();
-    const height = Math.max(scrubberRect.height, ICON_SIZE_PX + 6);
-    overlay.style.left = `${scrubberRect.left - playerRect.left}px`;
-    overlay.style.top = `${scrubberRect.top - playerRect.top + scrubberRect.height / 2 - height / 2}px`;
-    overlay.style.width = `${scrubberRect.width}px`;
-    overlay.style.height = `${height}px`;
+  // Many players' real scrubber/progress track — and sometimes an ancestor
+  // of it too — clips its content (overflow:hidden), usually just to keep
+  // the rounded-corner track/fill looking tidy. A 22px icon actually
+  // appended *inside* that track would get silently cut down to an
+  // invisible sliver by that. Rather than working around it with a
+  // separately-positioned overlay, this walks up from `scrubber` to `stop`
+  // (inclusive) and forces `overflow: visible` on anything found clipping,
+  // so the icons can be true DOM children of the real scrubber and still
+  // show up poking slightly above/below its own thin box. Original values
+  // are recorded in `overflowOverrides` for clearOverlay() to restore.
+  function unclipAncestors(scrubber, stop) {
+    let node = scrubber;
+    let guard = 0;
+    while (node && node.nodeType === 1 && guard < 8) {
+      const computed = getComputedStyle(node);
+      ["overflow", "overflowX", "overflowY"].forEach((prop) => {
+        if (computed[prop] === "hidden" || computed[prop] === "clip") {
+          overflowOverrides.push({ el: node, prop, original: node.style[prop] });
+          node.style[prop] = "visible";
+        }
+      });
+      if (node === stop) break;
+      node = node.parentElement;
+      guard++;
+    }
   }
 
   function renderOnScrubber(scrubber, video, markers) {
-    // Most players' real scrubber/progress track is only a few px tall,
-    // and some themes clip it (overflow:hidden) for a rounded-track look.
-    // A 22px icon appended as a *child* of that track would get silently
-    // cut down to an invisible sliver — so instead the overlay is parented
-    // to the roomier player container and explicitly sized/positioned to
-    // sit exactly over the scrubber's own bounding box, kept in sync on
-    // resize. Icons are still positioned left:pct% within that overlay,
-    // so they still line up with the scrubber exactly.
-    const player = scrubber.closest(".video-js, .vjs-container") || scrubber.parentElement;
-    if (!player) {
-      renderFallbackBar(video, markers);
-      return;
+    const computed = getComputedStyle(scrubber);
+    if (computed.position === "static") {
+      scrubber.style.position = "relative";
     }
 
-    const computed = getComputedStyle(player);
-    if (computed.position === "static") {
-      player.style.position = "relative";
-    }
+    const player = scrubber.closest(".video-js, .vjs-container") || scrubber.parentElement;
+    unclipAncestors(scrubber, player);
 
     overlayEl = buildOverlay(markers, video.duration, video);
-    player.appendChild(overlayEl);
-
-    const reposition = () => positionOverlayOverScrubber(scrubber, player, overlayEl);
-    reposition();
-
-    if (window.ResizeObserver) {
-      resizeObserver = new ResizeObserver(reposition);
-      resizeObserver.observe(scrubber);
-      resizeObserver.observe(player);
-    } else {
-      windowResizeHandler = reposition;
-      window.addEventListener("resize", windowResizeHandler);
-    }
-
+    scrubber.appendChild(overlayEl);
     wireVisibility(scrubber, overlayEl);
-    console.info("[Marker Symbols] Rendering on the real scrubber:", scrubber);
+    console.info("[Marker Symbols] Rendering directly on the real scrubber:", scrubber);
   }
 
   function renderFallbackBar(video, markers) {

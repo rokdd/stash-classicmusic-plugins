@@ -44,27 +44,30 @@ how seeking on the bar behaves.
 
 ## Where the symbols show up
 
-On the real video scrubber, positioned proportionally along it by each
-marker's timestamp. Which exact element counts as "the scrubber" varies a
-little by Stash version, so this tries a short list of known selectors
-first; if none of them match yours, it falls back to drawing its own thin
-hover-reveal bar directly under the video instead (still clickable, still
-correctly positioned, just not pixel-perfect over Stash's own control
-bar).
+Directly inside the real video scrubber — the icons are appended as
+actual children of it, positioned proportionally along it by each
+marker's timestamp, not a separate element merely layered on top. Which
+exact element counts as "the scrubber" varies a little by Stash version,
+so this tries a short list of known selectors first; if none of them
+match yours, it falls back to drawing its own thin hover-reveal bar
+directly under the video instead (still clickable, still correctly
+positioned, just not part of Stash's own control bar).
 
 If you get the fallback bar and want it merged into your actual scrubber:
 open devtools on a scene page, click into the seek bar's element in the
 inspector to find the right container, and add its CSS selector to
 `SCRUBBER_SELECTORS` near the top of `marker-symbols.js`. The console logs
-which one it's using (`[Marker Symbols] Rendering on the real scrubber`
-or a warning about the fallback), so you can check that instead of
-guessing from what you see on screen.
+which one it's using (`[Marker Symbols] Rendering directly on the real
+scrubber` or a warning about the fallback), so you can check that instead
+of guessing from what you see on screen.
 
-On the real scrubber, the icon cluster is sized/positioned to match the
-scrubber's own bounding box, but tall enough to fit full-size icons even
-if the actual track is only a few px tall — it's not appended as a child
-of the track itself, so a short and/or `overflow:hidden` track can't clip
-the icons down to invisible slivers.
+The real scrubber's own track is usually only a few px tall, and some
+themes clip its content (`overflow: hidden`) for a rounded-track look —
+which would otherwise cut a 22px icon down to an invisible sliver. Rather
+than avoiding that by rendering somewhere else, this forces
+`overflow: visible` on the scrubber and any clipping ancestor up to the
+player (restored on navigating away), so the icons genuinely live inside
+the seek bar and just poke slightly above/below its own thin box.
 
 ## Notes
 
