@@ -27,6 +27,15 @@
 //   the player, so a 22px icon isn't cut down to an invisible sliver by a
 //   track a fraction of that height.
 //
+//   If Stash draws its own small colored marker indicators on the
+//   scrubber (one per marker, tinted with that marker's tag color) and
+//   NATIVE_MARKER_SELECTORS finds them, each icon is mounted directly
+//   inside the matching indicator (matched by position — see
+//   findClosestTick) and tinted to match its color, instead of floating
+//   in our own overlay. A marker with no matching indicator (or if none
+//   are found at all) still gets its icon positioned by percentage in the
+//   overlay as before, so nothing silently disappears.
+//
 // Icons:
 //   Shows one icon per tag on the marker that actually has an image
 //   uploaded (Settings on a tag page lets you upload one) — the primary
@@ -51,6 +60,21 @@
     '[class*="seek-bar"]',
     '[class*="scrubber"]',
   ];
+
+  // Stash draws its own small colored marker indicators on the scrubber —
+  // one per scene marker, tinted with that marker's tag color. Tried in
+  // order, scoped to inside the scrubber only, so a broad guess here can't
+  // accidentally match something unrelated elsewhere on the page.
+  const NATIVE_MARKER_SELECTORS = [
+    ".vjs-marker",
+    '[class*="marker"]',
+  ];
+
+  // How close (as a % of the scrubber's width) a native marker indicator's
+  // own position has to be to a marker's computed position to count as a
+  // match. Both are derived from the same seconds/duration formula, so a
+  // genuine match should land far closer than this in practice.
+  const TICK_MATCH_TOLERANCE_PCT = 2;
 
   const MAX_PLACEMENT_RETRIES = 20;
   const PLACEMENT_RETRY_MS = 500;
@@ -168,7 +192,10 @@
   // Builds the little cluster of icons shown at one marker's position: one
   // image per tag on that marker that has an image uploaded (primary tag
   // included). Returns null if none of its tags have an image — that
-  // marker just gets no icon, rather than a generic placeholder.
+  // marker just gets no icon, rather than a generic placeholder. Returns
+  // { el, pct } otherwise — `pct` (position along the scrubber, 0-100) is
+  // exposed so a caller can match this marker against a native marker
+  // indicator at roughly the same position (see findClosestTick below).
   function makeMarkerIcons(marker, duration, video) {
     const tags = tagsWithImages(marker);
     if (tags.length === 0) return null;
@@ -186,7 +213,9 @@
       "display:flex",
       "align-items:center",
       "gap:2px",
-      "pointer-events:inherit", // cascades from the overlay's own hover-toggled value
+      "opacity:0",
+      "pointer-events:none",
+      "transition:opacity 0.15s ease",
     ].join(";");
 
     const jumpToMarker = (e) => {
@@ -217,44 +246,29 @@
       group.appendChild(img);
     });
 
-    return group;
+    return { el: group, pct };
   }
 
-  function buildOverlay(markers, duration, video) {
-    const el = document.createElement("div");
-    el.id = "marker-symbols-overlay";
-    el.style.cssText = [
-      "position:absolute",
-      "left:0",
-      "top:0",
-      "width:100%",
-      "height:100%",
-      "z-index:20",
-      "opacity:0",
-      "pointer-events:none",
-      "transition:opacity 0.15s ease",
-    ].join(";");
-    markers.forEach((m) => {
-      const icons = makeMarkerIcons(m, duration, video);
-      if (icons) el.appendChild(icons);
-    });
-    return el;
-  }
-
-  // Shows `overlay` on hover, but also while the scrubber is actively
-  // being used: mouse/touch held down for a seek-drag (which can continue
-  // after the pointer leaves the bar itself — mouseup/touchend are
-  // watched on the whole document so it doesn't get stuck visible), or
-  // keyboard-focused. Touch devices have no hover at all, so without the
-  // touch handling here the icons would never show up on them.
-  function wireVisibility(container, overlay) {
+  // Shows every element in `groups` on hover, but also while the scrubber
+  // is actively being used: mouse/touch held down for a seek-drag (which
+  // can continue after the pointer leaves the bar itself — mouseup/
+  // touchend are watched on the whole document so it doesn't get stuck
+  // visible), or keyboard-focused. Touch devices have no hover at all, so
+  // without the touch handling here the icons would never show up on
+  // them. Each group's opacity/pointer-events are set directly (rather
+  // than relying on CSS inheritance from one shared parent) since groups
+  // mounted onto Stash's own native marker ticks live under a different
+  // parent than the ones left floating in our own overlay.
+  function wireVisibility(container, groups) {
     let hovering = false;
     let active = false;
 
     const sync = () => {
       const visible = hovering || active;
-      overlay.style.opacity = visible ? "1" : "0";
-      overlay.style.pointerEvents = visible ? "auto" : "none";
+      groups.forEach((el) => {
+        el.style.opacity = visible ? "1" : "0";
+        el.style.pointerEvents = visible ? "auto" : "none";
+      });
     };
     const onEnter = () => { hovering = true; sync(); };
     const onLeave = () => { hovering = false; sync(); };
@@ -304,6 +318,69 @@
     }
   }
 
+  // Finds Stash's own native per-marker indicators on the scrubber, if
+  // any — scoped to inside `scrubber` only, so a broad guess here can't
+  // match something unrelated elsewhere on the page.
+  function findNativeMarkerTicks(scrubber) {
+    for (const selector of NATIVE_MARKER_SELECTORS) {
+      const found = Array.from(scrubber.querySelectorAll(selector));
+      if (found.length) return found;
+    }
+    return [];
+  }
+
+  // Which of `ticks` sits at roughly `pct` along `scrubber` — both should
+  // land at (very close to) the same position, since both are derived
+  // from the same seconds/duration formula. Returns null if the closest
+  // one still isn't within TICK_MATCH_TOLERANCE_PCT (unrecognized marker
+  // indicator markup, or this player doesn't draw per-marker indicators
+  // at all despite NATIVE_MARKER_SELECTORS matching something else).
+  function findClosestTick(ticks, scrubber, pct) {
+    const scrubberRect = scrubber.getBoundingClientRect();
+    if (!scrubberRect.width) return null;
+    let best = null;
+    let bestDelta = Infinity;
+    ticks.forEach((tick) => {
+      const r = tick.getBoundingClientRect();
+      const tickPct = ((r.left + r.width / 2 - scrubberRect.left) / scrubberRect.width) * 100;
+      const delta = Math.abs(tickPct - pct);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        best = tick;
+      }
+    });
+    return bestDelta <= TICK_MATCH_TOLERANCE_PCT ? best : null;
+  }
+
+  // Mounts `iconGroupEl` as an actual child of `tick` — Stash's own native
+  // marker indicator — instead of leaving it floating in our overlay, and
+  // tints its icon(s) with that indicator's own color so they read as
+  // part of the colored bar rather than something dropped on top of it.
+  function mountIconOnTick(tick, iconGroupEl) {
+    const computed = getComputedStyle(tick);
+    if (computed.position === "static") {
+      overflowOverrides.push({ el: tick, prop: "position", original: tick.style.position });
+      tick.style.position = "relative";
+    }
+    if (computed.overflow === "hidden" || computed.overflow === "clip") {
+      overflowOverrides.push({ el: tick, prop: "overflow", original: tick.style.overflow });
+      tick.style.overflow = "visible";
+    }
+    // Re-anchor to the tick's own (usually tiny) box instead of the
+    // percentage position computed against the whole scrubber.
+    iconGroupEl.style.left = "50%";
+
+    const tickColor = computed.backgroundColor;
+    if (tickColor && tickColor !== "rgba(0, 0, 0, 0)" && tickColor !== "transparent") {
+      iconGroupEl.querySelectorAll("img").forEach((img) => {
+        img.style.borderColor = tickColor;
+        img.style.boxShadow = `0 0 4px ${tickColor}`;
+      });
+    }
+
+    tick.appendChild(iconGroupEl);
+  }
+
   function renderOnScrubber(scrubber, video, markers) {
     const computed = getComputedStyle(scrubber);
     if (computed.position === "static") {
@@ -313,15 +390,56 @@
     const player = scrubber.closest(".video-js, .vjs-container") || scrubber.parentElement;
     unclipAncestors(scrubber, player);
 
-    overlayEl = buildOverlay(markers, video.duration, video);
+    // Positioning container for whichever icon groups don't end up
+    // matched to a native marker tick below.
+    overlayEl = document.createElement("div");
+    overlayEl.id = "marker-symbols-overlay";
+    overlayEl.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;z-index:20;";
     scrubber.appendChild(overlayEl);
-    wireVisibility(scrubber, overlayEl);
-    console.info("[Marker Symbols] Rendering directly on the real scrubber:", scrubber);
+
+    const nativeTicks = findNativeMarkerTicks(scrubber);
+    const groups = [];
+    let mountedOnTicks = 0;
+
+    markers.forEach((marker) => {
+      const result = makeMarkerIcons(marker, video.duration, video);
+      if (!result) return;
+      const tick = nativeTicks.length ? findClosestTick(nativeTicks, scrubber, result.pct) : null;
+      if (tick) {
+        mountIconOnTick(tick, result.el);
+        mountedOnTicks++;
+      } else {
+        overlayEl.appendChild(result.el);
+      }
+      groups.push(result.el);
+    });
+
+    wireVisibility(scrubber, groups);
+    console.info(
+      `[Marker Symbols] Rendering directly on the real scrubber (${mountedOnTicks}/${groups.length} ` +
+      "icon(s) mounted onto Stash's own native marker indicators):",
+      scrubber
+    );
+  }
+
+  function buildOverlay(markers, duration, video) {
+    const el = document.createElement("div");
+    el.id = "marker-symbols-overlay";
+    el.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;z-index:20;";
+    const groups = [];
+    markers.forEach((m) => {
+      const result = makeMarkerIcons(m, duration, video);
+      if (!result) return;
+      el.appendChild(result.el);
+      groups.push(result.el);
+    });
+    return { el, groups };
   }
 
   function renderFallbackBar(video, markers) {
     // Guaranteed-to-work fallback: a thin bar directly under the video,
-    // used only if none of SCRUBBER_SELECTORS matched.
+    // used only if none of SCRUBBER_SELECTORS matched. No native marker
+    // indicators to mount onto here since this isn't Stash's own bar.
     console.warn(
       "[Marker Symbols] No known scrubber selector matched this player — falling back to a thin bar " +
       "under the video instead of hovering on Stash's own seek bar. If you want it merged into your " +
@@ -349,12 +467,12 @@
       "z-index:20",
     ].join(";");
 
-    overlayEl = buildOverlay(markers, video.duration, video);
-    overlayEl.style.cssText = "position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity 0.15s ease;";
+    const { el, groups } = buildOverlay(markers, video.duration, video);
+    overlayEl = el;
     bar.appendChild(overlayEl);
 
     player.appendChild(bar);
-    wireVisibility(bar, overlayEl);
+    wireVisibility(bar, groups);
   }
 
   async function placeSymbols(sceneId) {

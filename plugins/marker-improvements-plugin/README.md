@@ -71,6 +71,20 @@ than avoiding that by rendering somewhere else, this forces
 player (restored on navigating away), so the icons genuinely live inside
 the seek bar and just poke slightly above/below its own thin box.
 
+### Mounted onto Stash's own colored marker indicators
+
+If your Stash version draws its own small colored marker indicators on
+the scrubber (a thin tinted bar per marker, positioned at its timestamp),
+each tag icon is mounted directly inside the matching indicator — matched
+by comparing positions, since both are computed from the same
+seconds/duration math — and its border/glow is tinted to that indicator's
+own color, so it reads as part of the colored bar rather than something
+dropped on top of it. A marker whose indicator can't be matched (or on a
+player version that doesn't draw these at all) still gets its icon
+positioned by percentage along the scrubber as before, so nothing's ever
+silently dropped. The console line says how many it found:
+`(N/M icon(s) mounted onto Stash's own native marker indicators)`.
+
 ## Notes
 
 - This only reads markers/tags — it never creates, edits, or deletes
