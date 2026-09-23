@@ -1,11 +1,12 @@
 # Marker Improvements (Stash plugin)
 
 Puts each scene marker's tag images directly inside Stash's own colored
-marker indicator on the video scrubber, hidden until you hover, drag,
-touch, or keyboard-focus that specific indicator. Click an icon to jump
-straight to that marker. Pure frontend — no Python, no ffmpeg, nothing to
-configure server-side or in a settings dialog: the icons come straight
-from whatever images you've already got on each tag in Stash.
+marker indicator on the video scrubber — a real child of that indicator,
+so it shows and hides right along with it, however Stash itself reveals
+markers on the scrubber. Click an icon to jump straight to that marker.
+Pure frontend — no Python, no ffmpeg, nothing to configure server-side or
+in a settings dialog: the icons come straight from whatever images you've
+already got on each tag in Stash.
 
 Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 
@@ -15,8 +16,8 @@ Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/ma
    directory (same place as any other plugin — Settings → Plugins shows
    the exact path).
 2. Settings → Plugins → **Reload plugins**.
-3. Open any scene with markers and hover (or drag/touch) one of the
-   colored marker indicators on the scrubber.
+3. Open any scene with markers and look at the colored marker indicators
+   on the scrubber.
 
 ## Icons
 
@@ -24,10 +25,11 @@ Each marker shows one icon per tag on it that actually has an image
 uploaded — the one you can upload from that tag's page in Stash — not
 just its primary tag. If a marker has three tags and two of them have
 images, you get two icons clustered together at that marker's position;
-hover each one to see which tag it is. A marker where none of its tags
-have an image (or it has no tags at all) gets no icon at all — there's no
-generic placeholder pin. If one particular tag's image URL fails to load,
-just that one icon is dropped — its other tag icons are unaffected.
+hover each one (title tooltip) to see which tag it is. A marker where
+none of its tags have an image (or it has no tags at all) gets no icon at
+all — there's no generic placeholder pin. If one particular tag's image
+URL fails to load, just that one icon is dropped — its other tag icons
+are unaffected.
 
 ## Where the symbols show up
 
@@ -48,11 +50,12 @@ bar and just pokes slightly above/below its thin box.
 
 A `.vjs-marker-range` is also often styled `pointer-events: none` by the
 player, so it doesn't interfere with dragging the real seek handle
-underneath it — but that would also silently block the hover/drag/touch/
-focus listeners this plugin binds to it (see below), leaving the icon
-correctly mounted and positioned but never actually shown. If that's the
-case here, it's forced to `pointer-events: auto` too (also restored on
-navigating away).
+underneath it. That's left untouched — the icon group sets its own
+`pointer-events: auto` explicitly instead (a CSS-inherited property, so
+that takes over for the icon's own subtree regardless of what the
+indicator itself is set to), so clicking an icon still works without
+having to change how the indicator itself handles clicks anywhere else on
+its own area.
 
 ### How markers are matched to their indicator
 
@@ -71,22 +74,6 @@ prefix; the plugin also waits and retries (up to 20 times, 500ms apart)
 if it finds zero `.vjs-marker-range` elements at all rather than giving
 up immediately. If Stash ever renames the class, update
 `MARKER_RANGE_SELECTOR` near the top of `marker-symbols.js`.
-
-## Hidden until that marker's indicator is in use
-
-Each icon is invisible during normal playback and appears when its own
-`.vjs-marker-range` is:
-
-- **hovered** — mouse enters it,
-- **actively dragged** — mouse/touch held down, even if the drag continues
-  past its edge,
-- **touched** — touch devices have no hover state at all, so this is what
-  makes the icon reachable on mobile, or
-- **keyboard-focused** — tabbing to it.
-
-It fades back out once none of those are true anymore for that
-indicator. While hidden, it also doesn't intercept clicks, so the icon
-being gone doesn't change how seeking on the bar behaves.
 
 ## Diagnostics
 
