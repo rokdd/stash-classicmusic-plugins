@@ -75,11 +75,23 @@ its own.
 ## Splitting a scene at its markers
 
 Choose **Split at Markers…** from the File Operations menu. It opens a
-small dialog listing every marker on the scene as a checkbox —
-check the ones you want to cut at, leave the rest unchecked. Markers you
-leave unchecked aren't lost: they're still carried over into whichever
-part they land in, just not used as a cut point. The dialog also has
-"keep original file" and "frame-accurate cuts" checkboxes (see below).
+small dialog listing every marker on the scene as a checkbox, with two
+modes to choose from:
+
+- **Each marker as its own clip (start → end)** — the default. Every
+  checked marker becomes its own new scene, cut from where the marker
+  starts to where it ends. A marker without an end time (or on a Stash
+  older than v0.27, which has no marker end times) runs until the next
+  marker, or to the end of the video if it's the last one — those are
+  shown with a `*` in the list. Parts of the video outside every checked
+  marker don't end up in any new file.
+- **Cut the video at each marker** — the file is cut at every checked
+  marker, so the parts together cover the whole video. Markers you leave
+  unchecked aren't lost: they're still carried over into whichever part
+  they land in, just not used as a cut point.
+
+The dialog also has "keep original file" and "frame-accurate cuts"
+checkboxes (see below).
 
 For each part it creates, the plugin:
 

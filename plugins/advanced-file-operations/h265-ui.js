@@ -117,23 +117,44 @@
       keep_original: opts.keepOriginal ? "true" : "false",
       accurate: opts.accurate ? "true" : "false",
     };
-    if (opts.cutSeconds && opts.cutSeconds.length) {
+    if (opts.ranges && opts.ranges.length) {
+      argsMap.ranges = opts.ranges.join(",");
+    } else if (opts.cutSeconds && opts.cutSeconds.length) {
       argsMap.cut_seconds = opts.cutSeconds.join(",");
     }
     return runTask(`Split scene ${sceneId} at markers`, argsMap);
   }
 
+  // Asks for each marker's end_seconds too (Stash v0.27+). Older versions
+  // don't have that field and reject the whole query, so fall back to one
+  // without it — markers then just have no end of their own.
   async function fetchMarkers(sceneId) {
-    const query = `
+    const query = (fields) => `
       query($id: ID!) {
         findScene(id: $id) {
-          scene_markers { id seconds title primary_tag { name } }
+          scene_markers { ${fields} }
         }
       }`;
-    const data = await callGQL(query, { id: sceneId });
+    let data;
+    try {
+      data = await callGQL(query("id seconds end_seconds title primary_tag { name }"), { id: sceneId });
+    } catch (err) {
+      data = await callGQL(query("id seconds title primary_tag { name }"), { id: sceneId });
+    }
     return (data.findScene.scene_markers || [])
       .slice()
       .sort((a, b) => a.seconds - b.seconds);
+  }
+
+  // Where a marker's clip ends in "whole marker" mode: its own end time if
+  // it has one, else the next marker's start. null means "to the end of
+  // the video" — the backend fills that in from the file's duration.
+  function markerRangeEnd(marker, allMarkers) {
+    if (marker.end_seconds != null && marker.end_seconds > marker.seconds) {
+      return { end: marker.end_seconds, inferred: false };
+    }
+    const next = allMarkers.find((m) => m.seconds > marker.seconds);
+    return { end: next ? next.seconds : null, inferred: true };
   }
 
   function formatTime(seconds) {
@@ -142,9 +163,13 @@
     return `${m}:${s}`;
   }
 
-  // Shows a checklist of the scene's markers so the person can pick exactly
-  // which ones to cut at, instead of always splitting at every marker.
-  // Resolves to { cutSeconds, keepOriginal, accurate }, or null if cancelled.
+  // Shows a checklist of the scene's markers in one of two modes:
+  //   - "whole" (default): each checked marker becomes its own clip, from
+  //     its start to its end (see markerRangeEnd).
+  //   - "points": the file is cut at each checked marker, so the parts
+  //     together cover the whole video.
+  // Resolves to { ranges | cutSeconds, keepOriginal, accurate }, or null if
+  // cancelled.
   function openSplitDialog(markers) {
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
@@ -163,25 +188,65 @@
       heading.textContent = "Split scene — choose where to cut";
       box.appendChild(heading);
 
+      let mode = "whole";
+      const modeWrap = document.createElement("div");
+      modeWrap.style.cssText = "display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:0.9em;";
+      [
+        { value: "whole", text: "Each marker as its own clip (start → end)" },
+        { value: "points", text: "Cut the video at each marker" },
+      ].forEach((opt) => {
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "h265-split-mode";
+        radio.value = opt.value;
+        radio.checked = opt.value === mode;
+        radio.addEventListener("change", () => {
+          mode = opt.value;
+          renderList();
+        });
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(opt.text));
+        modeWrap.appendChild(label);
+      });
+      box.appendChild(modeWrap);
+
       const hint = document.createElement("p");
       hint.style.cssText = "font-size:0.85em;opacity:0.75;margin-bottom:14px;";
-      hint.textContent =
-        "Check the markers you want to cut at. Markers you leave unchecked " +
-        "aren't cut points, but they're still carried into whichever part " +
-        "they end up in.";
       box.appendChild(hint);
 
-      const cuttable = markers.filter((m) => m.seconds > 0);
-      const checkboxes = [];
+      const list = document.createElement("div");
+      list.style.cssText = "display:flex;flex-direction:column;gap:6px;margin-bottom:16px;";
+      box.appendChild(list);
 
-      if (cuttable.length === 0) {
-        const none = document.createElement("p");
-        none.textContent = "This scene has no markers after 0:00 to cut at.";
-        box.appendChild(none);
-      } else {
-        const list = document.createElement("div");
-        list.style.cssText = "display:flex;flex-direction:column;gap:6px;margin-bottom:16px;";
-        cuttable.forEach((m) => {
+      let checkboxes = [];
+
+      // Rebuilds the checklist for the current mode. "points" can't cut at
+      // 0:00, so it leaves those markers out; "whole" lists every marker
+      // with the range it would be cut to.
+      function renderList() {
+        hint.textContent = mode === "whole"
+          ? "Each checked marker becomes its own new scene, from where it starts " +
+            "to where it ends (or to the next marker, if it has no end set). " +
+            "Parts of the video outside every checked marker aren't in any new file."
+          : "Check the markers you want to cut at. Markers you leave unchecked " +
+            "aren't cut points, but they're still carried into whichever part " +
+            "they end up in.";
+
+        list.textContent = "";
+        checkboxes = [];
+        const shown = mode === "whole" ? markers : markers.filter((m) => m.seconds > 0);
+
+        if (shown.length === 0) {
+          const none = document.createElement("p");
+          none.textContent = mode === "whole"
+            ? "This scene has no markers."
+            : "This scene has no markers after 0:00 to cut at.";
+          list.appendChild(none);
+        }
+
+        shown.forEach((m) => {
           const label = document.createElement("label");
           label.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
           const cb = document.createElement("input");
@@ -190,13 +255,26 @@
           cb.dataset.seconds = String(m.seconds);
           const text = document.createElement("span");
           const name = m.title || (m.primary_tag && m.primary_tag.name) || "marker";
-          text.textContent = `${formatTime(m.seconds)} — ${name}`;
+          if (mode === "whole") {
+            const { end, inferred } = markerRangeEnd(m, markers);
+            cb.dataset.end = end == null ? "" : String(end);
+            const endText = end == null ? "end" : formatTime(end);
+            text.textContent = `${formatTime(m.seconds)} – ${endText}${inferred ? "*" : ""} — ${name}`;
+            if (inferred) {
+              text.title = end == null
+                ? "No end time set — runs to the end of the video"
+                : "No end time set — runs until the next marker";
+            }
+          } else {
+            text.textContent = `${formatTime(m.seconds)} — ${name}`;
+          }
           label.appendChild(cb);
           label.appendChild(text);
           list.appendChild(label);
           checkboxes.push(cb);
         });
-        box.appendChild(list);
+
+        confirmBtn.disabled = shown.length === 0;
       }
 
       const optionsWrap = document.createElement("div");
@@ -238,20 +316,27 @@
       confirmBtn.type = "button";
       confirmBtn.className = "btn btn-primary";
       confirmBtn.textContent = "Split";
-      confirmBtn.disabled = cuttable.length === 0;
       confirmBtn.addEventListener("click", () => {
-        const cutSeconds = checkboxes.filter((cb) => cb.checked).map((cb) => cb.dataset.seconds);
-        if (cutSeconds.length === 0) {
-          window.alert("Check at least one marker to cut at.");
+        const checked = checkboxes.filter((cb) => cb.checked);
+        if (checked.length === 0) {
+          window.alert("Check at least one marker.");
           return;
         }
         overlay.remove();
-        resolve({ cutSeconds, keepOriginal: keepCb.checked, accurate: accCb.checked });
+        const common = { keepOriginal: keepCb.checked, accurate: accCb.checked };
+        if (mode === "whole") {
+          // "start-end", with an empty end meaning "to the end of the video".
+          resolve({ ...common, ranges: checked.map((cb) => `${cb.dataset.seconds}-${cb.dataset.end}`) });
+        } else {
+          resolve({ ...common, cutSeconds: checked.map((cb) => cb.dataset.seconds) });
+        }
       });
 
       btnRow.appendChild(cancelBtn);
       btnRow.appendChild(confirmBtn);
       box.appendChild(btnRow);
+      // Only now — renderList() touches confirmBtn.
+      renderList();
 
       overlay.appendChild(box);
       overlay.addEventListener("click", (e) => {

@@ -921,35 +921,62 @@ def run_split_scene(client, args):
     # h265-ui.js). Falls back to "cut at every marker" when omitted, so the
     # mode still works if triggered without that dialog (e.g. by hand from
     # Settings > Tasks with an explicit scene_id).
+    #
+    # ranges, when given, takes precedence: a comma-separated list of
+    # "start-end" pairs (the dialog's "each marker as its own clip" mode),
+    # each cut out as its own part. An empty end means "to the end of the
+    # file". Unlike cut points, these don't have to cover the whole video,
+    # and one range alone is a valid split.
+    ranges_arg = (args.get("ranges") or "").strip()
     cut_seconds_arg = (args.get("cut_seconds") or "").strip()
-    if cut_seconds_arg:
-        try:
-            cut_points = sorted({round(float(s), 3) for s in cut_seconds_arg.split(",") if s.strip()})
-        except ValueError as exc:
-            write_plugin_output(error=f"Invalid cut_seconds value: {exc}")
-            return
-    else:
-        cut_points = sorted({round(float(m["seconds"]), 3) for m in markers if float(m["seconds"]) > 0})
-
-    cut_points = [c for c in cut_points if 0 < c < duration]
-    if not cut_points:
-        write_plugin_output(error="No valid cut points to split at (need at least one marker strictly between 0:00 and the end)")
-        return
-
-    boundaries = [0.0] + cut_points + [duration]
     segments = []
-    for i in range(len(boundaries) - 1):
-        start, end = boundaries[i], boundaries[i + 1]
-        if end - start >= MIN_SEGMENT_SECONDS:
-            segments.append((start, end))
+    if ranges_arg:
+        try:
+            for item in ranges_arg.split(","):
+                if not item.strip():
+                    continue
+                start_s, _, end_s = item.strip().partition("-")
+                start = max(0.0, round(float(start_s), 3))
+                end = min(duration, round(float(end_s), 3)) if end_s.strip() else duration
+                if end - start >= MIN_SEGMENT_SECONDS:
+                    segments.append((start, end))
+        except ValueError as exc:
+            write_plugin_output(error=f"Invalid ranges value: {exc}")
+            return
+        segments = sorted(set(segments))
+        if not segments:
+            write_plugin_output(error="None of the chosen marker ranges is long enough to cut")
+            return
+        split_desc = f"from {len(segments)} marker range(s)"
+    else:
+        if cut_seconds_arg:
+            try:
+                cut_points = sorted({round(float(s), 3) for s in cut_seconds_arg.split(",") if s.strip()})
+            except ValueError as exc:
+                write_plugin_output(error=f"Invalid cut_seconds value: {exc}")
+                return
+        else:
+            cut_points = sorted({round(float(m["seconds"]), 3) for m in markers if float(m["seconds"]) > 0})
 
-    if len(segments) < 2:
-        write_plugin_output(error="Markers didn't produce more than one usable segment; nothing to split")
-        return
+        cut_points = [c for c in cut_points if 0 < c < duration]
+        if not cut_points:
+            write_plugin_output(error="No valid cut points to split at (need at least one marker strictly between 0:00 and the end)")
+            return
+
+        boundaries = [0.0] + cut_points + [duration]
+        for i in range(len(boundaries) - 1):
+            start, end = boundaries[i], boundaries[i + 1]
+            if end - start >= MIN_SEGMENT_SECONDS:
+                segments.append((start, end))
+
+        if len(segments) < 2:
+            write_plugin_output(error="Markers didn't produce more than one usable segment; nothing to split")
+            return
+        split_desc = f"at {len(cut_points)} marker(s)"
 
     base_dir = os.path.dirname(src_path)
     base_name, ext = os.path.splitext(os.path.basename(src_path))
-    log_info(f"Splitting '{base_name}{ext}' into {len(segments)} part(s) at {len(cut_points)} marker(s)...")
+    log_info(f"Splitting '{base_name}{ext}' into {len(segments)} part(s) {split_desc}...")
 
     out_paths = []
     try:
@@ -1008,11 +1035,12 @@ def run_split_scene(client, args):
         except Exception as exc:  # noqa: BLE001
             log_warn(f"Copied file but couldn't copy metadata to new scene {new_scene_id}: {exc}")
 
-        is_last = idx == len(out_paths)
+        # A marker sitting exactly on the file's very end has no later part
+        # to go into, so it belongs to whichever part ends there.
         segment_markers = [
             m for m in markers
             if start <= float(m["seconds"]) < end
-            or (is_last and float(m["seconds"]) == end)
+            or (end >= duration and float(m["seconds"]) == end)
         ]
         marker_count = 0
         for m in segment_markers:
