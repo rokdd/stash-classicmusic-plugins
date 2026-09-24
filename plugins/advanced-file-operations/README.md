@@ -118,6 +118,12 @@ Two things worth knowing:
   before/after the exact marker you picked. Checking "frame-accurate cuts"
   re-encodes each part so the cut lands exactly on the marker, at the cost
   of re-encode time and a second generation of lossy compression.
+- **Two tasks, not one.** Stash runs one task at a time, so the split
+  can't wait for its own scan of the new files — the scan wouldn't start
+  until the split ended. Instead the split cuts the files, queues a scan,
+  and queues a second task, **Finish splitting "…"**, behind it. That one
+  runs once the scan is done and copies the details and markers onto the
+  new scenes. Until it has run, the new scenes show up bare.
 - **Finding the new scenes.** After scanning, the plugin looks up each new
   file's scene by path to attach metadata and markers to it. Which
   GraphQL filter that lookup uses can vary a little by Stash version; it

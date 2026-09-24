@@ -104,6 +104,10 @@ MIN_SEGMENT_SECONDS = 0.5
 # on top of whatever the source already was).
 SPLIT_ACCURATE_DEFAULT = False
 
+# Stash's id for this plugin — the yml manifest's filename minus ".yml".
+# Must match PLUGIN_ID in h265-ui.js. Used to queue follow-up tasks.
+PLUGIN_ID = "advancedFileOperations"
+
 # Name of the tag applied to scenes after a successful repair.
 REPAIR_TAG_NAME = "File Repaired"
 
@@ -112,12 +116,14 @@ REPAIR_TAG_NAME = "File Repaired"
 # Stash plugin log protocol
 # ---------------------------------------------------------------------------
 # Stash reads plugin stderr line by line. A line that starts with an SOH
-# (\x01) byte, then one of t/d/i/w/e/p, then a space, is parsed as a log line
-# at that level and shown in the plugin log in the UI. Progress lines use
-# "p" and a value 0.0-1.0.
+# (\x01) byte, then one of t/d/i/w/e/p, then an STX (\x02) byte, is parsed
+# as a log line at that level and shown in the plugin log in the UI.
+# Anything else (including a space instead of \x02) isn't recognised: it
+# gets logged verbatim at Error level and progress lines don't move the
+# task's progress bar. Progress lines use "p" and a value 0.0-1.0.
 
 def _log(level, message):
-    sys.stderr.write(f"\x01{level} {message}\n")
+    sys.stderr.write(f"\x01{level}\x02{message}\n")
     sys.stderr.flush()
 
 
@@ -431,35 +437,28 @@ class StashClient:
         )
         return data["sceneMarkerCreate"]["id"]
 
-    def wait_for_job(self, job_id, timeout=1800, poll_interval=3, on_progress=None):
+    def wait_for_job(self, job_id, timeout=1800, poll_interval=3):
         """
         Polls Stash's job queue until the given job id finishes (or we time
         out). If this Stash version doesn't expose findJob the way we
         expect, falls back to just waiting a fixed buffer instead of
         failing the whole run over it.
-
-        `on_progress`, if given, is called with the job's own 0.0-1.0
-        progress on every poll, so a caller can pass a scan's progress
-        through to this task's progress bar.
         """
         done_statuses = {"FINISHED", "CANCELLED", "STOPPED", "FAILED"}
-        fields = "id status progress" if on_progress else "id status"
         waited = 0
         while waited < timeout:
             try:
                 data = self.call(
-                    f"""
-                    query($id: ID!) {{
-                      findJob(input: {{ id: $id }}) {{ {fields} }}
-                    }}
+                    """
+                    query($id: ID!) {
+                      findJob(input: { id: $id }) { id status }
+                    }
                     """,
                     {"id": job_id},
                 )
                 job = data.get("findJob")
                 if not job or job.get("status") in done_statuses:
                     return
-                if on_progress and job.get("progress") is not None:
-                    on_progress(float(job["progress"]))
             except Exception as exc:  # noqa: BLE001
                 log_warn(f"Couldn't poll scan job status ({exc}); waiting a fixed buffer instead")
                 time.sleep(poll_interval * 5)
@@ -507,6 +506,30 @@ class StashClient:
         )
 
     # -- library ----------------------------------------------------------
+
+    def run_plugin_task(self, description, args_map):
+        """Queues another run of this plugin as a new Stash job. Tries the
+        modern args_map form first (Stash v0.25+), falling back to the
+        older PluginArgInput list form — same as runTask() in h265-ui.js."""
+        try:
+            self.call(
+                """
+                mutation($plugin_id: ID!, $description: String, $args_map: Map) {
+                  runPluginTask(plugin_id: $plugin_id, description: $description, args_map: $args_map)
+                }
+                """,
+                {"plugin_id": PLUGIN_ID, "description": description, "args_map": args_map},
+            )
+        except Exception:  # noqa: BLE001
+            args = [{"key": k, "value": {"str": str(v)}} for k, v in args_map.items()]
+            self.call(
+                """
+                mutation($plugin_id: ID!, $description: String, $args: [PluginArgInput!]) {
+                  runPluginTask(plugin_id: $plugin_id, description: $description, args: $args)
+                }
+                """,
+                {"plugin_id": PLUGIN_ID, "description": description, "args": args},
+            )
 
     def rescan_paths(self, paths):
         """Triggers a scan and returns whatever metadataScan resolves to —
@@ -841,10 +864,10 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progre
         return f"failed: {exc}"
 
 
-def scan_and_wait(client, paths, on_progress=None):
+def scan_and_wait(client, paths):
     job_id = client.rescan_paths(paths)
     if isinstance(job_id, str):
-        client.wait_for_job(job_id, on_progress=on_progress)
+        client.wait_for_job(job_id)
     else:
         # Older Stash versions scan synchronously enough, or return a plain
         # boolean; give the library a moment to settle either way.
@@ -985,12 +1008,11 @@ def run_split_scene(client, args):
     base_name, ext = os.path.splitext(os.path.basename(src_path))
     log_info(f"Splitting '{base_name}{ext}' into {len(segments)} part(s) {split_desc}...")
 
-    # How the task's progress bar is shared out: cutting is almost all of
-    # the work, the Stash scan and the per-part metadata much less. Within
-    # the cutting stage each part gets a share proportional to its length,
+    # Cutting is where nearly all the time goes, so it gets the progress
+    # bar; within it each part's share is proportional to its length,
     # since that's what ffmpeg's time is spent on — a 20-minute part
     # shouldn't move the bar as much as a 20-second one.
-    CUT_END, SCAN_END = 0.8, 0.9
+    CUT_END = 0.95
     total_length = sum(end - start for start, end in segments) or 1.0
 
     out_paths = []
@@ -1020,12 +1042,70 @@ def run_split_scene(client, args):
         return
     log_progress(CUT_END)
 
-    log_info("Scanning the new split files into Stash (this can take a bit)...")
-    scan_and_wait(
-        client, [p for p, _, _ in out_paths],
-        on_progress=lambda f: log_progress(CUT_END + f * (SCAN_END - CUT_END)),
+    # Stash runs one job at a time, and this task is itself a job — so a
+    # scan started from here can't run until this task has ended, and
+    # waiting for it would just hang. Instead, queue the scan and then a
+    # follow-up "split_finalize" task behind it: the queue runs them in
+    # order, so by the time the follow-up starts the new scenes exist.
+    log_info("Queueing a scan of the new files, then a follow-up task to copy the scene details onto them...")
+    client.rescan_paths([p for p, _, _ in out_paths])
+
+    title = scene.get("title") or base_name
+    try:
+        client.run_plugin_task(
+            f'Finish splitting "{title}"',
+            {
+                "mode": "split_finalize",
+                "scene_id": str(scene_id),
+                "keep_original": "true" if keep_original else "false",
+                "duration": str(duration),
+                "parts": json.dumps([[p, s, e] for p, s, e in out_paths]),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        log_progress(1.0)
+        write_plugin_output(
+            error=(
+                f"Cut {len(out_paths)} part(s) and queued a scan, but couldn't queue the follow-up task "
+                f"that copies title/performers/tags/markers onto them ({exc}). The files are on disk "
+                f"next to the original; their scenes will need those details added by hand."
+            )
+        )
+        return
+
+    log_progress(1.0)
+    summary = (
+        f"Cut {len(out_paths)} part(s). Scene details are copied onto them by the "
+        f'"Finish splitting" task, which runs right after the scan.'
     )
-    log_progress(SCAN_END)
+    log_info(summary)
+    write_plugin_output(output=summary)
+
+
+def run_split_finalize(client, args):
+    """
+    Second half of a split, queued by run_split_scene behind the scan of
+    the new files: finds each part's new scene and copies the original
+    scene's details and the markers that fall inside that part onto it.
+    """
+    scene_id = args.get("scene_id")
+    try:
+        parts = json.loads(args.get("parts") or "[]")
+        duration = float(args.get("duration"))
+    except (TypeError, ValueError) as exc:
+        write_plugin_output(error=f"split_finalize got invalid parts/duration arguments: {exc}")
+        return
+    keep_original = str(args.get("keep_original", "true")).lower() == "true"
+
+    scene = client.get_scene(scene_id) if scene_id else None
+    if not scene or not parts:
+        write_plugin_output(error=f"split_finalize: no original scene {scene_id} or no parts to finish")
+        return
+
+    markers = scene.get("scene_markers") or []
+    files = scene.get("files") or []
+    src_path = files[0]["path"] if files else None
+    base_name = os.path.splitext(os.path.basename(src_path))[0] if src_path else f"scene {scene_id}"
 
     performer_ids = [p["id"] for p in scene.get("performers") or []]
     tag_ids = [t["id"] for t in scene.get("tags") or []]
@@ -1033,8 +1113,9 @@ def run_split_scene(client, args):
     original_title = scene.get("title") or base_name
 
     created, needs_follow_up = 0, 0
-    for idx, (out_path, start, end) in enumerate(out_paths, start=1):
-        log_progress(SCAN_END + ((idx - 1) / len(out_paths)) * (1.0 - SCAN_END))
+    for idx, (out_path, start, end) in enumerate(parts, start=1):
+        log_progress((idx - 1) / len(parts))
+        start, end = float(start), float(end)
 
         new_scene_id = client.find_scene_by_path(out_path)
         if not new_scene_id:
@@ -1084,16 +1165,17 @@ def run_split_scene(client, args):
         created += 1
         log_info(f"Part {idx}: scene {new_scene_id} ({os.path.basename(out_path)}), {marker_count} marker(s) carried over")
 
-    if not keep_original:
+    if not keep_original and src_path:
         try:
             os.remove(src_path)
-            scan_and_wait(client, [base_dir])
+            # Queued, not waited on — same one-job-at-a-time reason as above.
+            client.rescan_paths([os.path.dirname(src_path)])
             log_info(f"Removed original file: {src_path}")
         except Exception as exc:  # noqa: BLE001
             log_warn(f"Split succeeded but couldn't remove the original file: {exc}")
 
     log_progress(1.0)
-    summary = f"Split into {len(out_paths)} part(s): {created} fully set up, {needs_follow_up} need a manual look."
+    summary = f"Split into {len(parts)} part(s): {created} fully set up, {needs_follow_up} need a manual look."
     log_info(summary)
     write_plugin_output(output=summary)
 
@@ -1314,7 +1396,9 @@ def run_repair_scene(client, args, repair_tag_id):
     rescan_target = [final_path]
     if removed_path and removed_path != final_path:
         rescan_target.append(os.path.dirname(removed_path))
-    scan_and_wait(client, rescan_target)
+    # Queued, not waited on: Stash runs one job at a time, so this scan
+    # can't start until this task ends — and nothing below needs it.
+    client.rescan_paths(rescan_target)
 
     try:
         existing_tag_ids = [t["id"] for t in scene.get("tags", [])]
@@ -1443,6 +1527,10 @@ def main():
             write_plugin_output(error=f"Could not reach Stash GraphQL API: {exc}")
             return
         run_split_scene(client, args)
+        return
+
+    if mode == "split_finalize":
+        run_split_finalize(client, args)
         return
 
     if mode == "repair_scene":
