@@ -83,7 +83,7 @@ part they land in, just not used as a cut point. The dialog also has
 
 For each part it creates, the plugin:
 
-- copies the title (suffixed `(part N)`), details, date, studio, performers,
+- copies the title (suffixed ` #N`, matching the `.pN` in the part's filename), details, date, studio, performers,
   tags, URLs and StashDB IDs from the original scene
 - re-creates whichever of the original scene's markers fall inside that
   part, with their timestamps shifted to be relative to that part's start

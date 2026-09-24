@@ -961,7 +961,7 @@ def run_split_scene(client, args):
             def on_progress(fraction, base=base, slice_size=slice_size):
                 log_progress(base + fraction * slice_size)
 
-            out_path = os.path.join(base_dir, f"{base_name}.part{idx}{ext}")
+            out_path = os.path.join(base_dir, f"{base_name}.p{idx}{ext}")
             cut_segment(src_path, start, end, out_path, accurate, on_progress=on_progress)
             out_paths.append((out_path, start, end))
     except Exception as exc:  # noqa: BLE001
@@ -996,7 +996,7 @@ def run_split_scene(client, args):
         try:
             client.update_scene_metadata(
                 new_scene_id,
-                title=f"{original_title} (part {idx})",
+                title=f"{original_title} #{idx}",
                 details=scene.get("details"),
                 date=scene.get("date"),
                 studio_id=studio_id,
