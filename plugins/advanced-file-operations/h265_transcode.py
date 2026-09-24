@@ -431,28 +431,35 @@ class StashClient:
         )
         return data["sceneMarkerCreate"]["id"]
 
-    def wait_for_job(self, job_id, timeout=1800, poll_interval=3):
+    def wait_for_job(self, job_id, timeout=1800, poll_interval=3, on_progress=None):
         """
         Polls Stash's job queue until the given job id finishes (or we time
         out). If this Stash version doesn't expose findJob the way we
         expect, falls back to just waiting a fixed buffer instead of
         failing the whole run over it.
+
+        `on_progress`, if given, is called with the job's own 0.0-1.0
+        progress on every poll, so a caller can pass a scan's progress
+        through to this task's progress bar.
         """
         done_statuses = {"FINISHED", "CANCELLED", "STOPPED", "FAILED"}
+        fields = "id status progress" if on_progress else "id status"
         waited = 0
         while waited < timeout:
             try:
                 data = self.call(
-                    """
-                    query($id: ID!) {
-                      findJob(input: { id: $id }) { id status }
-                    }
+                    f"""
+                    query($id: ID!) {{
+                      findJob(input: {{ id: $id }}) {{ {fields} }}
+                    }}
                     """,
                     {"id": job_id},
                 )
                 job = data.get("findJob")
                 if not job or job.get("status") in done_statuses:
                     return
+                if on_progress and job.get("progress") is not None:
+                    on_progress(float(job["progress"]))
             except Exception as exc:  # noqa: BLE001
                 log_warn(f"Couldn't poll scan job status ({exc}); waiting a fixed buffer instead")
                 time.sleep(poll_interval * 5)
@@ -834,10 +841,10 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progre
         return f"failed: {exc}"
 
 
-def scan_and_wait(client, paths):
+def scan_and_wait(client, paths, on_progress=None):
     job_id = client.rescan_paths(paths)
     if isinstance(job_id, str):
-        client.wait_for_job(job_id)
+        client.wait_for_job(job_id, on_progress=on_progress)
     else:
         # Older Stash versions scan synchronously enough, or return a plain
         # boolean; give the library a moment to settle either way.
@@ -873,16 +880,16 @@ def cut_segment(src_path, start, end, out_path, accurate, on_progress=None):
     else:
         # Stream-copy: no re-encode, no quality loss, but the cut snaps to
         # the nearest keyframe so it can land a little before/after the
-        # exact marker time. Fast enough (bounded by disk I/O, not decode
-        # speed) that per-segment progress isn't worth tracking.
+        # exact marker time. Bounded by disk I/O rather than decode speed,
+        # but on a large file on a slow or network disk that can still be
+        # minutes per part, so progress is tracked here too.
         cmd = [
             FFMPEG_BIN, "-y",
             "-ss", str(start), "-i", src_path, "-t", str(duration),
             "-c", "copy", "-avoid_negative_ts", "make_zero",
             out_path,
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        returncode, stderr = proc.returncode, proc.stderr
+        returncode, stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
 
     if returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
         raise RuntimeError(f"ffmpeg failed cutting [{start:.2f}s, {end:.2f}s): {stderr[-1500:]}")
@@ -978,12 +985,23 @@ def run_split_scene(client, args):
     base_name, ext = os.path.splitext(os.path.basename(src_path))
     log_info(f"Splitting '{base_name}{ext}' into {len(segments)} part(s) {split_desc}...")
 
+    # How the task's progress bar is shared out: cutting is almost all of
+    # the work, the Stash scan and the per-part metadata much less. Within
+    # the cutting stage each part gets a share proportional to its length,
+    # since that's what ffmpeg's time is spent on — a 20-minute part
+    # shouldn't move the bar as much as a 20-second one.
+    CUT_END, SCAN_END = 0.8, 0.9
+    total_length = sum(end - start for start, end in segments) or 1.0
+
     out_paths = []
+    out_path = None
     try:
+        done_length = 0.0
         for idx, (start, end) in enumerate(segments, start=1):
-            base = (idx - 1) / len(segments) * 0.5
-            slice_size = 0.5 / len(segments)
+            base = done_length / total_length * CUT_END
+            slice_size = (end - start) / total_length * CUT_END
             log_progress(base)
+            log_info(f"Cutting part {idx}/{len(segments)} ({end - start:.0f}s)...")
 
             def on_progress(fraction, base=base, slice_size=slice_size):
                 log_progress(base + fraction * slice_size)
@@ -991,16 +1009,23 @@ def run_split_scene(client, args):
             out_path = os.path.join(base_dir, f"{base_name}.p{idx}{ext}")
             cut_segment(src_path, start, end, out_path, accurate, on_progress=on_progress)
             out_paths.append((out_path, start, end))
+            done_length += end - start
     except Exception as exc:  # noqa: BLE001
-        for p, _, _ in out_paths:
-            if os.path.isfile(p):
+        # Includes the part that was being written when it failed, which
+        # isn't in out_paths yet.
+        for p in [p for p, _, _ in out_paths] + [out_path]:
+            if p and os.path.isfile(p):
                 os.remove(p)
         write_plugin_output(error=f"Splitting failed, no changes made: {exc}")
         return
+    log_progress(CUT_END)
 
     log_info("Scanning the new split files into Stash (this can take a bit)...")
-    scan_and_wait(client, [p for p, _, _ in out_paths])
-    log_progress(0.6)
+    scan_and_wait(
+        client, [p for p, _, _ in out_paths],
+        on_progress=lambda f: log_progress(CUT_END + f * (SCAN_END - CUT_END)),
+    )
+    log_progress(SCAN_END)
 
     performer_ids = [p["id"] for p in scene.get("performers") or []]
     tag_ids = [t["id"] for t in scene.get("tags") or []]
@@ -1009,7 +1034,7 @@ def run_split_scene(client, args):
 
     created, needs_follow_up = 0, 0
     for idx, (out_path, start, end) in enumerate(out_paths, start=1):
-        log_progress(0.6 + (idx / len(out_paths)) * 0.4)
+        log_progress(SCAN_END + ((idx - 1) / len(out_paths)) * (1.0 - SCAN_END))
 
         new_scene_id = client.find_scene_by_path(out_path)
         if not new_scene_id:
@@ -1067,6 +1092,7 @@ def run_split_scene(client, args):
         except Exception as exc:  # noqa: BLE001
             log_warn(f"Split succeeded but couldn't remove the original file: {exc}")
 
+    log_progress(1.0)
     summary = f"Split into {len(out_paths)} part(s): {created} fully set up, {needs_follow_up} need a manual look."
     log_info(summary)
     write_plugin_output(output=summary)
