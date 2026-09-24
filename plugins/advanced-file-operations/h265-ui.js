@@ -85,7 +85,25 @@
     }
   }
 
-  function runConvertScene(sceneId, opts) {
+  // How a scene is named in the task list: its title, or — since Stash
+  // leaves the title empty for scenes that never got one — its file name,
+  // falling back to the id only if the lookup fails.
+  async function sceneLabel(sceneId) {
+    try {
+      const data = await callGQL(
+        `query($id: ID!) { findScene(id: $id) { title files { basename } } }`,
+        { id: sceneId }
+      );
+      const scene = data.findScene;
+      const name = (scene && (scene.title || (scene.files[0] && scene.files[0].basename))) || "";
+      if (name) return `"${name}"`;
+    } catch (err) {
+      console.warn("[H265 Transcoder] Couldn't look up scene name for the task description:", err);
+    }
+    return `scene ${sceneId}`;
+  }
+
+  async function runConvertScene(sceneId, opts) {
     opts = opts || {};
     const argsMap = {
       mode: "convert_scene",
@@ -99,18 +117,18 @@
     } else {
       argsMap.quality = opts.quality || "visually_lossless";
     }
-    return runTask(`Convert scene ${sceneId} to H265`, argsMap);
+    return runTask(`Convert ${await sceneLabel(sceneId)} to H265`, argsMap);
   }
 
-  function runRepairScene(sceneId) {
-    return runTask(`Repair scene ${sceneId}`, {
+  async function runRepairScene(sceneId) {
+    return runTask(`Repair ${await sceneLabel(sceneId)}`, {
       mode: "repair_scene",
       scene_id: String(sceneId),
       keep_original: "true",
     });
   }
 
-  function runSplitScene(sceneId, opts) {
+  async function runSplitScene(sceneId, opts) {
     const argsMap = {
       mode: "split_scene",
       scene_id: String(sceneId),
@@ -122,7 +140,7 @@
     } else if (opts.cutSeconds && opts.cutSeconds.length) {
       argsMap.cut_seconds = opts.cutSeconds.join(",");
     }
-    return runTask(`Split scene ${sceneId} at markers`, argsMap);
+    return runTask(`Split ${await sceneLabel(sceneId)} at markers`, argsMap);
   }
 
   // Asks for each marker's end_seconds too (Stash v0.27+). Older versions
