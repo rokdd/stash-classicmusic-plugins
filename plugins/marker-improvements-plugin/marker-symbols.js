@@ -304,9 +304,14 @@
       img.title = label;
       img.style.cssText = [
         "cursor:pointer", "user-select:none", "flex:none",
-        `width:${ICON_SIZE_PX}px`,
+        // Fixed height, width following the image's own shape (capped so
+        // a very wide banner doesn't stretch the bubble across the bar),
+        // and `contain` so nothing is ever cropped — a square box with
+        // `cover` cut the sides/top off any image that wasn't square.
         `height:${ICON_SIZE_PX}px`,
-        "object-fit:cover",
+        "width:auto",
+        `max-width:${ICON_SIZE_PX * 2}px`,
+        "object-fit:contain",
         "border-radius:4px",
         "border:1px solid rgba(0,0,0,0.2)",
         "mix-blend-mode:multiply",
