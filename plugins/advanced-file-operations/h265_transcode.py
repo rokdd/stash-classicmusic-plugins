@@ -531,18 +531,71 @@ class StashClient:
                 {"plugin_id": PLUGIN_ID, "description": description, "args": args},
             )
 
+    def scan_generate_options(self):
+        """
+        What a scan started by this plugin should generate. A metadataScan
+        call with only `paths` generates nothing — no cover, no phash — so
+        this starts from the "Scan" defaults saved under Settings > Tasks
+        (whatever the person normally scans with), then always switches on
+        covers and phashes on top, since a new scene without either is
+        barely usable. If this Stash version can't report those defaults,
+        it's just covers and phashes.
+        """
+        options = {}
+        try:
+            data = self.call(
+                """
+                query {
+                  configuration {
+                    defaults {
+                      scan {
+                        scanGenerateCovers
+                        scanGeneratePreviews
+                        scanGenerateImagePreviews
+                        scanGenerateSprites
+                        scanGeneratePhashes
+                        scanGenerateThumbnails
+                        scanGenerateClipPreviews
+                      }
+                    }
+                  }
+                }
+                """
+            )
+            defaults = ((data.get("configuration") or {}).get("defaults") or {}).get("scan") or {}
+            options = {k: True for k, v in defaults.items() if v is True}
+        except Exception as exc:  # noqa: BLE001
+            log_warn(f"Couldn't read your default scan settings ({exc}); generating covers and phashes only")
+        options["scanGenerateCovers"] = True
+        options["scanGeneratePhashes"] = True
+        return options
+
     def rescan_paths(self, paths):
         """Triggers a scan and returns whatever metadataScan resolves to —
         a job id string on Stash versions with a job queue, or a plain
         boolean on older ones."""
-        data = self.call(
-            """
-            mutation($paths: [String!]) {
-              metadataScan(input: { paths: $paths })
-            }
-            """,
-            {"paths": paths},
-        )
+        scan_input = {"paths": paths, **self.scan_generate_options()}
+        try:
+            data = self.call(
+                """
+                mutation($input: ScanMetadataInput!) {
+                  metadataScan(input: $input)
+                }
+                """,
+                {"input": scan_input},
+            )
+        except Exception as exc:  # noqa: BLE001
+            # A generate option this Stash version doesn't know rejects the
+            # whole scan, so fall back to one that at least picks the files up.
+            log_warn(f"Scan with generate options failed ({exc}); scanning without them")
+            data = self.call(
+                """
+                mutation($paths: [String!]) {
+                  metadataScan(input: { paths: $paths })
+                }
+                """,
+                {"paths": paths},
+            )
         return data.get("metadataScan")
 
 
@@ -805,6 +858,22 @@ def link_converted_file_to_scene(client, scene, new_path):
         return False
 
 
+def scene_name(scene):
+    """How a scene is named in task names: its title, or its file name when
+    it never got one (Stash leaves the title empty then). Same rule as
+    sceneLabel() in h265-ui.js."""
+    files = scene.get("files") or []
+    name = scene.get("title") or (os.path.basename(files[0]["path"]) if files else "")
+    return f'"{name}"' if name else f"scene {scene['id']}"
+
+
+def scene_label(scene):
+    """How a scene is named in log lines: scene_name() plus its id, so two
+    scenes with the same title can still be told apart."""
+    name = scene_name(scene)
+    return name if name.startswith("scene ") else f"{name} (scene {scene['id']})"
+
+
 def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progress=None):
     """
     Converts one scene's primary video file to H265 if it needs it.
@@ -832,6 +901,7 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progre
         return "skipped"
 
     src_path = video_file["path"]
+    log_info(f"Converting {scene_label(scene)} to H265...")
     try:
         tmp_path = transcode_to_h265(src_path, crf=crf, on_progress=on_progress)
         final_path, removed_path = finalize_output(src_path, tmp_path, keep_original)
@@ -857,10 +927,10 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progre
         else:
             client.rescan_paths(rescan_paths)
 
-        log_info(f"Converted scene {scene['id']}: {os.path.basename(src_path)}{link_note}")
+        log_info(f"Converted {scene_label(scene)}{link_note}")
         return "converted"
     except Exception as exc:  # noqa: BLE001
-        log_error(f"Failed on scene {scene['id']} ({src_path}): {exc}")
+        log_error(f"Failed on {scene_label(scene)} ({src_path}): {exc}")
         return f"failed: {exc}"
 
 
@@ -1006,7 +1076,7 @@ def run_split_scene(client, args):
 
     base_dir = os.path.dirname(src_path)
     base_name, ext = os.path.splitext(os.path.basename(src_path))
-    log_info(f"Splitting '{base_name}{ext}' into {len(segments)} part(s) {split_desc}...")
+    log_info(f"Splitting {scene_label(scene)} into {len(segments)} part(s) {split_desc}...")
 
     # Cutting is where nearly all the time goes, so it gets the progress
     # bar; within it each part's share is proportional to its length,
@@ -1050,10 +1120,9 @@ def run_split_scene(client, args):
     log_info("Queueing a scan of the new files, then a follow-up task to copy the scene details onto them...")
     client.rescan_paths([p for p, _, _ in out_paths])
 
-    title = scene.get("title") or base_name
     try:
         client.run_plugin_task(
-            f'Finish splitting "{title}"',
+            f"Finish splitting {scene_name(scene)}",
             {
                 "mode": "split_finalize",
                 "scene_id": str(scene_id),
@@ -1075,8 +1144,8 @@ def run_split_scene(client, args):
 
     log_progress(1.0)
     summary = (
-        f"Cut {len(out_paths)} part(s). Scene details are copied onto them by the "
-        f'"Finish splitting" task, which runs right after the scan.'
+        f"Cut {scene_label(scene)} into {len(out_paths)} part(s). Scene details are copied "
+        f'onto them by the "Finish splitting" task, which runs right after the scan.'
     )
     log_info(summary)
     write_plugin_output(output=summary)
@@ -1163,7 +1232,10 @@ def run_split_finalize(client, args):
                 log_warn(f"Failed to recreate marker '{m.get('title')}' on new scene {new_scene_id}: {exc}")
 
         created += 1
-        log_info(f"Part {idx}: scene {new_scene_id} ({os.path.basename(out_path)}), {marker_count} marker(s) carried over")
+        log_info(
+            f'Part {idx}: "{original_title} #{idx}" (scene {new_scene_id}, {os.path.basename(out_path)}), '
+            f"{marker_count} marker(s) carried over"
+        )
 
     if not keep_original and src_path:
         try:
@@ -1175,7 +1247,10 @@ def run_split_finalize(client, args):
             log_warn(f"Split succeeded but couldn't remove the original file: {exc}")
 
     log_progress(1.0)
-    summary = f"Split into {len(parts)} part(s): {created} fully set up, {needs_follow_up} need a manual look."
+    summary = (
+        f"Split {scene_label(scene)} into {len(parts)} part(s): "
+        f"{created} fully set up, {needs_follow_up} need a manual look."
+    )
     log_info(summary)
     write_plugin_output(output=summary)
 
@@ -1347,7 +1422,10 @@ def run_repair_scene(client, args, repair_tag_id):
         return
     src_path = files[0]["path"]
 
-    log_info(f"Checking '{os.path.basename(src_path)}' for corruption (this decodes the whole file, so it can take a while)...")
+    log_info(
+        f"Checking {scene_label(scene)} ({os.path.basename(src_path)}) for corruption "
+        f"(this decodes the whole file, so it can take a while)..."
+    )
     log_progress(0.05)
 
     def on_check_progress(fraction):
@@ -1356,7 +1434,7 @@ def run_repair_scene(client, args, repair_tag_id):
     is_corrupt, detail = detect_corruption(src_path, on_progress=on_check_progress)
 
     if not is_corrupt and not force:
-        write_plugin_output(output="No corruption detected — the file decodes cleanly, nothing to repair.")
+        write_plugin_output(output=f"{scene_label(scene)}: no corruption detected — the file decodes cleanly, nothing to repair.")
         return
     if is_corrupt:
         log_warn(f"Corruption detected: {detail[:800]}")
@@ -1407,7 +1485,7 @@ def run_repair_scene(client, args, repair_tag_id):
         log_warn(f"Repaired the file but couldn't tag the scene: {exc}")
 
     log_progress(1.0)
-    summary = f"Repaired via {method}. New file: {os.path.basename(final_path)}."
+    summary = f"Repaired {scene_label(scene)} via {method}. New file: {os.path.basename(final_path)}."
     if keep_original:
         summary += " Original kept alongside it — check playback, then delete the original yourself once you're happy with it."
     log_info(summary)
@@ -1421,11 +1499,12 @@ def run_convert_scene(client, args, done_tag_id):
         return
 
     crf = resolve_crf(args)
-    log_info(f"Converting single scene {scene_id} to H265 at CRF {crf}...")
     scene = client.get_scene(scene_id)
     if not scene:
         write_plugin_output(error=f"No scene found with id {scene_id}")
         return
+    label = scene_label(scene)
+    log_info(f"Quality: CRF {crf}")
 
     keep_original = str(args.get("keep_original", "false")).lower() == "true"
     log_progress(0.05)
@@ -1439,11 +1518,11 @@ def run_convert_scene(client, args, done_tag_id):
     log_progress(1.0)
 
     if status == "converted":
-        write_plugin_output(output=f"Scene {scene_id} converted to H265.")
+        write_plugin_output(output=f"{label} converted to H265.")
     elif status == "skipped":
-        write_plugin_output(output=f"Scene {scene_id} skipped (already H265 or already converted).")
+        write_plugin_output(output=f"{label} skipped (already H265 or already converted).")
     else:
-        write_plugin_output(error=f"Scene {scene_id}: {status}")
+        write_plugin_output(error=f"{label}: {status}")
 
 
 def run_convert_library(client, args, done_tag_id):
