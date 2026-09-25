@@ -5,8 +5,9 @@ Stash's own colored marker indicator on the video scrubber — a real child
 of that indicator, so it shows and hides right along with it, however
 Stash itself reveals markers on the scrubber. Click an icon to jump
 straight to that marker. Pure frontend — no Python, no ffmpeg, nothing to
-configure server-side or in a settings dialog: the icons come straight
-from whatever images you've already got on each tag in Stash.
+configure server-side: the icons come straight from whatever images
+you've already got on each tag in Stash. One optional setting lets you
+restyle icons per tag (see "Custom styles per tag" below).
 
 Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 
@@ -31,15 +32,38 @@ all — there's no generic placeholder pin. If one particular tag's image
 URL fails to load, just that one icon is dropped — its other tag icons
 are unaffected.
 
+## Custom styles per tag
+
+Settings → Plugins → Marker Improvements → **Custom styles per tag**
+takes extra CSS for tag icons, written like CSS rules with tag names in
+place of selectors:
+
+```
+Violin { outline: 2px solid gold }
+Piano, Cello { opacity: .6 }
+* { filter: grayscale(1) }
+```
+
+- Each rule's CSS goes on that tag's icon; list several tags in one rule
+  by separating them with commas.
+- A rule matches every tag whose name *contains* its text, ignoring
+  case — `Violin` also styles "Violin I" and "Solo Violin".
+- `*` applies to every icon. It goes on first, then the other rules in
+  the order written, so a later rule wins where two match the same icon
+  and set the same property.
+- These are applied last, so they override the icon's built-in look too
+  (e.g. `Violin { border: 2px solid gold }` replaces its thin grey border).
+- Line breaks are optional — the whole thing can be on one line.
+
+Changes apply the next time a scene page loads.
+
 ## Where the symbols show up
 
 Directly inside Stash's own colored marker indicator for that marker —
 the small tinted bar (class `.vjs-marker-range`) Stash itself draws on
 the scrubber at each marker's timestamp. The bubble is an actual child of
 that element (not a separate overlay layered on top), floats centered
-above it with a small tail pointing back down at it, and each icon's
-border/glow is tinted to match that indicator's own color so it reads as
-belonging to that colored bar.
+above it with a small tail pointing back down at it.
 
 A `.vjs-marker-range` element is usually only a few px tall, and can clip
 its own content (`overflow: hidden`) for a rounded-track look — which
