@@ -148,8 +148,18 @@ Two things worth knowing:
 ## Repairing a corrupt file
 
 Choose **Repair File** from the File Operations menu. It's safe to click
-on anything — it always checks first, and if the file decodes cleanly it
-just reports "nothing to repair" and stops there.
+on anything — it always checks first, and if the file decodes cleanly
+*and* streams well it just reports "nothing to do" and stops there.
+
+**Streaming fix.** A file that decodes cleanly can still play badly in a
+browser. Repair also looks for three things a lossless remux fixes: the
+index (moov atom) sitting at the end of an .mp4, so the browser has to
+fetch the end before it can play or seek; audio browsers can't play from
+an .mp4 (AC3, DTS, PCM, FLAC, … — re-encoded to AAC, the video itself
+is copied untouched); and a container browsers can't play directly
+(.mkv, .avi, …), remuxed into .mp4. If the video codec itself doesn't fit
+in an .mp4, it says so and stops rather than re-encoding a healthy file —
+use Convert to H265 for that.
 
 If it finds decode errors, it tries two things in order:
 
@@ -168,7 +178,10 @@ If it finds decode errors, it tries two things in order:
 
 By default the repaired file is written as `<name>.repaired.mp4` next to
 the original, which is left untouched — check playback before deleting
-the original yourself. The scene gets tagged `File Repaired` either way
+the original yourself. Like a conversion, a queued **Finish repairing
+"…"** task attaches the repaired file to the same scene as its primary
+file once the scan has picked it up, with the original kept on the scene
+as a secondary file. The scene gets tagged `File Repaired` either way
 (so you can find everything the tool has touched later), and the checking
 step decodes the entire file, so it can take a while on a long video.
 

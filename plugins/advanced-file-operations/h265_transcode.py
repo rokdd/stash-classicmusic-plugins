@@ -624,6 +624,66 @@ def probe_audio_codecs(path):
         return ["unknown"]
 
 
+def browser_audio_args(path):
+    """ffmpeg audio arguments for writing `path`'s audio into an .mp4 a
+    browser can play: copied as-is when it already is AAC/MP3, otherwise
+    re-encoded to AAC."""
+    audio_codecs = probe_audio_codecs(path)
+    if all(c in BROWSER_AUDIO_CODECS for c in audio_codecs):
+        return ["-c:a", "copy"]
+    log_info(f"Audio is {', '.join(audio_codecs)}, which browsers can't play from an .mp4 — re-encoding it to AAC")
+    return ["-c:a", "aac", "-b:a", "192k"]
+
+
+def index_at_end(path):
+    """True if an .mp4/.mov's index (moov atom) comes after its media data
+    (mdat) — ffmpeg's default without +faststart. A browser then has to
+    fetch the end of the file before it can start playing or seek. Reads
+    only the top-level atom headers, not the file's contents."""
+    try:
+        with open(path, "rb") as f:
+            while True:
+                header = f.read(8)
+                if len(header) < 8:
+                    return False
+                size = int.from_bytes(header[:4], "big")
+                kind = header[4:8]
+                if kind == b"moov":
+                    return False
+                if kind == b"mdat":
+                    return True
+                if size == 1:
+                    size = int.from_bytes(f.read(8), "big")
+                    f.seek(size - 16, 1)
+                elif size == 0:
+                    return False  # atom runs to end of file
+                else:
+                    f.seek(size - 8, 1)
+    except OSError as exc:
+        log_warn(f"Couldn't read {path} to check where its index is: {exc}")
+        return False
+
+
+# Containers browsers play directly. Anything else (.mkv, .avi, .wmv, ...)
+# is remuxed into .mp4 by the streaming fix.
+BROWSER_CONTAINERS = {".mp4", ".m4v", ".mov", ".webm"}
+
+
+def streaming_problems(path):
+    """What in `path` gets in the way of playing it in a browser and can be
+    fixed without re-encoding the video. Empty if nothing."""
+    problems = []
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in BROWSER_CONTAINERS:
+        problems.append(f"{ext or 'unknown'} container, which browsers can't play directly")
+    elif ext != ".webm" and index_at_end(path):
+        problems.append("index (moov atom) at the end of the file, so playback and seeking have to wait for it")
+    bad_audio = [c for c in probe_audio_codecs(path) if c not in BROWSER_AUDIO_CODECS]
+    if bad_audio and ext != ".webm":
+        problems.append(f"{', '.join(bad_audio)} audio, which browsers can't play from an .mp4")
+    return problems
+
+
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
 
 
@@ -747,12 +807,7 @@ def transcode_to_h265(src_path, crf=None, on_progress=None):
     fd, tmp_path = tempfile.mkstemp(suffix=OUTPUT_EXT, dir=tmp_dir)
     os.close(fd)
 
-    audio_codecs = probe_audio_codecs(src_path)
-    if all(c in BROWSER_AUDIO_CODECS for c in audio_codecs):
-        audio_args = ["-c:a", "copy"]
-    else:
-        log_info(f"Audio is {', '.join(audio_codecs)}, which browsers can't play from an .mp4 — re-encoding it to AAC")
-        audio_args = ["-c:a", "aac", "-b:a", "192k"]
+    audio_args = browser_audio_args(src_path)
 
     # Everything below is chosen for the result to stream well in a browser:
     #   - hvc1 tag: without it Safari/Apple players refuse H.265 in .mp4.
@@ -1393,6 +1448,10 @@ def remux_repair(src_path, on_progress=None):
     except Exception:  # noqa: BLE001
         duration = None
 
+    # Streams are copied as-is, except audio a browser can't play, which
+    # becomes AAC; +faststart puts the index at the start of the file. So
+    # the result also streams well — which is all the streaming fix in
+    # run_repair_scene needs, too.
     cmd = [
         FFMPEG_BIN, "-y",
         "-err_detect", "ignore_err",
@@ -1400,7 +1459,8 @@ def remux_repair(src_path, on_progress=None):
         "-i", src_path,
         "-map", "0",
         "-c", "copy",
-        "-movflags", "faststart",
+        *browser_audio_args(src_path),
+        "-movflags", "+faststart",
         tmp_path,
     ]
     returncode, _stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
@@ -1440,7 +1500,11 @@ def reencode_repair(src_path, on_progress=None):
         "-i", src_path,
         "-map", "0:v:0", "-map", "0:a?",
         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        # 8-bit: browsers can't play 10-bit H.264, which a 10-bit source
+        # would otherwise produce.
+        "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart",
         tmp_path,
     ]
     returncode, stderr = run_ffmpeg_tracking_progress(cmd, duration=duration, on_progress=on_progress)
@@ -1508,22 +1572,46 @@ def run_repair_scene(client, args, repair_tag_id):
 
     is_corrupt, detail = detect_corruption(src_path, on_progress=on_check_progress)
 
-    if not is_corrupt and not force:
-        write_plugin_output(output=f"{scene_label(scene)}: no corruption detected — the file decodes cleanly, nothing to repair.")
+    # A file that decodes cleanly can still stream badly. The same lossless
+    # remux that repairs a damaged container fixes that too, so a clean
+    # file with streaming problems gets remuxed rather than left alone.
+    problems = [] if is_corrupt else streaming_problems(src_path)
+    streaming_only = not is_corrupt and bool(problems)
+
+    if not is_corrupt and not problems and not force:
+        write_plugin_output(
+            output=f"{scene_label(scene)}: no corruption detected and nothing in the way of streaming it — nothing to do."
+        )
         return
     if is_corrupt:
         log_warn(f"Corruption detected: {detail[:800]}")
+    elif problems:
+        log_info("No corruption detected, but it won't stream well: " + "; ".join(problems) + ".")
     else:
         log_info("No corruption detected, but repairing anyway since force was requested.")
     log_progress(0.5)
 
-    log_info("Attempting a lossless remux repair first...")
+    log_info("Attempting a lossless remux first...")
 
     def on_remux_progress(fraction):
-        log_progress(0.5 + fraction * 0.05)
+        # A streaming-only fix is just this remux, so let it use the bar.
+        span = 0.45 if streaming_only else 0.05
+        log_progress(0.5 + fraction * span)
 
     tmp_path = remux_repair(src_path, on_progress=on_remux_progress)
-    method = "lossless remux"
+    method = "lossless remux for streaming" if streaming_only else "lossless remux"
+
+    if tmp_path is None and streaming_only:
+        # Nothing's actually broken, so re-encoding the whole video just to
+        # fix streaming isn't worth the quality loss — say so and stop.
+        write_plugin_output(
+            error=(
+                f"{scene_label(scene)} decodes fine, but couldn't be remuxed into a browser-friendly .mp4 "
+                f"without re-encoding (its video codec or subtitles probably don't fit in .mp4). "
+                f"Use Convert to H265 instead, which re-encodes it."
+            )
+        )
+        return
 
     if tmp_path is None:
         log_warn(
@@ -1549,9 +1637,19 @@ def run_repair_scene(client, args, repair_tag_id):
     rescan_target = [final_path]
     if removed_path and removed_path != final_path:
         rescan_target.append(os.path.dirname(removed_path))
-    # Queued, not waited on: Stash runs one job at a time, so this scan
-    # can't start until this task ends — and nothing below needs it.
-    client.rescan_paths(rescan_target)
+    # Same as a conversion: a repaired file at a new path (".repaired.mp4",
+    # or .mkv/.avi → .mp4) would otherwise become its own bare scene, so
+    # queue the scan plus a task that attaches it to this scene afterwards.
+    queue_convert_followups(
+        client,
+        [{
+            "scene_id": str(scene["id"]),
+            "new_path": final_path,
+            "scan_paths": rescan_target,
+            "link": os.path.abspath(final_path) != os.path.abspath(src_path),
+        }],
+        f"Finish repairing {scene_name(scene)}",
+    )
 
     try:
         existing_tag_ids = [t["id"] for t in scene.get("tags", [])]
