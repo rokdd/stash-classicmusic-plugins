@@ -5,3 +5,8 @@ url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marke
 ui:
   javascript:
     - marker-symbols.js
+settings:
+  tagStyles:
+    displayName: Custom styles per tag
+    description: "Format: name { css } — repeat for more rules. Example: Violin { outline: 2px solid gold } Piano, Cello { opacity: .6 } * { filter: grayscale(1) }. A rule applies to every tag whose name contains that text (upper/lower case ignored); separate several names with commas; * means every icon. Later rules win over earlier ones."
+    type: STRING

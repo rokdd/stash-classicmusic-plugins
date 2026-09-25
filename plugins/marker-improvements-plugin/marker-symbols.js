@@ -4,8 +4,8 @@
 // that has a real custom image uploaded (Settings on a tag page lets you
 // upload one) — floating centered above Stash's own colored marker
 // indicator on the video scrubber (class `.vjs-marker-range`, one per
-// marker), with a little tail pointing back down at it and tinted to
-// match its color. It's a real, permanent child of that indicator, so it
+// marker), with a little tail pointing back down at it. It's a real,
+// permanent child of that indicator, so it
 // shows and hides right along with it — whatever Stash itself does to
 // reveal that indicator (e.g. hovering the scrubber) is what reveals the
 // bubble too, no separate interaction of its own needed. Click an icon to
@@ -50,7 +50,12 @@
   "use strict";
 
   const ICON_SIZE_PX = 44;
+  // Corner rounding of the bubble and of each image in it. 0 = square.
+  const BUBBLE_RADIUS_PX = 0;
+  const ICON_RADIUS_PX = 0;
   const MARKER_RANGE_SELECTOR = ".vjs-marker-range";
+  // Must match the filename of this plugin's yml manifest (minus .yml).
+  const PLUGIN_ID = "markerImprovements";
 
   const MAX_PLACEMENT_RETRIES = 20;
   const PLACEMENT_RETRY_MS = 500;
@@ -90,6 +95,40 @@
     return data.findScene.scene_markers || [];
   }
 
+  // The "Custom styles per tag" setting (Settings > Plugins), as saved.
+  // Read fresh on every scene load, so an edit shows up on the next one.
+  async function fetchTagStylesSetting() {
+    try {
+      const data = await callGQL(`query { configuration { plugins } }`);
+      const config = (data.configuration.plugins || {})[PLUGIN_ID] || {};
+      return config.tagStyles || "";
+    } catch (err) {
+      console.warn("[Marker Symbols] Couldn't read plugin settings:", err);
+      return "";
+    }
+  }
+
+  // Parses the setting — CSS rules with tag names in place of selectors,
+  // e.g. `Violin { outline: 2px solid gold } Piano, Cello { opacity: .6 }`
+  // — into a Map of lowercased name text → CSS declarations, in the order
+  // written. `*` is kept as its own key and applies to every icon. Text
+  // listed in more than one rule gets all of them, in order.
+  function parseTagStyles(text) {
+    const styles = new Map();
+    const rule = /([^{}]+)\{([^{}]*)\}/g;
+    let match;
+    while ((match = rule.exec(text || "")) !== null) {
+      const css = match[2].trim();
+      if (!css) continue;
+      match[1].split(",").forEach((name) => {
+        const key = name.trim().toLowerCase();
+        if (!key) return;
+        styles.set(key, styles.has(key) ? `${styles.get(key)};${css}` : css);
+      });
+    }
+    return styles;
+  }
+
   // -- helpers ---------------------------------------------------------
 
   function currentSceneId() {
@@ -121,6 +160,9 @@
   // recovery below (see ensureSeekRecovery) can re-mount without another
   // GraphQL round trip.
   let lastMarkers = null;
+  // Parsed "Custom styles per tag" setting for the current scene load
+  // (see parseTagStyles), kept alongside lastMarkers for the same reason.
+  let tagStyles = new Map();
 
   function clearOverlay() {
     mountedIcons.forEach((el) => el.remove());
@@ -261,7 +303,7 @@
       // area behind an image blends away cleanly, while a dark one just
       // crushes the whole image toward black.
       "background:rgba(255,255,255,0.92)",
-      "border-radius:8px",
+      `border-radius:${BUBBLE_RADIUS_PX}px`,
       "box-shadow:0 2px 6px rgba(0,0,0,0.55)",
       // Always visible/interactive — this is a real child of the marker's
       // own .vjs-marker-range now, so it shows and hides right along with
@@ -301,6 +343,7 @@
       const img = document.createElement("img");
       img.src = tag.image_path;
       img.alt = tag.name || "marker";
+      img.dataset.tagName = tag.name || "";
       img.title = label;
       img.style.cssText = [
         "cursor:pointer", "user-select:none", "flex:none",
@@ -312,7 +355,7 @@
         "width:auto",
         `max-width:${ICON_SIZE_PX * 2}px`,
         "object-fit:contain",
-        "border-radius:4px",
+        `border-radius:${ICON_RADIUS_PX}px`,
         "border:1px solid rgba(0,0,0,0.2)",
         "mix-blend-mode:multiply",
       ].join(";");
@@ -379,9 +422,8 @@
   }
 
   // Mounts `iconGroupEl` as an actual child of `tick` — one of Stash's own
-  // .vjs-marker-range elements — and tints its icon(s) with that
-  // element's own color so they read as part of the colored bar rather
-  // than something dropped on top of it.
+  // .vjs-marker-range elements — and applies the "Custom styles per tag"
+  // setting to its icon(s).
   function mountIconOnTick(tick, iconGroupEl, unclipRoot) {
     const computed = getComputedStyle(tick);
     if (computed.position === "static") {
@@ -398,13 +440,20 @@
     // pointer-events at all.
     unclipAncestors(tick, unclipRoot);
 
-    const tickColor = computed.backgroundColor;
-    if (tickColor && tickColor !== "rgba(0, 0, 0, 0)" && tickColor !== "transparent") {
-      iconGroupEl.querySelectorAll("img").forEach((img) => {
-        img.style.borderColor = tickColor;
-        img.style.boxShadow = `0 0 4px ${tickColor}`;
+    // Custom styles from the plugin setting go on last, so they can
+    // override the icon's built-in styles (see makeMarkerIcons).
+    // A rule matches every tag whose name contains its text, so `Violin`
+    // also styles "Violin I" and "Solo Violin". `*` goes first; the rest
+    // follow in the order they're written, so a later rule wins where two
+    // match the same icon and set the same property.
+    iconGroupEl.querySelectorAll("img").forEach((img) => {
+      const tagName = (img.dataset.tagName || "").toLowerCase();
+      const star = tagStyles.get("*");
+      if (star) img.style.cssText += `;${star}`;
+      tagStyles.forEach((css, key) => {
+        if (key !== "*" && tagName.includes(key)) img.style.cssText += `;${css}`;
       });
-    }
+    });
 
     tick.appendChild(iconGroupEl);
   }
@@ -487,9 +536,9 @@
       return;
     }
 
-    let markers;
+    let markers, stylesSetting;
     try {
-      markers = await fetchMarkers(sceneId);
+      [markers, stylesSetting] = await Promise.all([fetchMarkers(sceneId), fetchTagStylesSetting()]);
     } catch (err) {
       console.error("[Marker Symbols] Failed to fetch markers:", err);
       return;
@@ -506,6 +555,7 @@
     }
 
     lastMarkers = markers;
+    tagStyles = parseTagStyles(stylesSetting);
     ensureSeekRecovery(video);
     clearOverlay();
     mountIconsOnMarkerRanges(video, markers);
