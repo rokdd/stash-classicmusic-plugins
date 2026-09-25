@@ -59,6 +59,9 @@
 
   const MAX_PLACEMENT_RETRIES = 20;
   const PLACEMENT_RETRY_MS = 500;
+  // How many of those retries to spend waiting for the number of ranges
+  // to match the number of markers before pairing up what's there anyway.
+  const MISMATCH_RETRIES = 6;
 
   // -- GraphQL -------------------------------------------------------
 
@@ -651,9 +654,17 @@
     if (!markers.length) return;
 
     const root = video.closest(".video-js, .vjs-container") || document;
-    if (!findMarkerRangeElements(root).length) {
+    const tickCount = findMarkerRangeElements(root).length;
+    if (!tickCount) {
       // Stash hasn't drawn its marker-range elements yet (player still
       // initializing) — wait and try again rather than giving up.
+      retryPlacement(sceneId, attempt);
+      return;
+    }
+    if (tickCount !== markers.length && attempt < MISMATCH_RETRIES) {
+      // Right after a marker is added or deleted, Stash can still be
+      // redrawing its ranges — give it a moment before pairing them up,
+      // or every marker after the change would get the wrong icon.
       retryPlacement(sceneId, attempt);
       return;
     }
@@ -692,6 +703,55 @@
   }
 
   const scheduleRefresh = debounce(refreshForCurrentPage, 300);
+
+  // -- reload after a marker is saved ----------------------------------------
+  //
+  // Stash's own UI saves markers through GraphQL mutations over fetch().
+  // Wrapping fetch lets this notice a marker being created, updated or
+  // deleted — from the edit form, the Markers tab, anywhere — and redraw
+  // every bubble with fresh data once it succeeded. The longer delay gives
+  // Stash time to redraw its own marker ranges first.
+  const MARKER_MUTATION = /\bsceneMarkers?\w*(Create|Update|Destroy)\b/i;
+  const scheduleMarkerReload = debounce(refreshForCurrentPage, 800);
+
+  if (typeof window.fetch === "function" && !window.fetch.__markerSymbolsWrapped) {
+    const originalFetch = window.fetch;
+    const wrappedFetch = function (input, init) {
+      const result = originalFetch.apply(this, arguments);
+      const body = init && init.body;
+      if (typeof body === "string" && body.includes("mutation") && MARKER_MUTATION.test(body)) {
+        result.then((r) => { if (r.ok) scheduleMarkerReload(); }).catch(() => {});
+      }
+      return result;
+    };
+    wrappedFetch.__markerSymbolsWrapped = true;
+    window.fetch = wrappedFetch;
+  }
+
+  // Backup in case a Stash version sends those requests some other way:
+  // when the scrubber's marker ranges change (one added, removed or moved
+  // to a new time), reload too. Compared by count and position, so our own
+  // bubbles being mounted into those ranges doesn't count as a change.
+  let lastRangeSignature = "";
+  const rangeSignature = () =>
+    findMarkerRangeElements(document).map((t) => tickLeftPct(t).toFixed(3)).sort().join(",");
+  // The player rewrites inline styles several times a second while
+  // playing, so the check runs at most every 250ms however often this fires.
+  let rangeCheckPending = false;
+  new MutationObserver(() => {
+    if (rangeCheckPending) return;
+    rangeCheckPending = true;
+    setTimeout(() => {
+      rangeCheckPending = false;
+      const signature = rangeSignature();
+      if (signature === lastRangeSignature) return;
+      const hadRanges = lastRangeSignature !== "";
+      lastRangeSignature = signature;
+      // The first ranges appearing on page load are already handled by
+      // the regular placement retries.
+      if (hadRanges && signature) scheduleMarkerReload();
+    }, 250);
+  }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
 
   if (window.PluginApi && window.PluginApi.Event && typeof window.PluginApi.Event.addEventListener === "function") {
     window.PluginApi.Event.addEventListener("stash:location", scheduleRefresh);

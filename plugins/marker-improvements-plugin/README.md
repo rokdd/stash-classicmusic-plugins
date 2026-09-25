@@ -73,6 +73,18 @@ directly, so this goes by what's shown on screen. If a Stash update
 changes the Markers tab's layout, clicking still switches to that tab,
 and the browser console says it couldn't find the marker's row.
 
+## Staying up to date
+
+Whenever a marker is created, edited or deleted — from the edit form,
+the Markers tab, anywhere in Stash — the plugin reloads the scene's
+markers and its own settings and redraws every bubble, so a new tag
+image, a changed time or a removed marker shows up without reloading the
+page. It notices this by watching Stash's own save requests, with a
+backup check on the scrubber's marker ranges themselves (one appearing,
+disappearing or moving) in case a Stash version saves some other way.
+Only a change to a marker's time or count is caught by that backup, not
+a change to its tags.
+
 ## Where the symbols show up
 
 Directly inside Stash's own colored marker indicator for that marker —
