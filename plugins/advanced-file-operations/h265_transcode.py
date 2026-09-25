@@ -437,36 +437,6 @@ class StashClient:
         )
         return data["sceneMarkerCreate"]["id"]
 
-    def wait_for_job(self, job_id, timeout=1800, poll_interval=3):
-        """
-        Polls Stash's job queue until the given job id finishes (or we time
-        out). If this Stash version doesn't expose findJob the way we
-        expect, falls back to just waiting a fixed buffer instead of
-        failing the whole run over it.
-        """
-        done_statuses = {"FINISHED", "CANCELLED", "STOPPED", "FAILED"}
-        waited = 0
-        while waited < timeout:
-            try:
-                data = self.call(
-                    """
-                    query($id: ID!) {
-                      findJob(input: { id: $id }) { id status }
-                    }
-                    """,
-                    {"id": job_id},
-                )
-                job = data.get("findJob")
-                if not job or job.get("status") in done_statuses:
-                    return
-            except Exception as exc:  # noqa: BLE001
-                log_warn(f"Couldn't poll scan job status ({exc}); waiting a fixed buffer instead")
-                time.sleep(poll_interval * 5)
-                return
-            time.sleep(poll_interval)
-            waited += poll_interval
-        log_warn("Timed out waiting for the scan job to finish; continuing anyway")
-
     # -- tags -----------------------------------------------------------
 
     def find_or_create_tag(self, name):
@@ -627,6 +597,33 @@ def probe_ok(path):
         return False
 
 
+# Audio codecs every major browser can play from an .mp4. Anything else
+# (AC3, DTS, PCM, FLAC, ...) is re-encoded to AAC during conversion, since
+# copying it as-is leaves a file that plays silent or not at all in a
+# browser.
+BROWSER_AUDIO_CODECS = {"aac", "mp3"}
+
+
+def probe_audio_codecs(path):
+    """Codec names of every audio stream in `path`, e.g. ["aac", "ac3"].
+    Empty if there's no audio, or ffprobe couldn't tell."""
+    try:
+        result = subprocess.run(
+            [
+                FFPROBE_BIN, "-v", "error",
+                "-select_streams", "a",
+                "-show_entries", "stream=codec_name",
+                "-of", "csv=p=0",
+                path,
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except Exception as exc:  # noqa: BLE001
+        log_warn(f"Couldn't read audio codecs of {path}, re-encoding audio to be safe: {exc}")
+        return ["unknown"]
+
+
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
 
 
@@ -750,17 +747,40 @@ def transcode_to_h265(src_path, crf=None, on_progress=None):
     fd, tmp_path = tempfile.mkstemp(suffix=OUTPUT_EXT, dir=tmp_dir)
     os.close(fd)
 
+    audio_codecs = probe_audio_codecs(src_path)
+    if all(c in BROWSER_AUDIO_CODECS for c in audio_codecs):
+        audio_args = ["-c:a", "copy"]
+    else:
+        log_info(f"Audio is {', '.join(audio_codecs)}, which browsers can't play from an .mp4 — re-encoding it to AAC")
+        audio_args = ["-c:a", "aac", "-b:a", "192k"]
+
+    # Everything below is chosen for the result to stream well in a browser:
+    #   - hvc1 tag: without it Safari/Apple players refuse H.265 in .mp4.
+    #   - yuv420p: 8-bit 4:2:0, the only H.265 flavour browsers that play
+    #     H.265 at all reliably decode in hardware.
+    #   - open-gop=0: every keyframe is a clean restart point, so seeking
+    #     lands on the exact spot instead of glitching or failing.
+    #   - +faststart: puts the index (moov atom) at the start of the file.
+    #     ffmpeg's default is the end, which makes a browser fetch the end
+    #     of the file before it can start playing or seek.
+    video_args = [
+        "-c:v", "libx265",
+        "-preset", X265_PRESET,
+        "-crf", str(crf_value),
+        "-x265-params", "open-gop=0",
+        "-tag:v", "hvc1",
+        "-pix_fmt", "yuv420p",
+    ]
+    container_args = ["-movflags", "+faststart"]
+
     cmd = [
         FFMPEG_BIN, "-y",
         "-i", src_path,
         "-map", "0:v:0", "-map", "0:a?", "-map", "0:s?",
-        "-c:v", "libx265",
-        "-preset", X265_PRESET,
-        "-crf", str(crf_value),
-        "-tag:v", "hvc1",          # keeps QuickTime/Apple players happy
-        "-pix_fmt", "yuv420p",
-        "-c:a", "copy",
+        *video_args,
+        *audio_args,
         "-c:s", "copy",
+        *container_args,
         tmp_path,
     ]
 
@@ -773,9 +793,9 @@ def transcode_to_h265(src_path, crf=None, on_progress=None):
         cmd_no_subs = [
             FFMPEG_BIN, "-y", "-i", src_path,
             "-map", "0:v:0", "-map", "0:a?",
-            "-c:v", "libx265", "-preset", X265_PRESET, "-crf", str(crf_value),
-            "-tag:v", "hvc1", "-pix_fmt", "yuv420p",
-            "-c:a", "copy",
+            *video_args,
+            *audio_args,
+            *container_args,
             tmp_path,
         ]
         returncode, stderr = run_ffmpeg_tracking_progress(cmd_no_subs, duration=duration, on_progress=on_progress)
@@ -874,7 +894,7 @@ def scene_label(scene):
     return name if name.startswith("scene ") else f"{name} (scene {scene['id']})"
 
 
-def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progress=None):
+def process_scene(client, scene, keep_original, done_tag_id, followups, crf=None, on_progress=None):
     """
     Converts one scene's primary video file to H265 if it needs it.
     Returns a short status string: "converted" / "skipped" / "failed: <why>".
@@ -887,6 +907,11 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progre
     the scene's primary file (so playback/thumbnails switch to it) — the
     original stays right where it was, just as a secondary file on the
     scene rather than the primary one.
+
+    Nothing here scans or attaches the new file: Stash runs one job at a
+    time, so a scan can't start while this task runs. Instead, what needs
+    doing afterwards is appended to `followups` for
+    queue_convert_followups() to queue once the caller is done.
     """
     tag_names = {t["name"] for t in scene.get("tags", [])}
     if done_tag_id and tag_names and DONE_TAG_NAME in tag_names:
@@ -913,35 +938,85 @@ def process_scene(client, scene, keep_original, done_tag_id, crf=None, on_progre
         if removed_path and removed_path != final_path:
             rescan_paths.append(os.path.dirname(removed_path))
 
-        link_note = ""
-        if keep_original:
-            # Need the scan to actually finish before we can look up the
-            # placeholder scene it creates for the new file.
-            scan_and_wait(client, rescan_paths)
-            linked = link_converted_file_to_scene(client, scene, final_path)
-            link_note = (
-                " (new file set as primary; original kept as a secondary file)"
-                if linked
-                else " (converted file needs manual linking — see warning above)"
-            )
-        else:
-            client.rescan_paths(rescan_paths)
+        # The new file needs attaching to this scene whenever it's at a new
+        # path — always with keep_original, and when replacing a non-.mp4
+        # source. Stash sees such a file as brand new and gives it its own
+        # bare scene. Overwriting a .mp4 in place keeps the path, so Stash
+        # just updates the existing file on this same scene.
+        needs_link = os.path.abspath(final_path) != os.path.abspath(src_path)
+        followups.append({
+            "scene_id": str(scene["id"]),
+            "new_path": final_path,
+            "scan_paths": rescan_paths,
+            "link": needs_link,
+        })
 
-        log_info(f"Converted {scene_label(scene)}{link_note}")
+        note = " — the new file gets attached to this scene after the scan" if needs_link else ""
+        log_info(f"Converted {scene_label(scene)}{note}")
         return "converted"
     except Exception as exc:  # noqa: BLE001
         log_error(f"Failed on {scene_label(scene)} ({src_path}): {exc}")
         return f"failed: {exc}"
 
 
-def scan_and_wait(client, paths):
-    job_id = client.rescan_paths(paths)
-    if isinstance(job_id, str):
-        client.wait_for_job(job_id)
-    else:
-        # Older Stash versions scan synchronously enough, or return a plain
-        # boolean; give the library a moment to settle either way.
-        time.sleep(10)
+def queue_convert_followups(client, followups, description):
+    """
+    Queues what process_scene() left to do: one scan of every new file,
+    then — if any of them need attaching to their scene — one
+    "convert_finalize" task behind it. Stash runs its queue in order, so
+    the new files' scenes exist by the time that task starts.
+    """
+    if not followups:
+        return
+    scan_paths = []
+    for f in followups:
+        scan_paths.extend(p for p in f["scan_paths"] if p not in scan_paths)
+    client.rescan_paths(scan_paths)
+
+    links = [[f["scene_id"], f["new_path"]] for f in followups if f["link"]]
+    if not links:
+        return
+    try:
+        client.run_plugin_task(description, {"mode": "convert_finalize", "links": json.dumps(links)})
+        log_info(f"Queued a scan, then \"{description}\" to attach {len(links)} new file(s) to their scenes.")
+    except Exception as exc:  # noqa: BLE001
+        log_error(
+            f"Couldn't queue the task that attaches the converted file(s) to their scenes ({exc}). "
+            f"After the scan, each will show up as its own scene — attach it by hand in the original "
+            f"scene's editor (Files tab) and set it as primary: "
+            + ", ".join(os.path.basename(p) for _, p in links)
+        )
+
+
+def run_convert_finalize(client, args):
+    """
+    Second half of a conversion, queued by queue_convert_followups() behind
+    the scan of the new files: attaches each new file to its original
+    scene as the primary file and removes the bare scene Stash made for it.
+    """
+    try:
+        links = json.loads(args.get("links") or "[]")
+    except ValueError as exc:
+        write_plugin_output(error=f"convert_finalize got an invalid links argument: {exc}")
+        return
+
+    attached = 0
+    for idx, (scene_id, new_path) in enumerate(links, start=1):
+        log_progress((idx - 1) / max(len(links), 1))
+        scene = client.get_scene(scene_id)
+        if not scene:
+            log_warn(f"Scene {scene_id} no longer exists; {os.path.basename(new_path)} stays its own scene")
+            continue
+        if link_converted_file_to_scene(client, scene, new_path):
+            attached += 1
+            log_info(f"Attached {os.path.basename(new_path)} to {scene_label(scene)} as its primary file")
+
+    log_progress(1.0)
+    summary = f"Attached {attached} of {len(links)} converted file(s) to their scenes."
+    if attached < len(links):
+        summary += " See the warnings above for the rest."
+    log_info(summary)
+    write_plugin_output(output=summary)
 
 
 # ---------------------------------------------------------------------------
@@ -1514,7 +1589,9 @@ def run_convert_scene(client, args, done_tag_id):
         # encode itself finishes.
         log_progress(0.05 + fraction * 0.8)
 
-    status = process_scene(client, scene, keep_original, done_tag_id, crf=crf, on_progress=on_progress)
+    followups = []
+    status = process_scene(client, scene, keep_original, done_tag_id, followups, crf=crf, on_progress=on_progress)
+    queue_convert_followups(client, followups, f"Finish converting {scene_name(scene)}")
     log_progress(1.0)
 
     if status == "converted":
@@ -1532,6 +1609,17 @@ def run_convert_library(client, args, done_tag_id):
     total = client.count_scenes()
     log_info(f"Scanning {total} scenes for non-H265 video (CRF {crf})...")
 
+    # One scan and one attach task for the whole run, rather than a pair
+    # per scene. Queued in `finally`, so files already converted still get
+    # scanned and attached even if the run stops partway.
+    followups = []
+    try:
+        _convert_library_pages(client, keep_original, done_tag_id, crf, total, followups)
+    finally:
+        queue_convert_followups(client, followups, "Finish converting library")
+
+
+def _convert_library_pages(client, keep_original, done_tag_id, crf, total, followups):
     converted, skipped, failed = 0, 0, 0
     page, per_page = 1, 50
     processed = 0
@@ -1552,7 +1640,7 @@ def run_convert_library(client, args, done_tag_id):
                 if total:
                     log_progress(base + fraction * slice_size)
 
-            status = process_scene(client, scene, keep_original, done_tag_id, crf=crf, on_progress=on_progress)
+            status = process_scene(client, scene, keep_original, done_tag_id, followups, crf=crf, on_progress=on_progress)
             processed += 1
             if total:
                 log_progress(processed / total)
@@ -1610,6 +1698,10 @@ def main():
 
     if mode == "split_finalize":
         run_split_finalize(client, args)
+        return
+
+    if mode == "convert_finalize":
+        run_convert_finalize(client, args)
         return
 
     if mode == "repair_scene":
