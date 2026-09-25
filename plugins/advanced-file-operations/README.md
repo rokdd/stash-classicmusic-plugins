@@ -65,6 +65,18 @@ there's nothing for it to do in that case. (This is a client-side
 shortcut for convenience; the task itself re-checks the same thing
 server-side regardless.)
 
+Attaching the new file happens in a second task. Stash runs one task at
+a time, so the conversion can't wait for its own scan of the new file:
+it converts, queues a scan, and queues **Finish converting "…"** behind
+it, which attaches the file once the scan has picked it up. Until that
+has run, the new file briefly shows up as its own bare scene. The same
+happens when *replacing* a file that wasn't already `.mp4` — the result
+is a new `.mp4` at a new path, which Stash would otherwise treat as a
+brand-new scene. (The original file then stays listed on the scene as
+missing until Stash's own **Clean** task removes it.) The library-wide
+tasks queue one scan and one **Finish converting library** task for the
+whole run, not one per scene.
+
 If the automatic "set as primary" linking ever fails (an older Stash
 version without multi-file-scene support, a schema mismatch, etc.), the
 task log says so explicitly — the converted file is always safely on disk
