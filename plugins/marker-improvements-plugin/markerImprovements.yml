@@ -10,3 +10,7 @@ settings:
     displayName: Custom styles per tag
     description: "Format: name { css } — repeat for more rules. Example: Violin { outline: 2px solid gold } Piano, Cello { opacity: .6 } * { filter: grayscale(1) }. A rule applies to every tag whose name contains that text (upper/lower case ignored); separate several names with commas; * means every icon. Later rules win over earlier ones."
     type: STRING
+  disableEditOnClick:
+    displayName: Don't open the marker editor on click
+    description: "Off (the default): clicking a marker's colored range on the scrubber, or one of its icons, jumps to it and opens Stash's edit form for it in the Markers tab. Turn on to only jump to the marker."
+    type: BOOLEAN
