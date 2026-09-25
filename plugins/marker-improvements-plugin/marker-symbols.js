@@ -95,16 +95,17 @@
     return data.findScene.scene_markers || [];
   }
 
-  // The "Custom styles per tag" setting (Settings > Plugins), as saved.
-  // Read fresh on every scene load, so an edit shows up on the next one.
-  async function fetchTagStylesSetting() {
+  // This plugin's settings (Settings > Plugins), as saved. Read fresh on
+  // every scene load, so a change shows up on the next one. Settings never
+  // touched are simply missing, which is why the click-to-edit one is a
+  // "disable" switch: missing = off = editing enabled.
+  async function fetchPluginSettings() {
     try {
       const data = await callGQL(`query { configuration { plugins } }`);
-      const config = (data.configuration.plugins || {})[PLUGIN_ID] || {};
-      return config.tagStyles || "";
+      return (data.configuration.plugins || {})[PLUGIN_ID] || {};
     } catch (err) {
       console.warn("[Marker Symbols] Couldn't read plugin settings:", err);
-      return "";
+      return {};
     }
   }
 
@@ -163,10 +164,17 @@
   // Parsed "Custom styles per tag" setting for the current scene load
   // (see parseTagStyles), kept alongside lastMarkers for the same reason.
   let tagStyles = new Map();
+  // Whether clicking a marker's range or icon opens Stash's marker editor
+  // (the "Don't open the marker editor on click" setting, inverted).
+  let editOnClick = true;
+  // Every marker paired with its .vjs-marker-range on the current mount —
+  // including markers without an icon — for the range click handler.
+  let tickPairs = [];
 
   function clearOverlay() {
     mountedIcons.forEach((el) => el.remove());
     mountedIcons = [];
+    tickPairs = [];
     // `original` is whatever that inline style property held before we
     // touched it — including "" if it wasn't set at all, which correctly
     // clears our override back to "nothing" rather than "visible".
@@ -287,6 +295,7 @@
     const baseLabel = `${formatTime(marker.seconds)} — ${marker.title || primaryName || "marker"}`;
 
     const bubble = document.createElement("div");
+    bubble.className = "marker-symbols-bubble";
     bubble.style.cssText = [
       "position:absolute",
       "left:50%",
@@ -336,6 +345,7 @@
       e.stopPropagation();
       e.preventDefault();
       video.currentTime = marker.seconds;
+      if (editOnClick) openMarkerEditor(marker);
     };
 
     tags.forEach((tag) => {
@@ -478,6 +488,97 @@
     });
   }
 
+  // Parses a Stash timestamp ("1:23", "01:23" or "1:02:03") to seconds.
+  function timestampToSeconds(text) {
+    return text.split(":").reduce((total, part) => total * 60 + Number(part), 0);
+  }
+
+  // Opens Stash's own edit form for `marker`. That form only exists in the
+  // scene page's Markers tab, where every marker is listed with an Edit
+  // button — so this switches to that tab, finds the marker's row by its
+  // start time (and title, when it has one), and clicks the row's button.
+  // Stash doesn't mark rows or buttons with ids, so this goes by what's
+  // visible: if a Stash update changes that layout, it still switches to
+  // the Markers tab and warns in the console instead of doing nothing.
+  function openMarkerEditor(marker) {
+    const tab =
+      document.querySelector('[data-rb-event-key="scene-markers-panel"]') ||
+      Array.from(document.querySelectorAll(".nav-tabs .nav-link"))
+        .find((el) => /marker/i.test(el.textContent));
+    if (!tab) {
+      console.warn("[Marker Symbols] Couldn't find the scene's Markers tab to open the editor");
+      return;
+    }
+    if (!tab.classList.contains("active")) tab.click();
+
+    // The tab's content renders a moment after the click, so look a few
+    // times before giving up.
+    let attempts = 0;
+    const tryOpen = () => {
+      const panel =
+        document.getElementById("scene-markers-panel") ||
+        document.querySelector(".tab-pane.active");
+      const row = panel && findMarkerRow(panel, marker);
+      if (row) {
+        const buttons = Array.from(row.querySelectorAll("button"));
+        const edit =
+          buttons.find((b) => /^(edit|bearbeiten)$/i.test(b.textContent.trim())) ||
+          buttons[buttons.length - 1];
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        if (edit) edit.click();
+        return;
+      }
+      if (++attempts < 10) {
+        setTimeout(tryOpen, 100);
+      } else {
+        console.warn(`[Marker Symbols] Opened the Markers tab but couldn't find the row for the ${formatTime(marker.seconds)} marker`);
+      }
+    };
+    tryOpen();
+  }
+
+  // The smallest element in the Markers tab that holds one marker's
+  // buttons and its time — found by walking up from each button until an
+  // ancestor shows a timestamp, then comparing that timestamp (±1s, for
+  // rounding) and the title with `marker`'s.
+  function findMarkerRow(panel, marker) {
+    const timestamp = /\d+(?::\d{1,2}){1,2}/;
+    const wanted = Math.floor(marker.seconds);
+    const title = (marker.title || "").trim().toLowerCase();
+    for (const button of panel.querySelectorAll("button")) {
+      let row = button.parentElement;
+      while (row && row !== panel && !timestamp.test(row.textContent)) row = row.parentElement;
+      if (!row || row === panel) continue;
+      const start = timestampToSeconds(row.textContent.match(timestamp)[0]);
+      if (Math.abs(start - wanted) > 1) continue;
+      if (title && !row.textContent.toLowerCase().includes(title)) continue;
+      return row;
+    }
+    return null;
+  }
+
+  // Clicking a marker's own colored range on the scrubber opens its
+  // editor too. The range is often pointer-events:none (so it doesn't get
+  // in the way of dragging the seek handle), which means it never gets a
+  // click itself — so this listens on the whole player instead and checks
+  // whether the click landed inside a range's box. Clicks on our own
+  // bubbles are left to their own handler. The player's usual seek still
+  // happens, since nothing here stops the event.
+  function ensureRangeClickEditing(root) {
+    if (root.__markerSymbolsClickBound) return;
+    root.__markerSymbolsClickBound = true;
+    root.addEventListener("click", (e) => {
+      if (!editOnClick || e.target.closest(".marker-symbols-bubble")) return;
+      const pair = tickPairs.find(({ tick }) => {
+        const r = tick.getBoundingClientRect();
+        // A few px of slack vertically: the range is often only 2-4px tall.
+        return e.clientX >= r.left && e.clientX <= r.right &&
+          e.clientY >= r.top - 3 && e.clientY <= r.bottom + 3;
+      });
+      if (pair) openMarkerEditor(pair.marker);
+    }, true);
+  }
+
   // Pairs every .vjs-marker-range found (sorted left-to-right) against
   // every marker from Stash (sorted by timestamp), index for index, and
   // mounts each marker's icon(s) into its matched element.
@@ -497,9 +598,12 @@
 
     const pairingLog = [];
     let mountedCount = 0;
+    tickPairs = [];
+    ensureRangeClickEditing(root);
     for (let i = 0; i < pairCount; i++) {
       const marker = sortedMarkers[i];
       const tick = ticks[i];
+      tickPairs.push({ tick, marker });
       const computed = getComputedStyle(tick);
       const iconGroup = makeMarkerIcons(marker, video);
       const label = `${formatTime(marker.seconds)} ${marker.title || (marker.primary_tag && marker.primary_tag.name) || marker.id}`;
@@ -536,9 +640,9 @@
       return;
     }
 
-    let markers, stylesSetting;
+    let markers, settings;
     try {
-      [markers, stylesSetting] = await Promise.all([fetchMarkers(sceneId), fetchTagStylesSetting()]);
+      [markers, settings] = await Promise.all([fetchMarkers(sceneId), fetchPluginSettings()]);
     } catch (err) {
       console.error("[Marker Symbols] Failed to fetch markers:", err);
       return;
@@ -555,7 +659,8 @@
     }
 
     lastMarkers = markers;
-    tagStyles = parseTagStyles(stylesSetting);
+    tagStyles = parseTagStyles(settings.tagStyles || "");
+    editOnClick = !settings.disableEditOnClick;
     ensureSeekRecovery(video);
     clearOverlay();
     mountIconsOnMarkerRanges(video, markers);

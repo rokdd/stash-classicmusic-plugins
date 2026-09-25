@@ -57,6 +57,22 @@ Piano, Cello { opacity: .6 }
 
 Changes apply the next time a scene page loads.
 
+## Editing a marker by clicking it
+
+Clicking a marker's colored range on the scrubber, or one of its icons,
+jumps to that marker and opens Stash's own edit form for it. That form
+lives in the scene's **Markers** tab, so the plugin switches to that tab,
+finds the marker's row by its start time (and title), and presses its
+Edit button for you.
+
+On by default. To only jump to the marker, turn on Settings → Plugins →
+Marker Improvements → **Don't open the marker editor on click**.
+
+Stash doesn't label those rows or buttons in a way a plugin can target
+directly, so this goes by what's shown on screen. If a Stash update
+changes the Markers tab's layout, clicking still switches to that tab,
+and the browser console says it couldn't find the marker's row.
+
 ## Where the symbols show up
 
 Directly inside Stash's own colored marker indicator for that marker —
