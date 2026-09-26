@@ -50,6 +50,13 @@ first, letting you pick:
 - **Quality** — a preset (Highest / Visually lossless / Balanced / Smaller
   / Smallest, each mapping to an x265 CRF value) or **Custom CRF…** to type
   an exact 0-51 value.
+- **Best audio** — for concerts and films where the sound matters.
+  Audio a browser can already play from an .mp4 (AAC, MP3, FLAC) is
+  always copied untouched; anything else (AC3, DTS, PCM, …) has to be
+  converted, normally to AAC at 192 kbit/s. Tick this to convert it to
+  lossless FLAC instead — still playable in current Chrome, Firefox,
+  Edge and Safari, but bigger. Audio that was already lossy (AC3, DTS)
+  comes out exactly as it was; FLAC just stops it losing anything more.
 - **Keep original file** — checked by default. With it checked, the
   original is never deleted: the new H265 file is written alongside it,
   attached to the *same* scene, and set as that scene's primary file —
@@ -155,8 +162,8 @@ on anything — it always checks first, and if the file decodes cleanly
 browser. Repair also looks for three things a lossless remux fixes: the
 index (moov atom) sitting at the end of an .mp4, so the browser has to
 fetch the end before it can play or seek; audio browsers can't play from
-an .mp4 (AC3, DTS, PCM, FLAC, … — re-encoded to AAC, the video itself
-is copied untouched); and a container browsers can't play directly
+an .mp4 (AC3, DTS, PCM, … — re-encoded to AAC; the video itself is copied
+untouched); and a container browsers can't play directly
 (.mkv, .avi, …), remuxed into .mp4. If the video codec itself doesn't fit
 in an .mp4, it says so and stops rather than re-encoding a healthy file —
 use Convert to H265 for that.

@@ -109,6 +109,7 @@
       mode: "convert_scene",
       scene_id: String(sceneId),
       keep_original: opts.keepOriginal ? "true" : "false",
+      lossless_audio: opts.losslessAudio ? "true" : "false",
     };
     // A custom numeric CRF wins if given; otherwise send the named preset
     // (see QUALITY_PRESETS in h265_transcode.py — keep these in sync).
@@ -438,7 +439,7 @@
       });
 
       const optionsWrap = document.createElement("div");
-      optionsWrap.style.cssText = "margin-bottom:18px;font-size:0.9em;";
+      optionsWrap.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:18px;font-size:0.9em;";
       const keepLabel = document.createElement("label");
       keepLabel.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
       const keepCb = document.createElement("input");
@@ -450,6 +451,18 @@
         "primary file, original stays attached as a secondary file)"
       ));
       optionsWrap.appendChild(keepLabel);
+
+      const audioLabel = document.createElement("label");
+      audioLabel.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
+      const audioCb = document.createElement("input");
+      audioCb.type = "checkbox";
+      audioCb.checked = false;
+      audioLabel.appendChild(audioCb);
+      audioLabel.appendChild(document.createTextNode(
+        "Best audio — for concerts and films: audio a browser can't play " +
+        "(AC3, DTS, PCM…) becomes lossless FLAC instead of AAC. Bigger files."
+      ));
+      optionsWrap.appendChild(audioLabel);
       box.appendChild(optionsWrap);
 
       const btnRow = document.createElement("div");
@@ -479,7 +492,7 @@
           }
         }
         overlay.remove();
-        resolve({ quality, crf, keepOriginal: keepCb.checked });
+        resolve({ quality, crf, keepOriginal: keepCb.checked, losslessAudio: audioCb.checked });
       });
 
       btnRow.appendChild(cancelBtn);
