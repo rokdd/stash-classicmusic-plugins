@@ -598,10 +598,10 @@ def probe_ok(path):
 
 
 # Audio codecs every major browser can play from an .mp4. Anything else
-# (AC3, DTS, PCM, FLAC, ...) is re-encoded to AAC during conversion, since
-# copying it as-is leaves a file that plays silent or not at all in a
-# browser.
-BROWSER_AUDIO_CODECS = {"aac", "mp3"}
+# (AC3, DTS, PCM, ...) is re-encoded during conversion — to AAC, or to
+# lossless FLAC when the "Best audio" option is ticked — since copying it
+# as-is leaves a file that plays silent or not at all in a browser.
+BROWSER_AUDIO_CODECS = {"aac", "mp3", "flac"}
 
 
 def probe_audio_codecs(path):
@@ -624,14 +624,21 @@ def probe_audio_codecs(path):
         return ["unknown"]
 
 
-def browser_audio_args(path):
+def browser_audio_args(path, lossless=False):
     """ffmpeg audio arguments for writing `path`'s audio into an .mp4 a
-    browser can play: copied as-is when it already is AAC/MP3, otherwise
-    re-encoded to AAC."""
+    browser can play: copied as-is when it already is AAC/MP3/FLAC,
+    otherwise re-encoded — to lossless FLAC when `lossless` (the
+    "Best audio" option), to AAC otherwise."""
     audio_codecs = probe_audio_codecs(path)
     if all(c in BROWSER_AUDIO_CODECS for c in audio_codecs):
         return ["-c:a", "copy"]
-    log_info(f"Audio is {', '.join(audio_codecs)}, which browsers can't play from an .mp4 — re-encoding it to AAC")
+    listed = ", ".join(audio_codecs)
+    if lossless:
+        log_info(f"Audio is {listed}, which browsers can't play from an .mp4 — converting it to lossless FLAC")
+        # FLAC in .mp4 is flagged experimental in ffmpeg before 6.0, and
+        # refused without this; newer versions just ignore it.
+        return ["-c:a", "flac", "-strict", "experimental"]
+    log_info(f"Audio is {listed}, which browsers can't play from an .mp4 — re-encoding it to AAC")
     return ["-c:a", "aac", "-b:a", "192k"]
 
 
@@ -782,7 +789,7 @@ def resolve_crf(args):
     return CRF_VALUE
 
 
-def transcode_to_h265(src_path, crf=None, on_progress=None):
+def transcode_to_h265(src_path, crf=None, on_progress=None, lossless_audio=False):
     """
     Encodes src_path to H.265 in a temp file, then returns that temp path.
     Raises on failure. Caller is responsible for moving/cleaning up.
@@ -807,7 +814,7 @@ def transcode_to_h265(src_path, crf=None, on_progress=None):
     fd, tmp_path = tempfile.mkstemp(suffix=OUTPUT_EXT, dir=tmp_dir)
     os.close(fd)
 
-    audio_args = browser_audio_args(src_path)
+    audio_args = browser_audio_args(src_path, lossless=lossless_audio)
 
     # Everything below is chosen for the result to stream well in a browser:
     #   - hvc1 tag: without it Safari/Apple players refuse H.265 in .mp4.
@@ -949,7 +956,8 @@ def scene_label(scene):
     return name if name.startswith("scene ") else f"{name} (scene {scene['id']})"
 
 
-def process_scene(client, scene, keep_original, done_tag_id, followups, crf=None, on_progress=None):
+def process_scene(client, scene, keep_original, done_tag_id, followups, crf=None, on_progress=None,
+                  lossless_audio=False):
     """
     Converts one scene's primary video file to H265 if it needs it.
     Returns a short status string: "converted" / "skipped" / "failed: <why>".
@@ -983,7 +991,7 @@ def process_scene(client, scene, keep_original, done_tag_id, followups, crf=None
     src_path = video_file["path"]
     log_info(f"Converting {scene_label(scene)} to H265...")
     try:
-        tmp_path = transcode_to_h265(src_path, crf=crf, on_progress=on_progress)
+        tmp_path = transcode_to_h265(src_path, crf=crf, on_progress=on_progress, lossless_audio=lossless_audio)
         final_path, removed_path = finalize_output(src_path, tmp_path, keep_original)
 
         existing_tag_ids = [t["id"] for t in scene.get("tags", [])]
@@ -1432,7 +1440,7 @@ def detect_corruption(path, timeout=1800, on_progress=None):
     return False, ""
 
 
-def remux_repair(src_path, on_progress=None):
+def remux_repair(src_path, on_progress=None, lossless_audio=False):
     """
     Attempts a lossless container remux: copies every stream as-is into a
     fresh, cleanly-indexed file. This alone fixes most "won't seek", "wrong
@@ -1459,7 +1467,7 @@ def remux_repair(src_path, on_progress=None):
         "-i", src_path,
         "-map", "0",
         "-c", "copy",
-        *browser_audio_args(src_path),
+        *browser_audio_args(src_path, lossless=lossless_audio),
         "-movflags", "+faststart",
         tmp_path,
     ]
@@ -1477,7 +1485,7 @@ def remux_repair(src_path, on_progress=None):
     return tmp_path
 
 
-def reencode_repair(src_path, on_progress=None):
+def reencode_repair(src_path, on_progress=None, lossless_audio=False):
     """
     Last-resort repair: fully re-decodes and re-encodes, telling ffmpeg to
     ignore and skip corrupt packets rather than aborting. This recovers as
@@ -1503,7 +1511,7 @@ def reencode_repair(src_path, on_progress=None):
         # 8-bit: browsers can't play 10-bit H.264, which a 10-bit source
         # would otherwise produce.
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k",
+        *browser_audio_args(src_path, lossless=lossless_audio),
         "-movflags", "+faststart",
         tmp_path,
     ]
@@ -1549,6 +1557,7 @@ def run_repair_scene(client, args, repair_tag_id):
 
     force = str(args.get("force", "false")).lower() == "true"
     keep_original = str(args.get("keep_original", "true")).lower() == "true"
+    lossless_audio = str(args.get("lossless_audio", "false")).lower() == "true"
 
     scene = client.get_scene(scene_id)
     if not scene:
@@ -1598,7 +1607,7 @@ def run_repair_scene(client, args, repair_tag_id):
         span = 0.45 if streaming_only else 0.05
         log_progress(0.5 + fraction * span)
 
-    tmp_path = remux_repair(src_path, on_progress=on_remux_progress)
+    tmp_path = remux_repair(src_path, on_progress=on_remux_progress, lossless_audio=lossless_audio)
     method = "lossless remux for streaming" if streaming_only else "lossless remux"
 
     if tmp_path is None and streaming_only:
@@ -1625,7 +1634,7 @@ def run_repair_scene(client, args, repair_tag_id):
             log_progress(0.55 + fraction * 0.4)
 
         try:
-            tmp_path = reencode_repair(src_path, on_progress=on_reencode_progress)
+            tmp_path = reencode_repair(src_path, on_progress=on_reencode_progress, lossless_audio=lossless_audio)
             method = "re-encode (lossy, best-effort)"
         except Exception as exc:  # noqa: BLE001
             write_plugin_output(error=f"Both repair attempts failed — the file may be too badly damaged to recover: {exc}")
@@ -1680,6 +1689,7 @@ def run_convert_scene(client, args, done_tag_id):
     log_info(f"Quality: CRF {crf}")
 
     keep_original = str(args.get("keep_original", "false")).lower() == "true"
+    lossless_audio = str(args.get("lossless_audio", "false")).lower() == "true"
     log_progress(0.05)
 
     def on_progress(fraction):
@@ -1688,7 +1698,8 @@ def run_convert_scene(client, args, done_tag_id):
         log_progress(0.05 + fraction * 0.8)
 
     followups = []
-    status = process_scene(client, scene, keep_original, done_tag_id, followups, crf=crf, on_progress=on_progress)
+    status = process_scene(client, scene, keep_original, done_tag_id, followups, crf=crf, on_progress=on_progress,
+                           lossless_audio=lossless_audio)
     queue_convert_followups(client, followups, f"Finish converting {scene_name(scene)}")
     log_progress(1.0)
 
