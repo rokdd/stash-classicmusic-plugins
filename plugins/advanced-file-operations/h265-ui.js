@@ -14,7 +14,8 @@
 //   - "Split at Markers…" — cut the file at every marker into separate
 //                            scenes, carrying markers/title/performers/
 //                            tags/studio into each new part
-//   - "Repair File"        — check the file for decode errors and fix it
+//   - "Repair File…"       — check the file for decode errors and streaming
+//                            problems and fix them
 // instead of only being able to run these from Settings > Tasks against
 // the whole library.
 //
@@ -121,11 +122,12 @@
     return runTask(`Convert ${await sceneLabel(sceneId)} to H265`, argsMap);
   }
 
-  async function runRepairScene(sceneId) {
+  async function runRepairScene(sceneId, opts) {
     return runTask(`Repair ${await sceneLabel(sceneId)}`, {
       mode: "repair_scene",
       scene_id: String(sceneId),
-      keep_original: "true",
+      keep_original: opts.keepOriginal ? "true" : "false",
+      lossless_audio: opts.losslessAudio ? "true" : "false",
     });
   }
 
@@ -382,6 +384,122 @@
   // Lets the person pick an encode quality (and whether to keep the
   // original file) before queuing a single-scene H265 conversion, instead
   // of always encoding at a hardcoded default.
+  // Small dialog shown before a repair: whether the repaired file is
+  // attached as the scene's primary file (original kept as a secondary
+  // file) or replaces the original, and whether to keep the best audio.
+  // Resolves to { keepOriginal, losslessAudio }, or null if cancelled.
+  function openRepairDialog() {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.id = "h265-repair-dialog-overlay";
+      overlay.style.cssText =
+        "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3000;" +
+        "display:flex;align-items:center;justify-content:center;font-family:sans-serif;";
+
+      const box = document.createElement("div");
+      box.style.cssText =
+        "background:#242730;color:#eee;padding:20px 24px;border-radius:8px;" +
+        "max-width:420px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 4px 24px rgba(0,0,0,0.5);";
+
+      const heading = document.createElement("h5");
+      heading.style.marginTop = "0";
+      heading.textContent = "Repair file";
+      box.appendChild(heading);
+
+      const hint = document.createElement("p");
+      hint.style.cssText = "font-size:0.85em;opacity:0.75;margin-bottom:14px;";
+      hint.textContent =
+        "Checks the whole file for corruption and for anything that stops it " +
+        "streaming well in a browser, and fixes what it finds. A healthy file " +
+        "is left alone. Checking decodes the entire file, so it can take a while.";
+      box.appendChild(hint);
+
+      const optionsWrap = document.createElement("div");
+      optionsWrap.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:18px;font-size:0.9em;";
+      const addCheckbox = (text, checked) => {
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = checked;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(text));
+        optionsWrap.appendChild(label);
+        return cb;
+      };
+      // What happens to the original: a real either/or, so radio buttons.
+      const fileQuestion = document.createElement("div");
+      fileQuestion.style.cssText = "font-weight:600;";
+      fileQuestion.textContent = "The repaired file should…";
+      optionsWrap.appendChild(fileQuestion);
+      const addRadio = (value, text, checked) => {
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-left:4px;";
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "h265-repair-file-mode";
+        radio.value = value;
+        radio.checked = checked;
+        radio.style.marginTop = "3px";
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(text));
+        optionsWrap.appendChild(label);
+        return radio;
+      };
+      const attachRadio = addRadio(
+        "attach",
+        "Be attached to the scene as its primary file — the original stays on " +
+        "the scene as a secondary file (recommended: nothing is deleted)",
+        true
+      );
+      addRadio(
+        "replace",
+        "Replace the original — the original file is deleted",
+        false
+      );
+      const audioCb = addCheckbox(
+        "Best audio — for concerts and films: audio a browser can't play " +
+        "(AC3, DTS, PCM…) becomes lossless FLAC instead of AAC. Bigger files.",
+        false
+      );
+      box.appendChild(optionsWrap);
+
+      const btnRow = document.createElement("div");
+      btnRow.style.cssText = "display:flex;justify-content:flex-end;gap:8px;";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "btn btn-secondary";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.addEventListener("click", () => {
+        overlay.remove();
+        resolve(null);
+      });
+
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = "btn btn-primary";
+      confirmBtn.textContent = "Check & repair";
+      confirmBtn.addEventListener("click", () => {
+        overlay.remove();
+        resolve({ keepOriginal: attachRadio.checked, losslessAudio: audioCb.checked });
+      });
+
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(confirmBtn);
+      box.appendChild(btnRow);
+
+      overlay.appendChild(box);
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+          overlay.remove();
+          resolve(null);
+        }
+      });
+      document.body.appendChild(overlay);
+    });
+  }
+
   function openQualityDialog() {
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
@@ -697,9 +815,16 @@
 
     const repairItem = makeMenuItem({
       id: "h265-repair-btn",
-      label: "Repair File",
-      title: "Check this scene's file for corruption and repair it (lossless remux first, tolerant re-encode as a fallback). Safe to click on a healthy file — it'll just report nothing to do.",
-      onClick: () => runRepairScene(sceneId),
+      label: "Repair File…",
+      title: "Check this scene's file for corruption and streaming problems and fix them (lossless remux first, tolerant re-encode as a fallback). Safe on a healthy file — it'll just report nothing to do.",
+      onClick: async () => {
+        closeMenu();
+        const choice = await openRepairDialog();
+        if (!choice) {
+          return { cancelled: true };
+        }
+        return runRepairScene(sceneId, choice);
+      },
       closeMenu,
     });
 

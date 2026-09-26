@@ -32,7 +32,7 @@ Run either one. Progress and a running log show up in the task UI.
 Besides the two library-wide tasks, opening any scene now shows a single
 **File Operations** button (scissors icon) in the scene toolbar. Click it
 to open a dropdown with three actions: **Convert to H265**, **Split at
-Markers…**, and **Repair File** — described individually below.
+Markers…**, and **Repair File…** — described individually below.
 
 The button tries to slot itself into Stash's own toolbar. Since Stash's
 internal page structure can differ by version, if you only ever see it as a
@@ -154,8 +154,17 @@ Two things worth knowing:
 
 ## Repairing a corrupt file
 
-Choose **Repair File** from the File Operations menu. It's safe to click
-on anything — it always checks first, and if the file decodes cleanly
+Choose **Repair File…** from the File Operations menu. A small dialog
+asks two things first:
+
+- **What happens to the original** — either the repaired file is
+  *attached* to the scene as its primary file, with the original kept on
+  the scene as a secondary file (the default — nothing is deleted), or it
+  *replaces* the original, which is deleted.
+- **Best audio** — same as in the Convert dialog: audio a browser can't
+  play becomes lossless FLAC instead of AAC.
+
+It's safe to run on anything — it always checks first, and if the file decodes cleanly
 *and* streams well it just reports "nothing to do" and stops there.
 
 **Streaming fix.** A file that decodes cleanly can still play badly in a
