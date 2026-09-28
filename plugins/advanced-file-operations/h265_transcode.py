@@ -22,9 +22,8 @@ Install:
     3. `pip install requests` in the Python environment Stash calls
        (see requirements.txt).
     4. Reload plugins in Settings > Plugins. The H265 library tasks show
-       up under Settings > Tasks > Plugin Tasks; a "File Operations" menu
-       (Convert to H265 / Split at Markers / Repair File) shows up on each
-       scene's page.
+       up under Settings > Tasks > Plugin Tasks; Convert to H265 / Split at
+       Markers / Repair File show up in each scene's "⋮" operations menu.
 
 Notes on "without losing quality":
     H.265 is a lossy codec, so *some* generation loss versus the source is

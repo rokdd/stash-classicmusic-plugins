@@ -1,7 +1,7 @@
 // Advanced File Operations — UI addon
 //
-// Adds a single "File Operations" dropdown (scissors icon) on individual
-// scene pages, with three actions:
+// Adds three actions to the "⋮" operations menu on individual scene pages
+// (Stash's own menu with Rescan, Generate, Delete, …):
 //   - "Convert to H265…"  — opens a small dialog to pick a quality preset
 //                            (or a custom CRF), then re-encodes just this
 //                            scene's file. Greyed out once the file's
@@ -19,23 +19,14 @@
 // instead of only being able to run these from Settings > Tasks against
 // the whole library.
 //
-// How it finds/places the dropdown:
-//   Stash's internal component names occasionally change between
-//   versions, so rather than depending on one exact React component to
-//   patch (which could silently stop working after a Stash upgrade), this
-//   script:
-//     1. Watches the page with PluginApi.Event (falls back to a plain
-//        MutationObserver on older Stash versions that don't have
-//        PluginApi.Event yet).
-//     2. Tries to slot the dropdown into Stash's own scene toolbar by
-//        looking for a couple of known container selectors.
-//     3. If it can't find one, it falls back to a small fixed-position
-//        button in the corner of the page — so the feature still works
-//        even if step 2's selectors are stale for your version.
-//   If you want it properly merged into your toolbar and the fallback
-//   button is showing instead, open devtools on a scene page, find the
-//   element that wraps Stash's own toolbar buttons, and add its selector
-//   to TOOLBAR_SELECTORS below.
+// Where the actions go:
+//   Appended below a divider in Stash's own scene operations menu (the
+//   "⋮" button, id "operation-menu" in Stash's ScenePage). That menu is
+//   React-managed and can be re-created at any time, so the items are
+//   re-added whenever they go missing (see syncStashMenu). If a Stash
+//   version has no such menu, a small scissors dropdown of our own is
+//   used instead — slotted into the toolbar via TOOLBAR_SELECTORS below,
+//   or floating in the page corner if none of those match either.
 
 (function () {
   "use strict";
@@ -671,24 +662,30 @@
     '<line x1="14.47" y1="14.48" x2="20" y2="20"></line>' +
     '<line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>';
 
-  // One row inside the File Operations dropdown. Handles its own
-  // working/success/failure feedback, same as the old standalone buttons
-  // did, then hands control back to the caller via closeMenu.
-  function makeMenuItem({ id, label, title, onClick, closeMenu }) {
+  // One row in a menu — Stash's own scene operations menu, or the
+  // fallback scissors dropdown. Handles its own working/success/failure
+  // feedback, then hands control back to the caller via closeMenu.
+  // `stashStyle` gives it Stash's own dropdown-item classes instead of
+  // the fallback menu's inline look.
+  function makeMenuItem({ id, label, title, onClick, closeMenu, stashStyle }) {
     const item = document.createElement("button");
     item.type = "button";
     item.id = id;
     item.title = title;
     item.textContent = label;
-    item.style.cssText =
-      "display:block;width:100%;text-align:left;background:none;border:0;" +
-      "padding:8px 16px;cursor:pointer;color:inherit;font-size:0.9em;white-space:nowrap;";
-    item.addEventListener("mouseenter", () => {
-      if (!item.disabled) item.style.background = "rgba(255,255,255,0.08)";
-    });
-    item.addEventListener("mouseleave", () => {
-      item.style.background = "none";
-    });
+    if (stashStyle) {
+      item.className = "dropdown-item bg-secondary text-white h265-stash-item";
+    } else {
+      item.style.cssText =
+        "display:block;width:100%;text-align:left;background:none;border:0;" +
+        "padding:8px 16px;cursor:pointer;color:inherit;font-size:0.9em;white-space:nowrap;";
+      item.addEventListener("mouseenter", () => {
+        if (!item.disabled) item.style.background = "rgba(255,255,255,0.08)";
+      });
+      item.addEventListener("mouseleave", () => {
+        item.style.background = "none";
+      });
+    }
 
     item.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -710,6 +707,7 @@
         }, 1200);
       } catch (err) {
         console.error(`[Advanced File Operations] ${id} failed:`, err);
+        window.alert(`Couldn't start the task: ${err.message || err}`);
         item.textContent = "Failed — see console";
         item.style.color = "#e35d6a";
         setTimeout(() => {
@@ -723,48 +721,9 @@
     return item;
   }
 
-  function removeAnyExistingButtons() {
-    const existing = document.getElementById("h265-ops-wrap");
-    if (existing) existing.remove();
-  }
-
-  function placeButtons() {
-    const sceneId = currentSceneId();
-    removeAnyExistingButtons();
-    if (!sceneId) return;
-
-    const wrap = document.createElement("div");
-    wrap.id = "h265-ops-wrap";
-    wrap.style.cssText = "position:relative;display:inline-block;";
-
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.id = "h265-ops-toggle";
-    toggle.className = "btn btn-secondary";
-    toggle.title = "File operations — convert to H265, split at markers, or repair this scene's file";
-    toggle.setAttribute("aria-label", "File operations");
-    toggle.style.cssText = "display:inline-flex;align-items:center;justify-content:center;padding-left:10px;padding-right:10px;";
-    toggle.innerHTML = SCISSORS_ICON_SVG;
-
-    const menu = document.createElement("div");
-    menu.id = "h265-ops-menu";
-    menu.style.cssText =
-      "display:none;position:absolute;top:100%;left:0;margin-top:4px;" +
-      "background:#242730;color:#eee;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);" +
-      "min-width:230px;z-index:2500;overflow:hidden;padding:4px 0;";
-
-    const closeMenu = () => {
-      menu.style.display = "none";
-    };
-    const toggleMenu = () => {
-      menu.style.display = menu.style.display === "none" ? "block" : "none";
-    };
-
-    toggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleMenu();
-    });
-
+  // The three actions, as menu items for `sceneId`. `closeMenu` closes
+  // whichever menu they end up in.
+  function buildMenuItems(sceneId, closeMenu, stashStyle) {
     const convertItem = makeMenuItem({
       id: "h265-convert-btn",
       label: "Convert to H265…",
@@ -778,6 +737,7 @@
         return runConvertScene(sceneId, choice);
       },
       closeMenu,
+      stashStyle,
     });
 
     // Grey the item out once we know the scene's already H265 (or already
@@ -811,6 +771,7 @@
         return runSplitScene(sceneId, choice);
       },
       closeMenu,
+      stashStyle,
     });
 
     const repairItem = makeMenuItem({
@@ -826,11 +787,87 @@
         return runRepairScene(sceneId, choice);
       },
       closeMenu,
+      stashStyle,
     });
 
-    menu.appendChild(convertItem);
-    menu.appendChild(splitItem);
-    menu.appendChild(repairItem);
+    return [convertItem, splitItem, repairItem];
+  }
+
+  // -- Stash's own scene operations menu ------------------------------------
+  //
+  // The "⋮" button in a scene's toolbar (id "operation-menu" in Stash's
+  // ScenePage) opens Stash's operations menu — Rescan, Generate, Delete,
+  // etc. Our items are appended at the bottom of it, below a divider.
+  // That menu is React-managed and may only be created the first time it
+  // opens, or re-created on re-render, so this is re-checked whenever the
+  // page changes and re-adds the items whenever they're missing.
+  function syncStashMenu() {
+    const sceneId = currentSceneId();
+    const toggle = sceneId && document.getElementById("operation-menu");
+    if (!toggle) return false;
+    const menu =
+      document.querySelector('[aria-labelledby="operation-menu"]') ||
+      (toggle.parentElement && toggle.parentElement.querySelector(".dropdown-menu"));
+    // Toggle there but menu not rendered yet: it's created on first open,
+    // and the next page change (that opening) brings us back here.
+    if (!menu) return true;
+    if (menu.dataset.h265Scene === sceneId && menu.querySelector("#h265-convert-btn")) return true;
+
+    menu.querySelectorAll(".h265-stash-item").forEach((el) => el.remove());
+    menu.dataset.h265Scene = sceneId;
+    const closeMenu = () => {
+      if (menu.classList.contains("show")) toggle.click();
+    };
+    const divider = document.createElement("div");
+    divider.className = "dropdown-divider h265-stash-item";
+    menu.appendChild(divider);
+    buildMenuItems(sceneId, closeMenu, true).forEach((item) => menu.appendChild(item));
+    return true;
+  }
+
+  // -- fallback: our own scissors dropdown -----------------------------------
+  //
+  // Only used if a Stash version has no "operation-menu" to join.
+
+  function removeAnyExistingButtons() {
+    const existing = document.getElementById("h265-ops-wrap");
+    if (existing) existing.remove();
+  }
+
+  function placeFallbackButton() {
+    const sceneId = currentSceneId();
+    removeAnyExistingButtons();
+    if (!sceneId || document.getElementById("operation-menu")) return;
+
+    const wrap = document.createElement("div");
+    wrap.id = "h265-ops-wrap";
+    wrap.style.cssText = "position:relative;display:inline-block;";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.id = "h265-ops-toggle";
+    toggle.className = "btn btn-secondary";
+    toggle.title = "File operations — convert to H265, split at markers, or repair this scene's file";
+    toggle.setAttribute("aria-label", "File operations");
+    toggle.style.cssText = "display:inline-flex;align-items:center;justify-content:center;padding-left:10px;padding-right:10px;";
+    toggle.innerHTML = SCISSORS_ICON_SVG;
+
+    const menu = document.createElement("div");
+    menu.id = "h265-ops-menu";
+    menu.style.cssText =
+      "display:none;position:absolute;top:100%;left:0;margin-top:4px;" +
+      "background:#242730;color:#eee;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);" +
+      "min-width:230px;z-index:2500;overflow:hidden;padding:4px 0;";
+
+    const closeMenu = () => {
+      menu.style.display = "none";
+    };
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.style.display = menu.style.display === "none" ? "block" : "none";
+    });
+
+    buildMenuItems(sceneId, closeMenu, false).forEach((item) => menu.appendChild(item));
     wrap.appendChild(toggle);
     wrap.appendChild(menu);
 
@@ -842,8 +879,8 @@
       }
     }
 
-    // Fallback: a small floating button, guaranteed to work regardless of
-    // Stash's internal toolbar markup for this version.
+    // Last resort: a small floating button, guaranteed to work regardless
+    // of Stash's internal toolbar markup for this version.
     wrap.style.position = "fixed";
     wrap.style.bottom = "16px";
     wrap.style.right = "16px";
@@ -852,9 +889,9 @@
     document.body.appendChild(wrap);
   }
 
-  // Closes the dropdown on any click outside it. Registered once — the
-  // wrap element is looked up fresh each time so this keeps working across
-  // re-renders/navigation without piling up duplicate listeners.
+  // Closes the fallback dropdown on any click outside it. Registered once —
+  // the wrap element is looked up fresh each time so this keeps working
+  // across re-renders/navigation without piling up duplicate listeners.
   document.addEventListener("click", (e) => {
     const wrap = document.getElementById("h265-ops-wrap");
     const menu = document.getElementById("h265-ops-menu");
@@ -862,6 +899,8 @@
       menu.style.display = "none";
     }
   });
+
+  // -- wiring -----------------------------------------------------------------
 
   function debounce(fn, ms) {
     let t;
@@ -871,20 +910,32 @@
     };
   }
 
-  const schedulePlaceButtons = debounce(() => {
-    removeAnyExistingButtons();
-    placeButtons();
-  }, 300);
+  // After navigating to a scene, give Stash a moment to render its
+  // toolbar before deciding the fallback button is needed — otherwise it
+  // would flash up and vanish again on every page load.
+  const scheduleFallbackCheck = debounce(() => {
+    if (!syncStashMenu()) placeFallbackButton();
+  }, 2000);
 
+  // Whenever the page changes: keep our items in Stash's menu (and drop the
+  // fallback button once that menu shows up). Coalesced to at most one
+  // check per 100ms, since this fires on every DOM change.
+  let syncPending = false;
+  new MutationObserver(() => {
+    if (syncPending) return;
+    syncPending = true;
+    setTimeout(() => {
+      syncPending = false;
+      if (syncStashMenu()) removeAnyExistingButtons();
+    }, 100);
+  }).observe(document.body, { childList: true, subtree: true });
+
+  const onLocationChange = () => {
+    removeAnyExistingButtons();
+    if (!syncStashMenu()) scheduleFallbackCheck();
+  };
   if (window.PluginApi && window.PluginApi.Event && typeof window.PluginApi.Event.addEventListener === "function") {
-    // Preferred: official navigation event (Stash v0.25+).
-    window.PluginApi.Event.addEventListener("stash:location", schedulePlaceButtons);
-    schedulePlaceButtons();
-  } else {
-    // Fallback for older Stash versions: watch the DOM for route changes,
-    // since there's no SPA-navigation hook available.
-    schedulePlaceButtons();
-    const observer = new MutationObserver(schedulePlaceButtons);
-    observer.observe(document.body, { childList: true, subtree: true });
+    window.PluginApi.Event.addEventListener("stash:location", onLocationChange);
   }
+  onLocationChange();
 })();

@@ -27,24 +27,26 @@ Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/ad
 
 Run either one. Progress and a running log show up in the task UI.
 
-## The File Operations menu
+## The scene menu
 
-Besides the two library-wide tasks, opening any scene now shows a single
-**File Operations** button (scissors icon) in the scene toolbar. Click it
-to open a dropdown with three actions: **Convert to H265**, **Split at
-Markers…**, and **Repair File…** — described individually below.
+Besides the two library-wide tasks, every scene's "⋮" operations menu
+(the one with Stash's own Rescan, Generate, Delete, …) gets three more
+entries below a divider: **Convert to H265…**, **Split at Markers…**, and
+**Repair File…** — described individually below.
 
-The button tries to slot itself into Stash's own toolbar. Since Stash's
-internal page structure can differ by version, if you only ever see it as a
-small floating button in the bottom-right corner instead of inline with
-Stash's other scene buttons: open devtools on a scene page, find the
-element wrapping Stash's own toolbar buttons, and add its CSS selector to
-`TOOLBAR_SELECTORS` near the top of `h265-ui.js`. Either way, clicking it
-works the same — it's purely cosmetic which container it ends up in.
+If your Stash version has no such menu, a small **File Operations**
+button (scissors icon) shows up in the scene toolbar instead, with the
+same three actions. If even that can't find Stash's toolbar, it floats
+in the bottom-right corner; to fix that, open devtools on a scene page,
+find the element wrapping Stash's own toolbar buttons, and add its CSS
+selector to `TOOLBAR_SELECTORS` near the top of `h265-ui.js`.
+
+If starting a task fails, a message box says why (the full error is in
+the browser console).
 
 ## Converting a single scene from its page
 
-Choose **Convert to H265…** from the File Operations menu. A dialog opens
+Choose **Convert to H265…** from the scene's ⋮ menu. A dialog opens
 first, letting you pick:
 
 - **Quality** — a preset (Highest / Visually lossless / Balanced / Smaller
@@ -93,7 +95,7 @@ its own.
 
 ## Splitting a scene at its markers
 
-Choose **Split at Markers…** from the File Operations menu. It opens a
+Choose **Split at Markers…** from the scene's ⋮ menu. It opens a
 small dialog listing every marker on the scene as a checkbox, with two
 modes to choose from:
 
@@ -154,7 +156,7 @@ Two things worth knowing:
 
 ## Repairing a corrupt file
 
-Choose **Repair File…** from the File Operations menu. A small dialog
+Choose **Repair File…** from the scene's ⋮ menu. A small dialog
 asks two things first:
 
 - **What happens to the original** — either the repaired file is

@@ -99,17 +99,37 @@
   }
 
   // This plugin's settings (Settings > Plugins), as saved. Read fresh on
-  // every scene load, so a change shows up on the next one. Settings never
-  // touched are simply missing, which is why the click-to-edit one is a
-  // "disable" switch: missing = off = editing enabled.
+  // every scene load, so a change shows up on the next one.
   async function fetchPluginSettings() {
+    let settings;
     try {
       const data = await callGQL(`query { configuration { plugins } }`);
-      return (data.configuration.plugins || {})[PLUGIN_ID] || {};
+      settings = (data.configuration.plugins || {})[PLUGIN_ID] || {};
     } catch (err) {
       console.warn("[Marker Symbols] Couldn't read plugin settings:", err);
-      return {};
+      return { editMarkerOnClick: true };
     }
+    return applySettingDefaults(settings);
+  }
+
+  // Stash plugin settings can't declare a default: one never touched is
+  // just missing, and its switch shows "off". "Click opens the marker
+  // editor" should start out on, so the first time it's missing this saves
+  // it as on — the switch then shows what actually happens. Also carries
+  // over the older, inverted "disableEditOnClick" switch if it was set.
+  async function applySettingDefaults(settings) {
+    if (typeof settings.editMarkerOnClick === "boolean") return settings;
+    const updated = { ...settings, editMarkerOnClick: settings.disableEditOnClick !== true };
+    delete updated.disableEditOnClick;
+    try {
+      await callGQL(
+        `mutation($plugin_id: ID!, $input: Map!) { configurePlugin(plugin_id: $plugin_id, input: $input) }`,
+        { plugin_id: PLUGIN_ID, input: updated }
+      );
+    } catch (err) {
+      console.warn("[Marker Symbols] Couldn't save the default for the marker editor setting:", err);
+    }
+    return updated;
   }
 
   // Parses the setting — CSS rules with tag names in place of selectors,
@@ -168,7 +188,7 @@
   // (see parseTagStyles), kept alongside lastMarkers for the same reason.
   let tagStyles = new Map();
   // Whether clicking a marker's range or icon opens Stash's marker editor
-  // (the "Don't open the marker editor on click" setting, inverted).
+  // (the "Click on a marker opens the edit marker dialog" setting).
   let editOnClick = true;
   // Every marker paired with its .vjs-marker-range on the current mount —
   // including markers without an icon — for the range click handler.
@@ -671,7 +691,7 @@
 
     lastMarkers = markers;
     tagStyles = parseTagStyles(settings.tagStyles || "");
-    editOnClick = !settings.disableEditOnClick;
+    editOnClick = settings.editMarkerOnClick !== false;
     ensureSeekRecovery(video);
     clearOverlay();
     mountIconsOnMarkerRanges(video, markers);

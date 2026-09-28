@@ -65,8 +65,10 @@ lives in the scene's **Markers** tab, so the plugin switches to that tab,
 finds the marker's row by its start time (and title), and presses its
 Edit button for you.
 
-On by default. To only jump to the marker, turn on Settings → Plugins →
-Marker Improvements → **Don't open the marker editor on click**.
+On by default. To only jump to the marker, switch off Settings → Plugins
+→ Marker Improvements → **Click on a marker opens the edit marker
+dialog**. (Stash settings can't have a default, so the plugin saves this
+one as "on" the first time it runs — that's why the switch starts out on.)
 
 Stash doesn't label those rows or buttons in a way a plugin can target
 directly, so this goes by what's shown on screen. If a Stash update
