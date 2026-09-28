@@ -1,0 +1,7 @@
+name: Tag Tree
+description: "Shows all your tags as a collapsible tree of parents and children, with each tag's image, scene and marker counts, and a search that keeps the path to every match. Opens from a button in the top navigation bar."
+version: 0.0.1
+url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-tree
+ui:
+  javascript:
+    - tag-tree.js
