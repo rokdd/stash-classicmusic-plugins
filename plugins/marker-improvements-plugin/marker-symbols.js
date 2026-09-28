@@ -310,7 +310,11 @@
   // at it — like a tooltip callout rather than plain icons sitting flush
   // on the bar. Returns null if none of its tags have an image — that
   // marker just gets no bubble, rather than a generic placeholder.
-  function makeMarkerIcons(marker, video) {
+  //
+  // `preview` builds the same bubble for the marker edit form instead (see
+  // updateFormPreview): sitting in the page flow rather than floating over
+  // the scrubber, with no tail and nothing to click.
+  function makeMarkerIcons(marker, video, { preview = false } = {}) {
     const tags = tagsWithImages(marker);
     if (tags.length === 0) return null;
 
@@ -319,13 +323,18 @@
 
     const bubble = document.createElement("div");
     bubble.className = "marker-symbols-bubble";
+    const placement = preview
+      ? ["position:relative", "display:inline-flex"]
+      : [
+        "position:absolute",
+        "left:50%",
+        "bottom:100%",
+        "transform:translateX(-50%)",
+        "margin-bottom:6px",
+        "display:flex",
+      ];
     bubble.style.cssText = [
-      "position:absolute",
-      "left:50%",
-      "bottom:100%",
-      "transform:translateX(-50%)",
-      "margin-bottom:6px",
-      "display:flex",
+      ...placement,
       "flex-direction:column",
       "align-items:center",
       "gap:2px",
@@ -362,7 +371,7 @@
       "transform:rotate(45deg)",
       "pointer-events:none",
     ].join(";");
-    bubble.appendChild(tail);
+    if (!preview) bubble.appendChild(tail);
 
     const jumpToMarker = (e) => {
       e.stopPropagation();
@@ -372,14 +381,14 @@
     };
 
     tags.forEach((tag) => {
-      const label = tag.name ? `${baseLabel} (${tag.name})` : baseLabel;
+      const label = preview ? tag.name || "" : tag.name ? `${baseLabel} (${tag.name})` : baseLabel;
       const img = document.createElement("img");
       img.src = tag.image_path;
       img.alt = tag.name || "marker";
       img.dataset.tagName = tag.name || "";
       img.title = label;
       img.style.cssText = [
-        "cursor:pointer", "user-select:none", "flex:none",
+        preview ? "cursor:default" : "cursor:pointer", "user-select:none", "flex:none",
         // Fixed height, width following the image's own shape (capped so
         // a very wide banner doesn't stretch the bubble across the bar),
         // and `contain` so nothing is ever cropped — a square box with
@@ -392,7 +401,7 @@
         "border:1px solid rgba(0,0,0,0.2)",
         "mix-blend-mode:multiply",
       ].join(";");
-      img.addEventListener("click", jumpToMarker);
+      if (!preview) img.addEventListener("click", jumpToMarker);
       // If this particular tag's image fails to load, just drop it — the
       // marker's other tag images (if any) are unaffected.
       img.addEventListener("error", () => img.remove());
@@ -400,8 +409,26 @@
     });
 
     if (tags.length > 1) removeDuplicateImages(bubble);
+    applyTagStyles(bubble);
 
     return bubble;
+  }
+
+  // Applies the "Custom styles per tag" setting to a bubble's icons. They
+  // go on last, so they can override the icon's built-in styles above.
+  // A rule matches every tag whose name contains its text, so `Violin`
+  // also styles "Violin I" and "Solo Violin". `*` goes first; the rest
+  // follow in the order they're written, so a later rule wins where two
+  // match the same icon and set the same property.
+  function applyTagStyles(bubble) {
+    bubble.querySelectorAll("img").forEach((img) => {
+      const tagName = (img.dataset.tagName || "").toLowerCase();
+      const star = tagStyles.get("*");
+      if (star) img.style.cssText += `;${star}`;
+      tagStyles.forEach((css, key) => {
+        if (key !== "*" && tagName.includes(key)) img.style.cssText += `;${css}`;
+      });
+    });
   }
 
   // A .vjs-marker-range element — and sometimes an ancestor of it too —
@@ -455,8 +482,7 @@
   }
 
   // Mounts `iconGroupEl` as an actual child of `tick` — one of Stash's own
-  // .vjs-marker-range elements — and applies the "Custom styles per tag"
-  // setting to its icon(s).
+  // .vjs-marker-range elements.
   function mountIconOnTick(tick, iconGroupEl, unclipRoot) {
     const computed = getComputedStyle(tick);
     if (computed.position === "static") {
@@ -472,21 +498,6 @@
     // of what the tick itself is set to. No need to touch the tick's own
     // pointer-events at all.
     unclipAncestors(tick, unclipRoot);
-
-    // Custom styles from the plugin setting go on last, so they can
-    // override the icon's built-in styles (see makeMarkerIcons).
-    // A rule matches every tag whose name contains its text, so `Violin`
-    // also styles "Violin I" and "Solo Violin". `*` goes first; the rest
-    // follow in the order they're written, so a later rule wins where two
-    // match the same icon and set the same property.
-    iconGroupEl.querySelectorAll("img").forEach((img) => {
-      const tagName = (img.dataset.tagName || "").toLowerCase();
-      const star = tagStyles.get("*");
-      if (star) img.style.cssText += `;${star}`;
-      tagStyles.forEach((css, key) => {
-        if (key !== "*" && tagName.includes(key)) img.style.cssText += `;${css}`;
-      });
-    });
 
     tick.appendChild(iconGroupEl);
   }
@@ -671,6 +682,10 @@
       return;
     }
     if (currentSceneId() !== sceneId) return; // navigated away while fetching
+    // Settings first: the edit-form preview needs the tag styles even on a
+    // scene that has no markers yet.
+    tagStyles = parseTagStyles(settings.tagStyles || "");
+    editOnClick = settings.editMarkerOnClick !== false;
     if (!markers.length) return;
 
     const root = video.closest(".video-js, .vjs-container") || document;
@@ -690,8 +705,6 @@
     }
 
     lastMarkers = markers;
-    tagStyles = parseTagStyles(settings.tagStyles || "");
-    editOnClick = settings.editMarkerOnClick !== false;
     ensureSeekRecovery(video);
     clearOverlay();
     mountIconsOnMarkerRanges(video, markers);
@@ -723,6 +736,104 @@
   }
 
   const scheduleRefresh = debounce(refreshForCurrentPage, 300);
+
+  // -- preview in the marker edit form ---------------------------------------
+  //
+  // While a marker is being created or edited (Stash's form in the scene's
+  // Markers tab), shows the bubble that marker will get on the scrubber,
+  // updated live as tags are picked. Stash's form only shows tag *names*
+  // (its tag pickers are react-select fields), so each name is looked up
+  // once to get the tag's image, then cached.
+
+  const tagsByName = new Map(); // lowercased name → Promise<tag or null>
+
+  function lookupTagByName(name) {
+    const key = name.toLowerCase();
+    if (!tagsByName.has(key)) {
+      const query = `
+        query($name: String!) {
+          findTags(tag_filter: { name: { value: $name, modifier: EQUALS } }, filter: { per_page: 1 }) {
+            tags { id name image_path }
+          }
+        }`;
+      tagsByName.set(key, callGQL(query, { name })
+        .then((data) => data.findTags.tags[0] || null)
+        .catch((err) => {
+          console.warn(`[Marker Symbols] Couldn't look up tag "${name}":`, err);
+          tagsByName.delete(key); // try again next time
+          return null;
+        }));
+    }
+    return tagsByName.get(key);
+  }
+
+  // The marker form, if one is open: a form in the Markers tab that has
+  // react-select fields (Stash's tag pickers). The tab's pane id comes
+  // from react-bootstrap ("…-tabpane-scene-markers-panel"); older layouts
+  // are matched by the plain id or the active tab's label.
+  function findMarkerForms() {
+    let panel =
+      document.querySelector('[id$="tabpane-scene-markers-panel"]') ||
+      document.getElementById("scene-markers-panel");
+    if (!panel) {
+      const activeTab = document.querySelector(".nav-tabs .nav-link.active");
+      if (activeTab && /marker/i.test(activeTab.textContent)) panel = document.querySelector(".tab-pane.active");
+    }
+    if (!panel) return [];
+    return Array.from(panel.querySelectorAll("form")).filter((f) => f.querySelector('[class*="react-select__control"]'));
+  }
+
+  // Every value currently picked in the form's react-select fields. That
+  // includes the title field, which is harmless: a title that isn't also a
+  // tag name finds no tag, and one that is shows the same icon as the tag.
+  function pickedNames(form) {
+    return Array.from(form.querySelectorAll('[class*="react-select__single-value"], [class*="react-select__multi-value__label"]'))
+      .map((el) => el.textContent.trim())
+      .filter(Boolean);
+  }
+
+  async function updateFormPreview(form) {
+    const names = pickedNames(form);
+    const key = names.join("\n");
+    if (form.__markerSymbolsPreviewKey === key) return;
+    form.__markerSymbolsPreviewKey = key;
+
+    const tags = (await Promise.all(names.map(lookupTagByName))).filter(Boolean);
+    if (form.__markerSymbolsPreviewKey !== key) return; // picks changed meanwhile
+
+    let holder = form.querySelector(".marker-symbols-preview");
+    if (!holder) {
+      holder = document.createElement("div");
+      holder.className = "marker-symbols-preview";
+      holder.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:0.85em;";
+      form.insertBefore(holder, form.firstChild);
+    }
+    holder.textContent = "";
+    const bubble = makeMarkerIcons({ primary_tag: tags[0], tags: tags.slice(1), seconds: 0 }, null, { preview: true });
+    if (!bubble) {
+      holder.style.display = "none";
+      return;
+    }
+    holder.style.display = "flex";
+    const label = document.createElement("span");
+    label.style.opacity = "0.7";
+    label.textContent = "On the scrubber:";
+    holder.appendChild(label);
+    holder.appendChild(bubble);
+  }
+
+  // React re-renders the form's fields as tags are picked, so this watches
+  // the page and re-checks at most every 250ms. Our own preview changing
+  // doesn't loop: its picks are unchanged, so updateFormPreview stops early.
+  let previewCheckPending = false;
+  new MutationObserver(() => {
+    if (previewCheckPending) return;
+    previewCheckPending = true;
+    setTimeout(() => {
+      previewCheckPending = false;
+      findMarkerForms().forEach(updateFormPreview);
+    }, 250);
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
   // -- reload after a marker is saved ----------------------------------------
   //
