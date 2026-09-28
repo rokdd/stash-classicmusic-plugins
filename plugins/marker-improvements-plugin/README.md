@@ -75,17 +75,20 @@ directly, so this goes by what's shown on screen. If a Stash update
 changes the Markers tab's layout, clicking still switches to that tab,
 and the browser console says it couldn't find the marker's row.
 
-## Preview while editing a marker
+## Tag bubble on hover
 
-While you create or edit a marker (Stash's form in the scene's Markers
-tab), a small preview at the top of the form shows the bubble that
-marker will get on the scrubber — updated as you pick its primary tag and
-tags, with the same duplicate removal and custom styles. It only appears
-once at least one picked tag has an image.
+In the scene's Markers tab, hovering a tag shows the bubble it gives a
+marker, right next to it — with the same look and custom styles as on
+the scrubber:
 
-Stash's form only shows tag *names*, so the plugin looks each picked name
-up once to find the tag's image. If a Stash update changes how that form
-is built, the preview just doesn't appear; nothing else is affected.
+- options in the tag dropdown while you create or edit a marker,
+- tags you've already picked in that form,
+- tag badges in the Markers tab's list of markers.
+
+A tag without an image shows nothing. Stash only shows tag *names* in
+those places, so the plugin looks each one up once to find its image. If
+a Stash update changes how the form or list is built, the bubble just
+doesn't appear there; nothing else is affected.
 
 ## Staying up to date
 

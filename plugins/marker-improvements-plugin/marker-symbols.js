@@ -311,9 +311,8 @@
   // on the bar. Returns null if none of its tags have an image — that
   // marker just gets no bubble, rather than a generic placeholder.
   //
-  // `preview` builds the same bubble for the marker edit form instead (see
-  // updateFormPreview): sitting in the page flow rather than floating over
-  // the scrubber, with no tail and nothing to click.
+  // `preview` builds the same bubble to show on its own, e.g. when
+  // hovering a tag (see showTagBubble): no tail and nothing to click.
   function makeMarkerIcons(marker, video, { preview = false } = {}) {
     const tags = tagsWithImages(marker);
     if (tags.length === 0) return null;
@@ -682,7 +681,7 @@
       return;
     }
     if (currentSceneId() !== sceneId) return; // navigated away while fetching
-    // Settings first: the edit-form preview needs the tag styles even on a
+    // Settings first: the hover bubble needs the tag styles even on a
     // scene that has no markers yet.
     tagStyles = parseTagStyles(settings.tagStyles || "");
     editOnClick = settings.editMarkerOnClick !== false;
@@ -737,13 +736,14 @@
 
   const scheduleRefresh = debounce(refreshForCurrentPage, 300);
 
-  // -- preview in the marker edit form ---------------------------------------
+  // -- tag bubble on hover -----------------------------------------------------
   //
-  // While a marker is being created or edited (Stash's form in the scene's
-  // Markers tab), shows the bubble that marker will get on the scrubber,
-  // updated live as tags are picked. Stash's form only shows tag *names*
-  // (its tag pickers are react-select fields), so each name is looked up
-  // once to get the tag's image, then cached.
+  // Hovering a tag shows the bubble it gives a marker, next to the pointer:
+  // options in the tag dropdown while a marker is being created or edited,
+  // tags already picked in that form, and tag badges in the Markers tab's
+  // list. Stash only shows tag *names* there, so each name is looked up
+  // once to get the tag's image, then cached. A tag without an image (or
+  // a name that isn't a tag, like a performer) shows nothing.
 
   const tagsByName = new Map(); // lowercased name → Promise<tag or null>
 
@@ -767,73 +767,84 @@
     return tagsByName.get(key);
   }
 
-  // The marker form, if one is open: a form in the Markers tab that has
-  // react-select fields (Stash's tag pickers). The tab's pane id comes
-  // from react-bootstrap ("…-tabpane-scene-markers-panel"); older layouts
-  // are matched by the plain id or the active tab's label.
-  function findMarkerForms() {
-    let panel =
+  // The scene's Markers tab. Its pane id comes from react-bootstrap
+  // ("…-tabpane-scene-markers-panel"); older layouts are matched by the
+  // plain id or the active tab's label.
+  function findMarkersPanel() {
+    const panel =
       document.querySelector('[id$="tabpane-scene-markers-panel"]') ||
       document.getElementById("scene-markers-panel");
-    if (!panel) {
-      const activeTab = document.querySelector(".nav-tabs .nav-link.active");
-      if (activeTab && /marker/i.test(activeTab.textContent)) panel = document.querySelector(".tab-pane.active");
-    }
-    if (!panel) return [];
-    return Array.from(panel.querySelectorAll("form")).filter((f) => f.querySelector('[class*="react-select__control"]'));
+    if (panel) return panel;
+    const activeTab = document.querySelector(".nav-tabs .nav-link.active");
+    return activeTab && /marker/i.test(activeTab.textContent) ? document.querySelector(".tab-pane.active") : null;
   }
 
-  // Every value currently picked in the form's react-select fields. That
-  // includes the title field, which is harmless: a title that isn't also a
-  // tag name finds no tag, and one that is shows the same icon as the tag.
-  function pickedNames(form) {
-    return Array.from(form.querySelectorAll('[class*="react-select__single-value"], [class*="react-select__multi-value__label"]'))
-      .map((el) => el.textContent.trim())
-      .filter(Boolean);
+  // What counts as "a tag" to hover: react-select options and picked
+  // values (Stash's tag pickers), and Stash's tag badges.
+  const HOVER_TARGETS =
+    '[class*="react-select__option"], [class*="react-select__multi-value"], ' +
+    '[class*="react-select__single-value"], .tag-item';
+
+  // Only in the marker context: inside the Markers tab, or — since the
+  // dropdown's option list can be rendered elsewhere in the page — while
+  // a field inside the Markers tab has focus.
+  function inMarkerContext(el) {
+    const panel = findMarkersPanel();
+    if (!panel) return false;
+    return panel.contains(el) || panel.contains(document.activeElement);
   }
 
-  async function updateFormPreview(form) {
-    const names = pickedNames(form);
-    const key = names.join("\n");
-    if (form.__markerSymbolsPreviewKey === key) return;
-    form.__markerSymbolsPreviewKey = key;
-
-    const tags = (await Promise.all(names.map(lookupTagByName))).filter(Boolean);
-    if (form.__markerSymbolsPreviewKey !== key) return; // picks changed meanwhile
-
-    let holder = form.querySelector(".marker-symbols-preview");
-    if (!holder) {
-      holder = document.createElement("div");
-      holder.className = "marker-symbols-preview";
-      holder.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:0.85em;";
-      form.insertBefore(holder, form.firstChild);
-    }
-    holder.textContent = "";
-    const bubble = makeMarkerIcons({ primary_tag: tags[0], tags: tags.slice(1), seconds: 0 }, null, { preview: true });
-    if (!bubble) {
-      holder.style.display = "none";
-      return;
-    }
-    holder.style.display = "flex";
-    const label = document.createElement("span");
-    label.style.opacity = "0.7";
-    label.textContent = "On the scrubber:";
-    holder.appendChild(label);
-    holder.appendChild(bubble);
+  function hoveredTagName(el) {
+    const label = el.querySelector('[class*="multi-value__label"]');
+    return (label || el).textContent.trim();
   }
 
-  // React re-renders the form's fields as tags are picked, so this watches
-  // the page and re-checks at most every 250ms. Our own preview changing
-  // doesn't loop: its picks are unchanged, so updateFormPreview stops early.
-  let previewCheckPending = false;
-  new MutationObserver(() => {
-    if (previewCheckPending) return;
-    previewCheckPending = true;
-    setTimeout(() => {
-      previewCheckPending = false;
-      findMarkerForms().forEach(updateFormPreview);
-    }, 250);
-  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  let hoverTarget = null;
+  let hoverBubble = null;
+
+  function hideTagBubble() {
+    if (hoverBubble) hoverBubble.remove();
+    hoverBubble = null;
+    hoverTarget = null;
+  }
+
+  async function showTagBubble(target) {
+    hoverTarget = target;
+    const name = hoveredTagName(target);
+    const tag = name ? await lookupTagByName(name) : null;
+    // The pointer may have moved on while the lookup ran.
+    if (hoverTarget !== target || !target.isConnected) return;
+    const bubble = tag && makeMarkerIcons({ primary_tag: tag, tags: [], seconds: 0 }, null, { preview: true });
+    if (!bubble) return;
+
+    if (hoverBubble) hoverBubble.remove();
+    bubble.style.position = "fixed";
+    bubble.style.zIndex = "5000";
+    bubble.style.pointerEvents = "none";
+    // Beside the tag, vertically centered on it — to the right, or to the
+    // left when there's no room on the right.
+    const r = target.getBoundingClientRect();
+    bubble.style.top = `${r.top + r.height / 2}px`;
+    bubble.style.transform = "translateY(-50%)";
+    document.body.appendChild(bubble);
+    const width = bubble.getBoundingClientRect().width;
+    const left = r.right + 8 + width <= window.innerWidth ? r.right + 8 : r.left - 8 - width;
+    bubble.style.left = `${Math.max(4, left)}px`;
+    hoverBubble = bubble;
+  }
+
+  document.addEventListener("mouseover", (e) => {
+    const el = e.target.closest ? e.target.closest(HOVER_TARGETS) : null;
+    // Picked values nest a label inside the value itself — treat the pair
+    // as one target.
+    const target = el && (el.parentElement && el.parentElement.closest('[class*="react-select__multi-value"]')) || el;
+    if (target === hoverTarget) return;
+    hideTagBubble();
+    if (target && inMarkerContext(target)) showTagBubble(target);
+  });
+  // Scrolling or clicking moves things out from under the bubble.
+  document.addEventListener("scroll", hideTagBubble, true);
+  document.addEventListener("mousedown", hideTagBubble, true);
 
   // -- reload after a marker is saved ----------------------------------------
   //
