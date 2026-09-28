@@ -1,24 +1,109 @@
-# Template for creating Stash plugins source index
+# Stash classic music plugins
 
-This template allows you to create a new repository with a few clicks with preconfigured GitHub action to publish your plugins source index. 
-_This assumes you already know how to create plugins for Stash. If you don't, first read [this](https://docs.stashapp.cc/in-app-manual/plugins/#creating-plugins)._
+Plugins for [Stash](https://stashapp.cc), made for a library of concerts
+and classical music recordings — but useful for any library.
 
-## How to use it?
+| Plugin | What it's for |
+|---|---|
+| [Advanced File Operations](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file |
+| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
+| [Tag Tree](plugins/tag-tree/) | All your tags as a collapsible parent/child tree |
 
-1. Click **Use this template** > **Create a new repository**. 
-1. Choose a repository name and click **Create repository**.
-1. Open **Settings** and head to **Pages**.
-1. Under Build and deployment select the Source as GitHub Actions.
+They're independent of each other — install any of them.
 
-Now add your plugins to [plugins](/plugins) directory and they will be automatically published to the source index.
+## Install
 
-Source index URL: [`https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml`](https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml)
+1. In Stash, open **Settings → Plugins → Available Plugins** and click
+   **Add Source**.
+2. Enter any name (e.g. `Classic music plugins`) and this URL:
+   ```
+   https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml
+   ```
+3. The plugins now show up under that source. Tick the ones you want and
+   click **Install**.
+4. Reload the page in your browser.
 
-## Share your plugins
+**Updating:** Settings → Plugins → **Check for updates**, then update the
+ones listed. Afterwards, reload the page — and hard-refresh (Ctrl+Shift+R)
+if a change doesn't show up, so the browser doesn't keep the old script.
 
-- [Create a new topic](https://discourse.stashapp.cc/t/-/33) for your plugin on the community forum.
-- [Add your source index to the list](https://discourse.stashapp.cc/t/-/122) on the Stash community forum.
+**Without the source:** copy a plugin's folder from [plugins](plugins/)
+into your Stash plugins directory (Settings → Plugins shows where), then
+Settings → Plugins → **Reload plugins**.
+
+### Extra setup for Advanced File Operations
+
+This one runs ffmpeg on the server, so the machine Stash runs on needs:
+
+- **ffmpeg and ffprobe with H.265 support** (`libx265`). Check with
+  `ffmpeg -hide_banner -encoders | grep libx265`. Debian/Ubuntu's own
+  `ffmpeg` package has it.
+- **Python 3 with the `requests` module.** On Debian/Ubuntu:
+  `sudo apt install python3 python3-requests` (`pip install` is blocked
+  there). Elsewhere: `pip install -r requirements.txt` from the plugin
+  folder.
+- If Stash can't find Python (there's no `python` command, only
+  `python3`), set Settings → System → **Python executable path** to e.g.
+  `/usr/bin/python3`.
+
+The other two plugins run only in the browser and need nothing extra.
+
+## Features
+
+### Advanced File Operations
+
+Adds **Convert to H265…**, **Split at Markers…** and **Repair File…** to
+each scene's "⋮" operations menu, plus two library-wide conversion tasks
+under Settings → Tasks.
+
+- **Convert to H.265** at a chosen quality (presets or an exact CRF), per
+  scene or for the whole library, skipping files that already are H.265.
+- **Keep the original or replace it** — kept, the new file becomes the
+  scene's primary file and the original stays attached as a secondary one.
+- **Streams well in a browser**: index at the start of the file, clean
+  seek points, and audio browsers can't play converted automatically.
+- **Best audio option** for concerts and films: audio that has to be
+  converted becomes lossless FLAC instead of AAC.
+- **Split at markers**, either each marker as its own clip (start → end)
+  or cutting the video at each marker — fast lossless cuts or
+  frame-accurate ones.
+- Split parts are named `.p1`, `.p2`, … with titles `#1`, `#2`, … and get
+  the original's details, performers, tags, studio, URLs and markers.
+- **Repair** finds decode errors and fixes them (lossless remux first,
+  re-encode only if needed), and also fixes files that don't stream well.
+- New files are scanned with covers and phashes, and tasks are named
+  after the scene with live progress.
+
+Details: [Advanced File Operations README](plugins/advanced-file-operations/README.md)
+
+### Marker Improvements
+
+- **Tag images on the scrubber**: a small bubble above each marker shows
+  the images of its tags, appearing with Stash's own marker indicator.
+- The same image is only shown once per marker, and images are never
+  cropped.
+- **Click to edit**: clicking a marker's icon or its range jumps there and
+  opens Stash's edit marker dialog (can be switched off).
+- **Hover a tag** in the marker form's dropdown, picked tags or the
+  Markers tab's list to see its bubble.
+- **Custom styles per tag**: CSS rules by tag name, e.g.
+  `Violin { outline: 2px solid gold }`.
+- **Stays up to date**: bubbles redraw by themselves after a marker is
+  saved, added or deleted.
+
+Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.md)
+
+### Tag Tree
+
+- **All tags as a tree** of parents and sub-tags, opened from a button in
+  the top navigation bar.
+- Each tag with its **image**, a **link** to its page, and its **scene and
+  marker counts**.
+- **Search** by name or alias, with the path to every match opened.
+- **Expand all / collapse all**, and the open branches are remembered.
+
+Details: [Tag Tree README](plugins/tag-tree/README.md)
 
 ## License
 
-The default license is set to [AGPL-3.0](/LICENCE). Before publishing any plugins you can change it.
+[AGPL-3.0](LICENCE)
