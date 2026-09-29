@@ -95,6 +95,13 @@
     return `scene ${sceneId}`;
   }
 
+  // Marks a task that only starts the work in the background (see
+  // start_in_background in h265_transcode.py), so it's clear in the task
+  // list why it finished within seconds.
+  function backgroundSuffix(opts) {
+    return opts && opts.background ? " (started in background)" : "";
+  }
+
   async function runConvertScene(sceneId, opts) {
     opts = opts || {};
     const argsMap = {
@@ -110,11 +117,13 @@
     } else {
       argsMap.quality = opts.quality || "visually_lossless";
     }
-    return runTask(`Convert ${await sceneLabel(sceneId)} to H265`, argsMap);
+    argsMap.background = opts.background ? "true" : "false";
+    return runTask(`Convert ${await sceneLabel(sceneId)} to H265${backgroundSuffix(opts)}`, argsMap);
   }
 
   async function runRepairScene(sceneId, opts) {
-    return runTask(`Repair ${await sceneLabel(sceneId)}`, {
+    return runTask(`Repair ${await sceneLabel(sceneId)}${backgroundSuffix(opts)}`, {
+      background: opts.background ? "true" : "false",
       mode: "repair_scene",
       scene_id: String(sceneId),
       keep_original: opts.keepOriginal ? "true" : "false",
@@ -134,7 +143,8 @@
     } else if (opts.cutSeconds && opts.cutSeconds.length) {
       argsMap.cut_seconds = opts.cutSeconds.join(",");
     }
-    return runTask(`Split ${await sceneLabel(sceneId)} at markers`, argsMap);
+    argsMap.background = opts.background ? "true" : "false";
+    return runTask(`Split ${await sceneLabel(sceneId)} at markers${backgroundSuffix(opts)}`, argsMap);
   }
 
   // Asks for each marker's end_seconds too (Stash v0.27+). Older versions
@@ -173,6 +183,25 @@
     const s = Math.floor(seconds % 60).toString().padStart(2, "0");
     const m = Math.floor(seconds / 60);
     return `${m}:${s}`;
+  }
+
+  // The "Run in the background" checkbox shared by all three dialogs,
+  // appended to `optionsWrap`. Returns the checkbox.
+  function addBackgroundOption(optionsWrap) {
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:flex-start;gap:8px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = false;
+    cb.style.marginTop = "3px";
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(
+      "Run in the background — Stash's task queue is free again at once, so " +
+      "other tasks don't wait. Progress goes to a log file on the server " +
+      "instead of Stash's progress bar, and it can't be cancelled from Stash."
+    ));
+    optionsWrap.appendChild(label);
+    return cb;
   }
 
   // Shows a checklist of the scene's markers in one of two modes:
@@ -310,6 +339,7 @@
       accLabel.appendChild(document.createTextNode("Frame-accurate cuts (slower, re-encodes)"));
       optionsWrap.appendChild(accLabel);
 
+      const bgCb = addBackgroundOption(optionsWrap);
       box.appendChild(optionsWrap);
 
       const btnRow = document.createElement("div");
@@ -335,7 +365,7 @@
           return;
         }
         overlay.remove();
-        const common = { keepOriginal: keepCb.checked, accurate: accCb.checked };
+        const common = { keepOriginal: keepCb.checked, accurate: accCb.checked, background: bgCb.checked };
         if (mode === "whole") {
           // "start-end", with an empty end meaning "to the end of the video".
           resolve({ ...common, ranges: checked.map((cb) => `${cb.dataset.seconds}-${cb.dataset.end}`) });
@@ -453,6 +483,7 @@
         "(AC3, DTS, PCM…) becomes lossless FLAC instead of AAC. Bigger files.",
         false
       );
+      const bgCb = addBackgroundOption(optionsWrap);
       box.appendChild(optionsWrap);
 
       const btnRow = document.createElement("div");
@@ -473,7 +504,7 @@
       confirmBtn.textContent = "Check & repair";
       confirmBtn.addEventListener("click", () => {
         overlay.remove();
-        resolve({ keepOriginal: attachRadio.checked, losslessAudio: audioCb.checked });
+        resolve({ keepOriginal: attachRadio.checked, losslessAudio: audioCb.checked, background: bgCb.checked });
       });
 
       btnRow.appendChild(cancelBtn);
@@ -572,6 +603,7 @@
         "(AC3, DTS, PCM…) becomes lossless FLAC instead of AAC. Bigger files."
       ));
       optionsWrap.appendChild(audioLabel);
+      const bgCb = addBackgroundOption(optionsWrap);
       box.appendChild(optionsWrap);
 
       const btnRow = document.createElement("div");
@@ -601,7 +633,7 @@
           }
         }
         overlay.remove();
-        resolve({ quality, crf, keepOriginal: keepCb.checked, losslessAudio: audioCb.checked });
+        resolve({ quality, crf, keepOriginal: keepCb.checked, losslessAudio: audioCb.checked, background: bgCb.checked });
       });
 
       btnRow.appendChild(cancelBtn);

@@ -73,6 +73,9 @@ under Settings → Tasks.
   re-encode only if needed), and also fixes files that don't stream well.
 - New files are scanned with covers and phashes, and tasks are named
   after the scene with live progress.
+- **Run in the background** (optional, per task): the work runs outside
+  Stash's one-at-a-time task queue, so other tasks don't wait behind a
+  long conversion; progress goes to a log file on the server.
 
 Details: [Advanced File Operations README](plugins/advanced-file-operations/README.md)
 

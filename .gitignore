@@ -1,2 +1,5 @@
 _site/
 *.zip
+
+# Background-run logs written by Advanced File Operations
+plugins/advanced-file-operations/logs/

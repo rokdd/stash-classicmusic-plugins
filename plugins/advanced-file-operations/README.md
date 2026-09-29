@@ -154,6 +154,39 @@ Two things worth knowing:
   and already scanned — you'll just need to add its title/performers/tags
   and markers by hand, or re-run a Scan and check again.
 
+## Running in the background
+
+Stash runs one task at a time, so a long conversion — hours for a film on
+a small server — holds up everything else in the queue, scans included.
+The Convert, Split and Repair dialogs each have a **Run in the background**
+checkbox (off by default). With it ticked:
+
+- The Stash task only starts the work as a separate process on the server
+  and finishes within seconds (its name ends in "(started in
+  background)"), so the queue is free for other tasks at once.
+- The background process does the work, then queues the scan and the
+  **Finish …** task in Stash as usual, so new files still end up on the
+  right scenes.
+- Its messages and progress (in 5% steps) go to a log file in a `logs`
+  folder inside the plugin's folder (or the system temp folder if that
+  isn't writable), named like
+  `afo-20260929-085612-convert_scene-scene7.log`. The Stash task's result
+  shows the exact path. Logs older than 30 days are deleted when a new
+  background run starts.
+- There's no progress bar or cancel button in Stash. To stop it, run the
+  command the task's result shows on the server — `kill -- -<pid>`, which
+  stops the process and its ffmpeg together.
+
+Two things to know:
+
+- Several background runs at once work, but don't finish sooner in total:
+  x265 already uses every CPU core for one file.
+- If your Stash requires a login, the background process uses the login
+  session the task started with. A run that takes longer than Stash's
+  session lifetime can fail at the very end, when it queues the scan —
+  the new file is still on disk; scan it in by hand. Setting an API key in
+  the environment Stash runs in (`STASH_API_KEY`) avoids this.
+
 ## Repairing a corrupt file
 
 Choose **Repair File…** from the scene's ⋮ menu. A small dialog

@@ -121,8 +121,28 @@ REPAIR_TAG_NAME = "File Repaired"
 # gets logged verbatim at Error level and progress lines don't move the
 # task's progress bar. Progress lines use "p" and a value 0.0-1.0.
 
+# Set in main() when this process is running in the background (see
+# start_in_background): its stderr is then a plain log file a person reads,
+# not Stash's plugin log, so lines are written as readable text instead.
+BACKGROUND = False
+_LEVEL_NAMES = {"t": "TRACE", "d": "DEBUG", "i": "INFO", "w": "WARN", "e": "ERROR", "p": "PROGRESS"}
+_last_background_progress = -1
+
+
 def _log(level, message):
-    sys.stderr.write(f"\x01{level}\x02{message}\n")
+    global _last_background_progress
+    if BACKGROUND:
+        if level == "p":
+            # Progress in steps of 5%, rather than a line per 1% change.
+            step = int(float(message) * 100) // 5
+            if step == _last_background_progress:
+                return
+            _last_background_progress = step
+            message = f"{step * 5}%"
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        sys.stderr.write(f"{stamp} [{_LEVEL_NAMES.get(level, level)}] {message}\n")
+    else:
+        sys.stderr.write(f"\x01{level}\x02{message}\n")
     sys.stderr.flush()
 
 
@@ -1787,11 +1807,93 @@ def write_plugin_output(output=None, error=None):
     print(json.dumps(result))
 
 
+# Background log files older than this are deleted when a new one starts.
+BACKGROUND_LOG_DAYS = 30
+
+
+def background_log_dir():
+    """Where background runs write their logs: a "logs" folder next to this
+    script, or the system temp folder if that can't be written to."""
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        if os.access(log_dir, os.W_OK):
+            return log_dir
+    except OSError:
+        pass
+    return tempfile.gettempdir()
+
+
+def start_in_background(plugin_input):
+    """
+    Runs this same script again as a separate process, detached from Stash,
+    with the same input minus "background", then returns straight away.
+
+    Stash runs one task at a time, so a long conversion inside its queue
+    holds up every other task — scans included — for hours. Detached, the
+    work runs alongside whatever Stash does next, and this task ends at
+    once. The price: no progress bar or cancel button in Stash, and
+    messages go to a log file instead of Stash's log. The follow-up scan
+    and "Finish …" tasks are still queued in Stash as usual, by the
+    background process, once its work is done.
+    """
+    args = dict(plugin_input.get("args") or {})
+    args.pop("background", None)
+    args["_background_child"] = "true"
+
+    log_dir = background_log_dir()
+    cutoff = time.time() - BACKGROUND_LOG_DAYS * 86400
+    for old in os.listdir(log_dir):
+        path = os.path.join(log_dir, old)
+        if old.startswith("afo-") and old.endswith(".log") and os.path.getmtime(path) < cutoff:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    scene_part = f"-scene{args['scene_id']}" if args.get("scene_id") else ""
+    log_path = os.path.join(log_dir, f"afo-{time.strftime('%Y%m%d-%H%M%S')}-{args.get('mode')}{scene_part}.log")
+
+    # A new session (POSIX) or process group (Windows) so the process isn't
+    # tied to this task: it keeps running after this one exits, and can be
+    # stopped as a group, ffmpeg included.
+    if os.name == "nt":
+        detach = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+        stop_hint = "taskkill /T /F /PID {pid}"
+    else:
+        detach = {"start_new_session": True}
+        stop_hint = "kill -- -{pid}"
+
+    with open(log_path, "w") as log_file:
+        proc = subprocess.Popen(
+            [sys.executable, os.path.abspath(__file__)],
+            stdin=subprocess.PIPE, stdout=log_file, stderr=log_file,
+            close_fds=True, text=True, **detach,
+        )
+    proc.stdin.write(json.dumps({**plugin_input, "args": args}))
+    proc.stdin.close()
+
+    stop = stop_hint.format(pid=proc.pid)
+    log_info(f"Started in the background as process {proc.pid}. Messages and progress: {log_path}")
+    log_info(f"To stop it, on the server: {stop}")
+    write_plugin_output(
+        output=f"Running in the background (process {proc.pid}). Log: {log_path} — stop it with: {stop}"
+    )
+
+
 def main():
+    global BACKGROUND
     plugin_input = read_plugin_input()
     server_connection = plugin_input.get("server_connection", {})
     args = plugin_input.get("args", {}) or {}
     mode = args.get("mode", "convert_library")
+
+    if str(args.get("background", "false")).lower() == "true":
+        start_in_background(plugin_input)
+        return
+    BACKGROUND = str(args.get("_background_child", "false")).lower() == "true"
+    if BACKGROUND:
+        log_info(f"Background run of {mode} started (process {os.getpid()}).")
 
     client = StashClient(server_connection)
 
