@@ -1,6 +1,6 @@
 name: Marker Improvements
 description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video scrubber, so it shows and hides right along with that indicator. Click an icon to jump to that marker."
-version: 0.0.2
+version: 0.0.3
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 ui:
   javascript:
@@ -10,6 +10,10 @@ settings:
     displayName: Custom styles per tag
     description: "Format: name { css } — repeat for more rules. Example: Violin { outline: 2px solid gold } Piano, Cello { opacity: .6 } * { filter: grayscale(1) }. A rule applies to every tag whose name contains that text (upper/lower case ignored); separate several names with commas; * means every icon. Later rules win over earlier ones."
     type: STRING
+  styleParentTags:
+    displayName: Custom styles also match parent tags
+    description: "When on, a custom style rule also applies to a tag if any tag above it (its parents, their parents, …) contains the rule's text. E.g. Strings { outline: 2px solid gold } then also styles Violin, Viola and Cello if they're sub-tags of Strings."
+    type: BOOLEAN
   editMarkerOnClick:
     displayName: Click on a marker opens the edit marker dialog
     description: "Clicking a marker's icon, or its colored range on the scrubber, jumps to it and opens Stash's edit marker dialog. Switch off to only jump to the marker."

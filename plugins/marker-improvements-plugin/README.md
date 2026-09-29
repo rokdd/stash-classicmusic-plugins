@@ -55,6 +55,13 @@ Piano, Cello { opacity: .6 }
   (e.g. `Violin { border: 2px solid gold }` replaces its thin grey border).
 - Line breaks are optional — the whole thing can be on one line.
 
+**Matching parent tags too.** Turn on Settings → Plugins → Marker
+Improvements → **Custom styles also match parent tags**, and a rule also
+applies to a tag when any tag above it in the hierarchy — its parents,
+their parents, and so on — contains the rule's text. With Violin, Viola
+and Cello set up as sub-tags of Strings, `Strings { outline: 2px solid
+gold }` then styles all three. Off by default.
+
 Changes apply the next time a scene page loads.
 
 ## Editing a marker by clicking it

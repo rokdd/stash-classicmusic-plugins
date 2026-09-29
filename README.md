@@ -90,7 +90,8 @@ Details: [Advanced File Operations README](plugins/advanced-file-operations/READ
 - **Hover a tag** in the marker form's dropdown, picked tags or the
   Markers tab's list to see its bubble.
 - **Custom styles per tag**: CSS rules by tag name, e.g.
-  `Violin { outline: 2px solid gold }`.
+  `Violin { outline: 2px solid gold }` — optionally matching parent tags
+  too, so one rule for `Strings` styles all its sub-tags.
 - **Stays up to date**: bubbles redraw by themselves after a marker is
   saved, added or deleted.
 

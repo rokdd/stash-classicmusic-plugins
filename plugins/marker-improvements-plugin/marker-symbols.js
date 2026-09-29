@@ -190,6 +190,10 @@
   // Whether clicking a marker's range or icon opens Stash's marker editor
   // (the "Click on a marker opens the edit marker dialog" setting).
   let editOnClick = true;
+  // With the "Custom styles also match parent tags" setting on: tag id →
+  // lowercased names of every tag above it in the hierarchy (parents,
+  // their parents, …). Empty with the setting off.
+  let tagAncestorNames = new Map();
   // Every marker paired with its .vjs-marker-range on the current mount —
   // including markers without an icon — for the range click handler.
   let tickPairs = [];
@@ -385,6 +389,7 @@
       img.src = tag.image_path;
       img.alt = tag.name || "marker";
       img.dataset.tagName = tag.name || "";
+      img.dataset.tagId = tag.id || "";
       img.title = label;
       img.style.cssText = [
         preview ? "cursor:default" : "cursor:pointer", "user-select:none", "flex:none",
@@ -419,15 +424,45 @@
   // also styles "Violin I" and "Solo Violin". `*` goes first; the rest
   // follow in the order they're written, so a later rule wins where two
   // match the same icon and set the same property.
+  //
+  // With "Custom styles also match parent tags" on, the names of every tag
+  // above this one count too (see tagAncestorNames), so a rule for
+  // `Strings` also styles a Violin tag that sits under a Strings tag.
   function applyTagStyles(bubble) {
     bubble.querySelectorAll("img").forEach((img) => {
-      const tagName = (img.dataset.tagName || "").toLowerCase();
+      const names = [
+        (img.dataset.tagName || "").toLowerCase(),
+        ...(tagAncestorNames.get(img.dataset.tagId) || []),
+      ];
       const star = tagStyles.get("*");
       if (star) img.style.cssText += `;${star}`;
       tagStyles.forEach((css, key) => {
-        if (key !== "*" && tagName.includes(key)) img.style.cssText += `;${css}`;
+        if (key !== "*" && names.some((name) => name.includes(key))) img.style.cssText += `;${css}`;
       });
     });
+  }
+
+  // Every tag's ancestors' names (lowercased), from one request for the
+  // whole tag hierarchy. A tag that is (through some chain) its own
+  // ancestor is only visited once, so a loop can't hang this.
+  async function fetchTagAncestorNames() {
+    const data = await callGQL(`query { findTags(filter: { per_page: -1 }) { tags { id name parents { id } } } }`);
+    const byId = new Map(data.findTags.tags.map((t) => [t.id, t]));
+    const result = new Map();
+    byId.forEach((tag, id) => {
+      const names = [];
+      const seen = new Set([id]);
+      const stack = (tag.parents || []).map((p) => p.id);
+      while (stack.length) {
+        const parent = byId.get(stack.pop());
+        if (!parent || seen.has(parent.id)) continue;
+        seen.add(parent.id);
+        names.push(parent.name.toLowerCase());
+        (parent.parents || []).forEach((p) => stack.push(p.id));
+      }
+      if (names.length) result.set(id, names);
+    });
+    return result;
   }
 
   // A .vjs-marker-range element — and sometimes an ancestor of it too —
@@ -685,6 +720,15 @@
     // scene that has no markers yet.
     tagStyles = parseTagStyles(settings.tagStyles || "");
     editOnClick = settings.editMarkerOnClick !== false;
+    tagAncestorNames = new Map();
+    if (settings.styleParentTags && tagStyles.size) {
+      try {
+        tagAncestorNames = await fetchTagAncestorNames();
+      } catch (err) {
+        console.warn("[Marker Symbols] Couldn't load the tag hierarchy; styles match own tag names only:", err);
+      }
+      if (currentSceneId() !== sceneId) return;
+    }
     if (!markers.length) return;
 
     const root = video.closest(".video-js, .vjs-container") || document;
