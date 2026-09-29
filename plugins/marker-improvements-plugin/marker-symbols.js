@@ -833,7 +833,7 @@
       const query = `
         query($name: String!) {
           findTags(tag_filter: { name: { value: $name, modifier: EQUALS } }, filter: { per_page: 1 }) {
-            tags { id name image_path }
+            tags { id name image_path parents { id name } }
           }
         }`;
       tagsByName.set(key, callGQL(query, { name })
@@ -876,7 +876,18 @@
 
   function hoveredTagName(el) {
     const label = el.querySelector('[class*="multi-value__label"]');
-    return (label || el).textContent.trim();
+    return ownText(label || el);
+  }
+
+  // An element's text without the parent-tag hint this plugin adds to
+  // dropdown options (see annotateTagOptions), so names still match.
+  function ownText(el) {
+    let text = "";
+    el.childNodes.forEach((node) => {
+      if (node.nodeType === 1 && node.classList.contains("marker-symbols-parents")) return;
+      text += node.textContent;
+    });
+    return text.trim();
   }
 
   let hoverTarget = null;
@@ -925,6 +936,52 @@
   // Scrolling or clicking moves things out from under the bubble.
   document.addEventListener("scroll", hideTagBubble, true);
   document.addEventListener("mousedown", hideTagBubble, true);
+
+  // -- parent tags in the marker form's tag dropdown ----------------------------
+  //
+  // Stash's tag dropdown only lists names, so tags with the same kind of
+  // name ("Solo" under Violin, "Solo" under Piano) or a whole family of
+  // sub-tags are hard to tell apart. This adds each option's parent tags
+  // after its name, greyed out: "Violin (Strings)". Only in the marker
+  // context (see inMarkerContext), and only for names that are real tags.
+
+  async function annotateOption(option) {
+    const name = ownText(option);
+    if (!name || option.dataset.markerSymbolsParentsFor === name) return;
+    option.dataset.markerSymbolsParentsFor = name;
+    const old = option.querySelector(".marker-symbols-parents");
+    if (old) old.remove();
+
+    const tag = await lookupTagByName(name);
+    // The option may show another tag by now (React reuses option
+    // elements while you type), in which case that one gets its own pass.
+    if (!tag || !option.isConnected || ownText(option) !== name) return;
+    const parents = (tag.parents || []).map((p) => p.name).sort((a, b) => a.localeCompare(b));
+    if (!parents.length) return;
+    const hint = document.createElement("span");
+    hint.className = "marker-symbols-parents";
+    hint.style.cssText = "margin-left:6px;opacity:0.6;font-size:0.85em;";
+    hint.textContent = `(${parents.join(", ")})`;
+    option.appendChild(hint);
+  }
+
+  function annotateTagOptions() {
+    document.querySelectorAll('[class*="react-select__option"]').forEach((option) => {
+      if (inMarkerContext(option)) annotateOption(option);
+    });
+  }
+
+  // The dropdown's options appear, change as you type and disappear again,
+  // so this watches the page and re-checks at most every 150ms.
+  let optionsCheckPending = false;
+  new MutationObserver(() => {
+    if (optionsCheckPending) return;
+    optionsCheckPending = true;
+    setTimeout(() => {
+      optionsCheckPending = false;
+      annotateTagOptions();
+    }, 150);
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
   // -- reload after a marker is saved ----------------------------------------
   //

@@ -115,6 +115,14 @@ those places, so the plugin looks each one up once to find its image. If
 a Stash update changes how the form or list is built, the bubble just
 doesn't appear there; nothing else is affected.
 
+## Parent tags in the tag dropdown
+
+While you create or edit a marker, each tag in the form's tag dropdown
+shows its parent tags after its name, greyed out — `Violin (Strings)`,
+or `Solo (Piano, Violin)` for a tag with several parents. That tells
+apart tags with similar names and shows where a tag sits in your
+hierarchy before you pick it. Tags without a parent look as before.
+
 ## Staying up to date
 
 Whenever a marker is created, edited or deleted — from the edit form,

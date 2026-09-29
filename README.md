@@ -89,6 +89,8 @@ Details: [Advanced File Operations README](plugins/advanced-file-operations/READ
   opens Stash's edit marker dialog (can be switched off).
 - **Hover a tag** in the marker form's dropdown, picked tags or the
   Markers tab's list to see its bubble.
+- **Parent tags in the dropdown**: the marker form's tag dropdown shows
+  each tag's parents, e.g. `Violin (Strings)`.
 - **Custom styles per tag**: CSS rules by tag name, e.g.
   `Violin { outline: 2px solid gold }` — optionally matching parent tags
   too, so one rule for `Strings` styles all its sub-tags.
