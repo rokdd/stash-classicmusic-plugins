@@ -123,6 +123,26 @@ or `Solo (Piano, Violin)` for a tag with several parents. That tells
 apart tags with similar names and shows where a tag sits in your
 hierarchy before you pick it. Tags without a parent look as before.
 
+## Timeline view in the Markers tab
+
+The scene's **Markers** tab gets a timeline view above Stash's own marker
+list:
+
+- **Timeline bar** — the whole scene, with every marker drawn from its
+  start to its end (a marker without an end time runs until the next
+  marker, the last one to the end of the scene). Overlapping markers get
+  their own lane; markers with the same primary tag share a color. A line
+  shows where playback is. Click a segment to jump there.
+- **Marker list** — one row per marker: its screenshot on the left, and on
+  the right its title, start – end and length, primary tag, other tags,
+  and the tag images its bubble shows (with your custom styles). Click a
+  row to jump there; **Edit** opens Stash's edit form for that marker.
+- The marker playing right now is highlighted as the video plays.
+- **Hide / Show** collapses the view; your browser remembers the choice.
+
+Marker end times need Stash v0.27 or newer; on older versions every
+marker runs until the next one.
+
 ## Staying up to date
 
 Whenever a marker is created, edited or deleted — from the edit form,

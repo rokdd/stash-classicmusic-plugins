@@ -81,20 +81,30 @@
       });
   }
 
+  // Also asks for each marker's end time (Stash v0.27+) and screenshot,
+  // for the timeline view. Older versions don't have end_seconds and
+  // reject the whole query, so that's retried without it.
   async function fetchMarkers(sceneId) {
-    const query = `
+    const query = (extra) => `
       query($id: ID!) {
         findScene(id: $id) {
           scene_markers {
             id
             seconds
+            ${extra}
             title
+            screenshot
             primary_tag { id name image_path }
             tags { id name image_path }
           }
         }
       }`;
-    const data = await callGQL(query, { id: sceneId });
+    let data;
+    try {
+      data = await callGQL(query("end_seconds"), { id: sceneId });
+    } catch (err) {
+      data = await callGQL(query(""), { id: sceneId });
+    }
     return data.findScene.scene_markers || [];
   }
 
@@ -649,6 +659,9 @@
     const wanted = Math.floor(marker.seconds);
     const title = (marker.title || "").trim().toLowerCase();
     for (const button of panel.querySelectorAll("button")) {
+      // Skip this plugin's own timeline view, which sits in the same tab
+      // and shows the same times and titles — its Edit button calls this.
+      if (button.closest(`#${TIMELINE_ID}`)) continue;
       let row = button.parentElement;
       while (row && row !== panel && !timestamp.test(row.textContent)) row = row.parentElement;
       if (!row || row === panel) continue;
@@ -765,6 +778,7 @@
       }
       if (currentSceneId() !== sceneId) return;
     }
+    showTimeline(markers);
     if (!markers.length) return;
 
     const root = video.closest(".video-js, .vjs-container") || document;
@@ -799,10 +813,339 @@
 
   function refreshForCurrentPage() {
     clearOverlay();
+    timelineMarkers = [];
+    removeTimeline();
     const sceneId = currentSceneId();
     if (!sceneId) return;
     placeSymbols(sceneId, 0);
   }
+
+  // -- marker timeline view in the Markers tab ---------------------------------
+  //
+  // Above Stash's own marker list in the scene's Markers tab: a timeline bar
+  // with every marker drawn from its start to its end, and a list with one
+  // row per marker — its screenshot on the left, all its details on the
+  // right. Clicking a segment or row jumps to that marker; the row's Edit
+  // button opens Stash's own edit form (see openMarkerEditor). The marker
+  // playing right now is highlighted, following playback.
+
+  const TIMELINE_ID = "marker-symbols-timeline";
+  const TIMELINE_COLLAPSED_KEY = "markerImprovements.timelineCollapsed";
+  const LANE_HEIGHT_PX = 22;
+  const THUMB_WIDTH_PX = 144;
+
+  // Markers of the scene on screen, sorted by start, each with `start`,
+  // `end` and `index` worked out for the view.
+  let timelineMarkers = [];
+
+  function readCollapsed() {
+    try {
+      return localStorage.getItem(TIMELINE_COLLAPSED_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function writeCollapsed(collapsed) {
+    try {
+      localStorage.setItem(TIMELINE_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch (e) {
+      // Not remembered this time — nothing else depends on it.
+    }
+  }
+
+  function formatDuration(seconds) {
+    const total = Math.max(0, Math.round(seconds));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = String(total % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  }
+
+  // A steady color per primary tag, so markers of the same kind match.
+  function colorFor(name) {
+    let hash = 0;
+    for (const ch of name || "") hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+    return `hsl(${Math.abs(hash) % 360}, 55%, 50%)`;
+  }
+
+  function sceneDuration() {
+    const video = findVideoEl();
+    return video && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+  }
+
+  // Start/end for every marker: its own end time if it has one, else the
+  // next marker's start, else the end of the scene.
+  function prepareTimeline(markers) {
+    const sorted = markers.slice().sort((a, b) => a.seconds - b.seconds);
+    const duration = sceneDuration();
+    return sorted.map((m, index) => {
+      const next = sorted.find((o) => o.seconds > m.seconds);
+      let end = m.end_seconds != null && m.end_seconds > m.seconds ? m.end_seconds : next ? next.seconds : duration;
+      if (end == null) end = m.seconds; // duration not known yet; fixed once the video has loaded
+      return { ...m, start: m.seconds, end, index };
+    });
+  }
+
+  // Seeks to a marker's start.
+  function seekTo(marker) {
+    const video = findVideoEl();
+    if (video) video.currentTime = marker.start;
+  }
+
+  function buildTimelineBar(markers, duration) {
+    // Lanes: each marker goes into the first lane where it doesn't overlap
+    // the one before it.
+    const laneEnds = [];
+    const lanes = markers.map((m) => {
+      let lane = laneEnds.findIndex((end) => end <= m.start);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(0);
+      }
+      laneEnds[lane] = Math.max(m.end, m.start + duration * 0.005);
+      return lane;
+    });
+
+    const bar = document.createElement("div");
+    bar.style.cssText =
+      `position:relative;height:${laneEnds.length * LANE_HEIGHT_PX + 4}px;margin-bottom:12px;` +
+      "background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;";
+
+    markers.forEach((m, i) => {
+      const name = m.title || (m.primary_tag && m.primary_tag.name) || "marker";
+      const seg = document.createElement("div");
+      seg.dataset.markerIndex = String(m.index);
+      seg.title = `${formatDuration(m.start)}–${formatDuration(m.end)} ${name}`;
+      seg.style.cssText = [
+        "position:absolute",
+        `left:${(m.start / duration) * 100}%`,
+        `width:max(3px, ${((m.end - m.start) / duration) * 100}%)`,
+        `top:${2 + lanes[i] * LANE_HEIGHT_PX}px`,
+        `height:${LANE_HEIGHT_PX - 3}px`,
+        `background:${colorFor(m.primary_tag && m.primary_tag.name)}`,
+        "border-radius:2px",
+        "box-sizing:border-box",
+        "border:1px solid rgba(0,0,0,0.35)",
+        "color:#fff",
+        "font-size:11px",
+        `line-height:${LANE_HEIGHT_PX - 5}px`,
+        "padding:0 4px",
+        "white-space:nowrap",
+        "overflow:hidden",
+        "text-overflow:ellipsis",
+        "cursor:pointer",
+      ].join(";");
+      seg.textContent = name;
+      seg.addEventListener("click", () => seekTo(m));
+      bar.appendChild(seg);
+    });
+
+    const playhead = document.createElement("div");
+    playhead.className = "marker-symbols-playhead";
+    playhead.style.cssText = "position:absolute;top:0;bottom:0;width:2px;background:#fff;pointer-events:none;left:0;";
+    bar.appendChild(playhead);
+    return bar;
+  }
+
+  function buildMarkerRow(m) {
+    const name = m.title || (m.primary_tag && m.primary_tag.name) || "Marker";
+    const row = document.createElement("div");
+    row.dataset.markerIndex = String(m.index);
+    row.style.cssText =
+      "display:flex;gap:12px;padding:8px;border-radius:4px;cursor:pointer;" +
+      `border-left:4px solid ${colorFor(m.primary_tag && m.primary_tag.name)};margin-bottom:6px;` +
+      "background:rgba(255,255,255,0.04);";
+    row.addEventListener("click", () => seekTo(m));
+
+    // Left: the marker's screenshot.
+    const thumb = document.createElement("img");
+    thumb.src = m.screenshot || "";
+    thumb.alt = "";
+    thumb.loading = "lazy";
+    thumb.style.cssText =
+      `width:${THUMB_WIDTH_PX}px;aspect-ratio:16/9;object-fit:cover;flex:none;border-radius:3px;background:#000;`;
+    thumb.addEventListener("error", () => {
+      thumb.style.visibility = "hidden";
+    });
+    row.appendChild(thumb);
+
+    // Right: all the details.
+    const details = document.createElement("div");
+    details.style.cssText = "flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;";
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;align-items:baseline;gap:8px;";
+    const title = document.createElement("strong");
+    title.textContent = name;
+    title.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    head.appendChild(title);
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "btn btn-link btn-sm";
+    edit.textContent = "Edit";
+    edit.style.cssText = "margin-left:auto;padding:0;flex:none;";
+    edit.addEventListener("click", (e) => {
+      e.stopPropagation();
+      seekTo(m);
+      openMarkerEditor(m);
+    });
+    head.appendChild(edit);
+    details.appendChild(head);
+
+    const time = document.createElement("div");
+    time.style.cssText = "font-size:0.85em;opacity:0.75;";
+    time.textContent = `${formatDuration(m.start)} – ${formatDuration(m.end)} · ${formatDuration(m.end - m.start)}`;
+    details.appendChild(time);
+
+    if (m.primary_tag) {
+      const primary = document.createElement("div");
+      primary.style.cssText = "font-size:0.85em;";
+      primary.textContent = `Primary tag: ${m.primary_tag.name}`;
+      details.appendChild(primary);
+    }
+
+    const others = (m.tags || []).filter((t) => !m.primary_tag || t.id !== m.primary_tag.id);
+    if (others.length) {
+      const tags = document.createElement("div");
+      tags.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+      others.forEach((t) => {
+        const badge = document.createElement("span");
+        badge.className = "badge badge-secondary";
+        badge.textContent = t.name;
+        tags.appendChild(badge);
+      });
+      details.appendChild(tags);
+    }
+
+    // The same icons the marker's bubble shows on the scrubber.
+    const images = tagsWithImages(m);
+    if (images.length) {
+      const icons = document.createElement("div");
+      icons.style.cssText = "display:flex;gap:4px;";
+      images.forEach((t) => {
+        const img = document.createElement("img");
+        img.src = t.image_path;
+        img.alt = t.name || "";
+        img.title = t.name || "";
+        img.dataset.tagName = t.name || "";
+        img.dataset.tagId = t.id || "";
+        img.style.cssText =
+          "height:28px;width:auto;max-width:56px;object-fit:contain;background:rgba(255,255,255,0.92);";
+        img.addEventListener("error", () => img.remove());
+        icons.appendChild(img);
+      });
+      applyTagStyles(icons);
+      details.appendChild(icons);
+    }
+
+    row.appendChild(details);
+    return row;
+  }
+
+  function removeTimeline() {
+    const view = document.getElementById(TIMELINE_ID);
+    if (view) view.remove();
+  }
+
+  // (Re)builds the view at the top of the Markers tab. Does nothing until
+  // that tab is on screen; the observer below brings us back when it is.
+  function renderTimeline() {
+    const panel = findMarkersPanel();
+    if (!panel || !timelineMarkers.length) {
+      removeTimeline();
+      return;
+    }
+    timelineMarkers = prepareTimeline(timelineMarkers);
+    const duration =
+      sceneDuration() || Math.max(...timelineMarkers.map((m) => m.end), timelineMarkers[timelineMarkers.length - 1].start + 1);
+
+    removeTimeline();
+    const view = document.createElement("div");
+    view.id = TIMELINE_ID;
+    view.style.cssText = "margin-bottom:16px;";
+
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;";
+    const heading = document.createElement("strong");
+    heading.textContent = `Timeline · ${timelineMarkers.length} marker${timelineMarkers.length === 1 ? "" : "s"}`;
+    header.appendChild(heading);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "btn btn-secondary btn-sm";
+    toggle.style.marginLeft = "auto";
+    header.appendChild(toggle);
+    view.appendChild(header);
+
+    const body = document.createElement("div");
+    body.appendChild(buildTimelineBar(timelineMarkers, duration));
+    timelineMarkers.forEach((m) => body.appendChild(buildMarkerRow(m)));
+    view.appendChild(body);
+
+    const applyCollapsed = (collapsed) => {
+      body.style.display = collapsed ? "none" : "";
+      toggle.textContent = collapsed ? "Show" : "Hide";
+    };
+    applyCollapsed(readCollapsed());
+    toggle.addEventListener("click", () => {
+      const collapsed = body.style.display !== "none";
+      writeCollapsed(collapsed);
+      applyCollapsed(collapsed);
+    });
+
+    panel.insertBefore(view, panel.firstChild);
+    updateTimelineProgress();
+  }
+
+  // Moves the playhead and highlights the marker playing right now.
+  function updateTimelineProgress() {
+    const view = document.getElementById(TIMELINE_ID);
+    const video = findVideoEl();
+    if (!view || !video) return;
+    const t = video.currentTime;
+    const duration = sceneDuration();
+    const playhead = view.querySelector(".marker-symbols-playhead");
+    if (playhead && duration) playhead.style.left = `calc(${(t / duration) * 100}% - 1px)`;
+    const playing = new Set(timelineMarkers.filter((m) => t >= m.start && t < m.end).map((m) => String(m.index)));
+    view.querySelectorAll("[data-marker-index]").forEach((el) => {
+      const on = playing.has(el.dataset.markerIndex);
+      if (el.tagName === "DIV" && el.parentElement === view.lastChild) {
+        el.style.background = on ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)";
+      } else {
+        el.style.outline = on ? "2px solid #fff" : "none";
+      }
+    });
+  }
+
+  function ensureTimelineTracking(video) {
+    if (video.__markerSymbolsTimelineBound) return;
+    video.__markerSymbolsTimelineBound = true;
+    video.addEventListener("timeupdate", updateTimelineProgress);
+    // The scene's length is only known once the video has loaded, and the
+    // last marker's end (and the bar's scale) depend on it.
+    video.addEventListener("loadedmetadata", renderTimeline);
+  }
+
+  function showTimeline(markers) {
+    timelineMarkers = markers;
+    const video = findVideoEl();
+    if (video) ensureTimelineTracking(video);
+    renderTimeline();
+  }
+
+  // The Markers tab is only rendered when it's opened, and re-rendered by
+  // Stash at times, so the view is put back whenever it's missing.
+  let timelineCheckPending = false;
+  new MutationObserver(() => {
+    if (timelineCheckPending) return;
+    timelineCheckPending = true;
+    setTimeout(() => {
+      timelineCheckPending = false;
+      const panel = findMarkersPanel();
+      const view = document.getElementById(TIMELINE_ID);
+      if (panel && timelineMarkers.length && (!view || view.parentElement !== panel)) renderTimeline();
+    }, 200);
+  }).observe(document.body, { childList: true, subtree: true });
 
   // -- navigation wiring -------------------------------------------------
 
