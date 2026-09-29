@@ -55,8 +55,26 @@ Piano, Cello { opacity: .6 }
   (e.g. `Violin { border: 2px solid gold }` replaces its thin grey border).
 - Line breaks are optional — the whole thing can be on one line.
 
+**Styling the whole bubble.** Settings → Plugins → Marker Improvements →
+**Custom styles per bubble** takes rules in exactly the same format, but
+their CSS goes on a marker's whole bubble instead of one icon. A rule
+applies when *any* of the marker's tags contains its text — including
+tags without an image, so a category tag can color a bubble without
+adding an icon of its own:
+
+```
+Concerto { background: #ffe9b0; border: 2px solid #c90 }
+* { padding: 4px 6px }
+```
+
+The little tail under the bubble takes on the bubble's background, so a
+custom background covers both. The bubble is positioned with
+`transform: translateX(-50%)` — keep that in any `transform` you set
+(e.g. `transform: translateX(-50%) scale(1.2)`), or it shifts sideways.
+
 **Matching parent tags too.** Turn on Settings → Plugins → Marker
-Improvements → **Custom styles also match parent tags**, and a rule also
+Improvements → **Custom styles also match parent tags**, and a rule in
+either style setting also
 applies to a tag when any tag above it in the hierarchy — its parents,
 their parents, and so on — contains the rule's text. With Violin, Viola
 and Cello set up as sub-tags of Strings, `Strings { outline: 2px solid

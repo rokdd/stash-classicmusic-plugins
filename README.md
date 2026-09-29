@@ -92,6 +92,8 @@ Details: [Advanced File Operations README](plugins/advanced-file-operations/READ
 - **Custom styles per tag**: CSS rules by tag name, e.g.
   `Violin { outline: 2px solid gold }` — optionally matching parent tags
   too, so one rule for `Strings` styles all its sub-tags.
+- **Custom styles per bubble**: the same rules for a marker's whole
+  bubble, e.g. `Concerto { background: #ffe9b0 }`.
 - **Stays up to date**: bubbles redraw by themselves after a marker is
   saved, added or deleted.
 

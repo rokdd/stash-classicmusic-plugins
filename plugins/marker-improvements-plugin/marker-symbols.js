@@ -187,6 +187,9 @@
   // Parsed "Custom styles per tag" setting for the current scene load
   // (see parseTagStyles), kept alongside lastMarkers for the same reason.
   let tagStyles = new Map();
+  // The "Custom styles per bubble" setting, parsed the same way; its CSS
+  // goes on a whole bubble (see applyBubbleStyles).
+  let bubbleStyles = new Map();
   // Whether clicking a marker's range or icon opens Stash's marker editor
   // (the "Click on a marker opens the edit marker dialog" setting).
   let editOnClick = true;
@@ -370,7 +373,9 @@
       "width:8px",
       "height:8px",
       "margin:-4px 0 0 -4px",
-      "background:rgba(255,255,255,0.92)",
+      // Same background as the bubble, including one set by a custom
+      // bubble style, so the tail always matches.
+      "background:inherit",
       "transform:rotate(45deg)",
       "pointer-events:none",
     ].join(";");
@@ -414,6 +419,7 @@
 
     if (tags.length > 1) removeDuplicateImages(bubble);
     applyTagStyles(bubble);
+    applyBubbleStyles(bubble, dedupedTags(marker));
 
     return bubble;
   }
@@ -430,16 +436,45 @@
   // `Strings` also styles a Violin tag that sits under a Strings tag.
   function applyTagStyles(bubble) {
     bubble.querySelectorAll("img").forEach((img) => {
-      const names = [
-        (img.dataset.tagName || "").toLowerCase(),
-        ...(tagAncestorNames.get(img.dataset.tagId) || []),
-      ];
-      const star = tagStyles.get("*");
-      if (star) img.style.cssText += `;${star}`;
-      tagStyles.forEach((css, key) => {
-        if (key !== "*" && names.some((name) => name.includes(key))) img.style.cssText += `;${css}`;
+      const names = namesToMatch([{ id: img.dataset.tagId, name: img.dataset.tagName }]);
+      matchingCss(tagStyles, names).forEach((css) => {
+        img.style.cssText += `;${css}`;
       });
     });
+  }
+
+  // Applies the "Custom styles per bubble" setting to a whole bubble. A
+  // rule matches when any of the marker's tags matches it — all of them,
+  // including tags without an image — with the same name-contains and
+  // parent-tag rules as the icon styles.
+  function applyBubbleStyles(bubble, tags) {
+    matchingCss(bubbleStyles, namesToMatch(tags)).forEach((css) => {
+      bubble.style.cssText += `;${css}`;
+    });
+  }
+
+  // The lowercased names a style rule is matched against for `tags`: their
+  // own names, plus — with "also match parent tags" on — the names of
+  // every tag above them.
+  function namesToMatch(tags) {
+    const names = [];
+    tags.forEach((tag) => {
+      if (!tag) return;
+      names.push((tag.name || "").toLowerCase());
+      names.push(...(tagAncestorNames.get(tag.id) || []));
+    });
+    return names;
+  }
+
+  // The CSS of every rule in `rules` that matches one of `names`: `*`
+  // first, then the rest in the order written.
+  function matchingCss(rules, names) {
+    const css = [];
+    if (rules.has("*")) css.push(rules.get("*"));
+    rules.forEach((ruleCss, key) => {
+      if (key !== "*" && names.some((name) => name.includes(key))) css.push(ruleCss);
+    });
+    return css;
   }
 
   // Every tag's ancestors' names (lowercased), from one request for the
@@ -719,9 +754,10 @@
     // Settings first: the hover bubble needs the tag styles even on a
     // scene that has no markers yet.
     tagStyles = parseTagStyles(settings.tagStyles || "");
+    bubbleStyles = parseTagStyles(settings.bubbleStyles || "");
     editOnClick = settings.editMarkerOnClick !== false;
     tagAncestorNames = new Map();
-    if (settings.styleParentTags && tagStyles.size) {
+    if (settings.styleParentTags && (tagStyles.size || bubbleStyles.size)) {
       try {
         tagAncestorNames = await fetchTagAncestorNames();
       } catch (err) {
