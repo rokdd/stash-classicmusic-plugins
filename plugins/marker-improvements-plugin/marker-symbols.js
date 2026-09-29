@@ -645,6 +645,9 @@
   // visible: if a Stash update changes that layout, it still switches to
   // the Markers tab and warns in the console instead of doing nothing.
   function openMarkerEditor(marker) {
+    // Opens as an accordion under the marker's row in the timeline view, if
+    // it's there (and puts back any form that's open elsewhere first).
+    requestAccordion(marker);
     const tab =
       document.querySelector('[data-rb-event-key="scene-markers-panel"]') ||
       Array.from(document.querySelectorAll(".nav-tabs .nav-link"))
@@ -985,6 +988,7 @@
     const name = m.title || (m.primary_tag && m.primary_tag.name) || "Marker";
     const row = document.createElement("div");
     row.dataset.markerIndex = String(m.index);
+    row.dataset.markerId = String(m.id);
     row.style.cssText =
       "display:flex;gap:12px;padding:8px;border-radius:4px;cursor:pointer;" +
       `border-left:4px solid ${colorFor(m.primary_tag && m.primary_tag.name)};margin-bottom:6px;` +
@@ -1015,11 +1019,13 @@
     head.appendChild(title);
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.className = "btn btn-link btn-sm";
+    edit.className = "btn btn-link btn-sm marker-symbols-edit";
     edit.textContent = "Edit";
     edit.style.cssText = "margin-left:auto;padding:0;flex:none;";
     edit.addEventListener("click", (e) => {
       e.stopPropagation();
+      // Clicking Edit on the row whose form is open closes it again.
+      if (movedForm && movedForm.row === row && closeAccordion()) return;
       seekTo(m);
       openMarkerEditor(m);
     });
@@ -1078,6 +1084,9 @@
   }
 
   function removeTimeline() {
+    // Put Stash's form back first if it's open inside this view — see
+    // "edit form as an accordion" below.
+    restoreForm();
     const view = document.getElementById(TIMELINE_ID);
     if (view) view.remove();
   }
@@ -1179,6 +1188,144 @@
       const view = document.getElementById(TIMELINE_ID);
       if (panel && timelineMarkers.length && (!view || view.parentElement !== panel)) renderTimeline();
     }, 200);
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // -- edit form as an accordion under the marker's row --------------------------
+  //
+  // When a marker is edited from this plugin — its Edit button in the
+  // timeline list, or a click on the marker on the scrubber — Stash's own
+  // edit form is moved from the top of the Markers tab to right below that
+  // marker's row, like an accordion.
+  //
+  // The form belongs to Stash's React UI, which expects it to stay where it
+  // rendered it. So a placeholder marks its original spot, and the form is
+  // put back there the moment Save, Cancel or Delete is used — before Stash
+  // reacts to that click — and whenever this view is rebuilt. Otherwise
+  // React, when it later removes the form, wouldn't find it where it left it.
+
+  // The marker whose row should get the form, and when that was asked for.
+  let accordionRequest = null; // { markerId, at }
+  // The form while it's moved: { form, placeholder, holder, row }.
+  let movedForm = null;
+
+  function findStashMarkerForm(panel) {
+    return Array.from(panel.querySelectorAll("form")).find(
+      (f) => !f.closest(`#${TIMELINE_ID}`) && f.querySelector('[class*="react-select__control"]')
+    ) || null;
+  }
+
+  function setRowOpen(row, open) {
+    row.style.marginBottom = open ? "0" : "6px";
+    row.style.borderBottomLeftRadius = open ? "0" : "4px";
+    row.style.borderBottomRightRadius = open ? "0" : "4px";
+    const edit = row.querySelector(".marker-symbols-edit");
+    if (edit) edit.textContent = open ? "Close" : "Edit";
+  }
+
+  function restoreForm() {
+    if (!movedForm) return;
+    const { form, placeholder, holder, row } = movedForm;
+    movedForm = null;
+    if (placeholder.parentNode) {
+      placeholder.parentNode.insertBefore(form, placeholder);
+    } else {
+      // Its original spot is gone (Stash re-rendered the tab), so React no
+      // longer manages this form — just take it away.
+      form.remove();
+    }
+    placeholder.remove();
+    holder.remove();
+    if (row.isConnected) setRowOpen(row, false);
+  }
+
+  function moveFormUnder(form, row) {
+    const placeholder = document.createComment("marker-symbols: Stash's marker form belongs here");
+    form.parentNode.insertBefore(placeholder, form);
+    const holder = document.createElement("div");
+    holder.className = "marker-symbols-accordion";
+    holder.style.cssText =
+      "padding:12px;margin-bottom:6px;background:rgba(255,255,255,0.08);" +
+      `border-left:${row.style.borderLeft ? row.style.borderLeft.split(" ").slice(0, 2).join(" ") : "4px solid"} ${row.style.borderLeftColor};` +
+      "border-bottom-left-radius:4px;border-bottom-right-radius:4px;";
+    row.after(holder);
+    holder.appendChild(form);
+    movedForm = { form, placeholder, holder, row };
+    setRowOpen(row, true);
+    holder.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  // Asks for the form to open under `marker`'s row, if the timeline view
+  // shows one. Called by openMarkerEditor.
+  function requestAccordion(marker) {
+    restoreForm();
+    const row = document.querySelector(`#${TIMELINE_ID} [data-marker-id="${CSS.escape(String(marker.id))}"]`);
+    accordionRequest = row ? { markerId: String(marker.id), at: Date.now() } : null;
+  }
+
+  function syncAccordion() {
+    if (movedForm) {
+      // Stash re-rendered around it, or the page changed: tidy up.
+      if (!movedForm.form.isConnected || !movedForm.placeholder.isConnected || !movedForm.row.isConnected) restoreForm();
+      return;
+    }
+    if (!accordionRequest) return;
+    if (Date.now() - accordionRequest.at > 5000) {
+      accordionRequest = null; // the form never showed up
+      return;
+    }
+    const panel = findMarkersPanel();
+    const form = panel && findStashMarkerForm(panel);
+    const row = document.querySelector(`#${TIMELINE_ID} [data-marker-id="${CSS.escape(accordionRequest.markerId)}"]`);
+    if (!form || !row) return;
+    accordionRequest = null;
+    moveFormUnder(form, row);
+  }
+
+  // The form's Save, Cancel and Delete: put the form back before Stash's own
+  // handler runs (Stash's handlers run as the event bubbles up; this runs on
+  // the way down). Other buttons in the form — like setting the current
+  // time — leave it where it is.
+  const CLOSING_WORDS = /^(cancel|delete|close|abbrechen|löschen|schließen)$/i;
+  function restoreBeforeStash(e) {
+    if (!movedForm || !movedForm.form.contains(e.target)) return;
+    if (e.type === "submit") {
+      restoreForm();
+      return;
+    }
+    const button = e.target.closest("button");
+    if (!button) return;
+    if (
+      button.type === "submit" ||
+      button.classList.contains("btn-primary") ||
+      button.classList.contains("btn-danger") ||
+      CLOSING_WORDS.test(button.textContent.trim())
+    ) {
+      restoreForm();
+    }
+  }
+  document.addEventListener("click", restoreBeforeStash, true);
+  document.addEventListener("submit", restoreBeforeStash, true);
+
+  // The row's Edit button, while its form is open: close it with the form's
+  // own Cancel, so Stash leaves edit mode too.
+  function closeAccordion() {
+    if (!movedForm) return false;
+    const cancel = Array.from(movedForm.form.querySelectorAll("button")).find(
+      (b) => b.type !== "submit" && !b.classList.contains("btn-danger") && CLOSING_WORDS.test(b.textContent.trim())
+    ) || movedForm.form.querySelector("button.btn-secondary");
+    if (cancel) cancel.click(); // restoreBeforeStash puts the form back first
+    else restoreForm();
+    return true;
+  }
+
+  let accordionCheckPending = false;
+  new MutationObserver(() => {
+    if (accordionCheckPending) return;
+    accordionCheckPending = true;
+    setTimeout(() => {
+      accordionCheckPending = false;
+      syncAccordion();
+    }, 100);
   }).observe(document.body, { childList: true, subtree: true });
 
   // -- navigation wiring -------------------------------------------------

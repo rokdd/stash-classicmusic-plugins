@@ -142,11 +142,19 @@ list:
   the right its title, start – end and length, primary tag, other tags,
   and the tag images its bubble shows (with your custom styles). Click a
   row to jump there; **Edit** opens Stash's edit form for that marker.
+- **Editing opens in place**: a row's **Edit** (or clicking a marker on the
+  scrubber) opens Stash's edit form right below that marker's row, like an
+  accordion. Save, Cancel or **Close** folds it away again.
 - The marker playing right now is highlighted as the video plays.
 - **Hide / Show** collapses the view; your browser remembers the choice.
 
 Marker end times need Stash v0.27 or newer; on older versions every
 marker runs until the next one.
+
+The edit form is Stash's own, moved into place: the plugin leaves a
+placeholder where Stash put it and moves it back the moment you save,
+cancel or delete, before Stash handles that click. Editing a marker from
+Stash's own list below still opens the form in Stash's usual place.
 
 ## Staying up to date
 
