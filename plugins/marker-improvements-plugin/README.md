@@ -48,6 +48,11 @@ Piano, Cello { opacity: .6 }
   by separating them with commas.
 - A rule matches every tag whose name *contains* its text, ignoring
   case — `Violin` also styles "Violin I" and "Solo Violin".
+- **Wildcards:** a name with a `*` in it is a pattern for the *whole* tag
+  name, `*` standing for any text — `Solo*` matches names starting with
+  "Solo" (Solo Violin, not Violin Solo), `*Concerto` names ending with
+  "Concerto", `Concerto*Piano` names that start with one and end with the
+  other. Names without a `*` keep matching anywhere in the name.
 - `*` applies to every icon. It goes on first, then the other rules in
   the order written, so a later rule wins where two match the same icon
   and set the same property.

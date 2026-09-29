@@ -489,9 +489,24 @@
     const css = [];
     if (rules.has("*")) css.push(rules.get("*"));
     rules.forEach((ruleCss, key) => {
-      if (key !== "*" && names.some((name) => name.includes(key))) css.push(ruleCss);
+      if (key !== "*" && names.some((name) => ruleMatches(key, name))) css.push(ruleCss);
     });
     return css;
+  }
+
+  // Whether a rule's name matches a (lowercased) tag name. Without a `*`
+  // the name only has to appear somewhere in the tag name ("violin"
+  // matches "solo violin"). With a `*` it's a pattern for the whole tag
+  // name, `*` standing for any text: "solo*" = starts with "solo",
+  // "*concerto" = ends with "concerto", "concerto*piano" = both.
+  const rulePatterns = new Map(); // rule name → RegExp, built once each
+  function ruleMatches(key, name) {
+    if (!key.includes("*")) return name.includes(key);
+    if (!rulePatterns.has(key)) {
+      const escaped = key.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
+      rulePatterns.set(key, new RegExp(`^${escaped.join(".*")}$`));
+    }
+    return rulePatterns.get(key).test(name);
   }
 
   // Every tag's ancestors' names (lowercased), from one request for the
