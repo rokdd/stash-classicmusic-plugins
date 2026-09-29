@@ -29,7 +29,7 @@
   const FA = api.libraries.FontAwesomeSolid || {};
 
   const ROUTE = "/plugin/tag-tree";
-  const IMAGE_HEIGHT_PX = 28;
+  const IMAGE_HEIGHT_PX = 56;
 
   // Remembered per browser: which branches were open, so coming back to
   // the page doesn't collapse everything again. Wrapped in try/catch since

@@ -49,7 +49,10 @@
 (function () {
   "use strict";
 
-  const ICON_SIZE_PX = 44;
+  // Height of a tag icon in the bubbles (scrubber and hover), and in the
+  // Markers tab's timeline list. Wide icons get up to twice this in width.
+  const ICON_SIZE_PX = 88;
+  const LIST_ICON_SIZE_PX = 56;
   // Corner rounding of the bubble and of each image in it. 0 = square.
   const BUBBLE_RADIUS_PX = 0;
   const ICON_RADIUS_PX = 0;
@@ -1061,7 +1064,8 @@
         img.dataset.tagName = t.name || "";
         img.dataset.tagId = t.id || "";
         img.style.cssText =
-          "height:28px;width:auto;max-width:56px;object-fit:contain;background:rgba(255,255,255,0.92);";
+          `height:${LIST_ICON_SIZE_PX}px;width:auto;max-width:${LIST_ICON_SIZE_PX * 2}px;` +
+          "object-fit:contain;background:rgba(255,255,255,0.92);";
         img.addEventListener("error", () => img.remove());
         icons.appendChild(img);
       });
