@@ -3,3 +3,6 @@ _site/
 
 # Background-run logs written by Advanced File Operations
 plugins/advanced-file-operations/logs/
+
+# Personal Claude Code settings
+.claude/settings.local.json
