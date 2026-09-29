@@ -9,3 +9,6 @@ plugins/advanced-file-operations/logs/
 
 # Record of descriptions written by Tag Tree's StashDB sync
 plugins/tag-tree/written-descriptions.json
+
+# Background-run logs written by yt-dlp Downloader
+plugins/yt-dlp-downloader/logs/

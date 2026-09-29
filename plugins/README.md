@@ -13,6 +13,9 @@ One folder per plugin; each is independent of the others.
   tree, plus tag descriptions from StashDB, filled in for new tags and
   refreshed every few days. Needs Python 3 on the server, no extra
   modules.
+- **[`yt-dlp-downloader/`](yt-dlp-downloader/)** — download videos and
+  playlists with yt-dlp into a library folder, with the scenes filled in
+  from the video's info. Needs yt-dlp and Python 3 on the server.
 
 Installing, updating and the full feature list are in the
 [main README](../README.md). Each folder's own README has the details.

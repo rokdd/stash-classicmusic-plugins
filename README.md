@@ -8,6 +8,7 @@ and classical music recordings — but useful for any library.
 | [Advanced File Operations](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
 | [Tag Tree](plugins/tag-tree/) | All your tags as a collapsible parent/child tree, with descriptions from StashDB |
+| [yt-dlp Downloader](plugins/yt-dlp-downloader/) | Download videos and playlists into your library, with title, date, description and cover filled in |
 
 They're independent of each other — install any of them.
 
@@ -49,6 +50,12 @@ This one runs ffmpeg on the server, so the machine Stash runs on needs:
 **Tag Tree** also runs on the server for its StashDB descriptions, but
 needs only Python 3 itself — no extra modules. It uses the StashDB
 endpoint and API key you've set up under Settings → Metadata Providers.
+
+### Extra setup for yt-dlp Downloader
+
+- **yt-dlp** on the server: `sudo apt install yt-dlp` on Debian/Ubuntu, or
+  `pip install yt-dlp` for the newest version.
+- ffmpeg and Python 3, which Stash and the other plugins need anyway.
 
 Marker Improvements runs only in the browser and needs nothing extra.
 
@@ -123,6 +130,18 @@ Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.
   itself are replaced, unless you turn on "Overwrite".
 
 Details: [Tag Tree README](plugins/tag-tree/README.md)
+
+### yt-dlp Downloader
+
+- **Download button** in Stash's top bar: paste URLs (playlists too), pick
+  a library folder, subfolder and quality.
+- **Scenes filled in automatically**: title, source URL, upload date,
+  description, and the thumbnail as cover.
+- **Progress in Settings → Tasks**, or **in the background** so other
+  tasks don't wait.
+- Thumbnails and video info never land in your library.
+
+Details: [yt-dlp Downloader README](plugins/yt-dlp-downloader/README.md)
 
 ## License
 
