@@ -11,6 +11,9 @@ One folder per plugin; each is independent of the others.
   Browser only, nothing to install.
 - **[`tag-tree/`](tag-tree/)** — all tags as a collapsible parent/child
   tree. Browser only, nothing to install.
+- **[`stashdb-tag-descriptions/`](stashdb-tag-descriptions/)** — tag
+  descriptions from StashDB, filled in for new tags and refreshed every
+  few days. Needs Python 3 on the server, no extra modules.
 
 Installing, updating and the full feature list are in the
 [main README](../README.md). Each folder's own README has the details.
