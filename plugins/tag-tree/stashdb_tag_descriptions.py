@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-StashDB Tag Descriptions — a Stash plugin.
+StashDB tag descriptions — the backend of the Tag Tree plugin.
 
 Copies each tag's description from StashDB (or any other stash-box set up
 under Settings > Metadata Providers) for tags that have a StashDB ID:
@@ -8,8 +8,9 @@ under Settings > Metadata Providers) for tags that have a StashDB ID:
   - task "Update tag descriptions from StashDB": every tag at once;
   - hooks on tag create/update: just that tag, right away, so a tag
     imported or linked to StashDB gets its description immediately;
-  - auto-refresh.js starts the task by itself every few days when Stash
-    is open in a browser (Stash has no scheduler of its own).
+  - stashdb-auto-refresh.js starts the task by itself every few days when
+    Stash is open in a browser (Stash has no scheduler of its own);
+  - the tag tree page's buttons: all tags, or one ("sync_tag").
 
 Descriptions you wrote yourself are never replaced, unless the "overwrite"
 setting is on: a description is only written when the tag has none, or
@@ -26,7 +27,7 @@ import urllib.error
 import urllib.request
 
 # Stash's id for this plugin — the yml manifest's filename minus ".yml".
-PLUGIN_ID = "stashdbTagDescriptions"
+PLUGIN_ID = "tagTree"
 
 # How many tags to ask stash-box for per request.
 BATCH_SIZE = 50
@@ -34,6 +35,15 @@ BATCH_SIZE = 50
 # Tag id → the description this plugin last wrote to it. Lets a later run
 # tell "still ours, safe to update" apart from "edited by hand, leave it".
 WRITTEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "written-descriptions.json")
+
+# Where the separate "StashDB Tag Descriptions" plugin kept that record
+# before it became part of Tag Tree: its own folder, a sibling of this one
+# (named by plugin id when installed from a plugin source, or by folder
+# name when copied by hand). Read once if ours doesn't exist yet.
+OLD_WRITTEN_FILES = [
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), folder, "written-descriptions.json")
+    for folder in ("stashdbTagDescriptions", "stashdb-tag-descriptions")
+]
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +85,15 @@ def post_graphql(url, query, variables=None, headers=None):
         with urllib.request.urlopen(request, timeout=60) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"HTTP {exc.code} from {url}") from exc
+        # GraphQL servers explain a rejected query in the body — pass that
+        # on instead of just the status code.
+        detail = ""
+        try:
+            errors = json.loads(exc.read().decode("utf-8")).get("errors") or []
+            detail = "; ".join(e.get("message", "") for e in errors)
+        except Exception:  # noqa: BLE001
+            pass
+        raise RuntimeError(f"HTTP {exc.code} from {url}" + (f": {detail}" if detail else "")) from exc
     if payload.get("errors"):
         raise RuntimeError(f"GraphQL error from {url}: {payload['errors']}")
     return payload["data"]
@@ -130,18 +148,27 @@ class Stash:
 
 
 def fetch_remote_tags(box, ids):
-    """stash-box tags by id → {id: tag}, BATCH_SIZE at a time."""
+    """
+    stash-box tags by id → {id: tag}, BATCH_SIZE per request. StashDB has
+    no "several tags by id" query (newer stash-box code does, but StashDB
+    doesn't run it), so each request asks for findTag once per tag, under
+    its own alias: t0: findTag(id: $id0) …, t1: findTag(id: $id1) ….
+    """
     found = {}
     headers = {"ApiKey": box["api_key"]} if box.get("api_key") else {}
     for start in range(0, len(ids), BATCH_SIZE):
         batch = ids[start:start + BATCH_SIZE]
+        params = ", ".join(f"$id{i}: ID!" for i in range(len(batch)))
+        fields = " ".join(
+            f"t{i}: findTag(id: $id{i}) {{ id name description deleted }}" for i in range(len(batch))
+        )
         data = post_graphql(
             box["endpoint"],
-            "query($ids: [ID!]!) { findTags(ids: $ids) { id name description deleted } }",
-            {"ids": batch},
+            f"query({params}) {{ {fields} }}",
+            {f"id{i}": stash_id for i, stash_id in enumerate(batch)},
             headers,
         )
-        for tag in data.get("findTags") or []:
+        for tag in (data or {}).values():
             if tag:
                 found[tag["id"]] = tag
     return found
@@ -152,11 +179,13 @@ def fetch_remote_tags(box, ids):
 # ---------------------------------------------------------------------------
 
 def load_written():
-    try:
-        with open(WRITTEN_FILE) as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    for path in [WRITTEN_FILE] + OLD_WRITTEN_FILES:
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            continue
+    return {}
 
 
 def save_written(written):
@@ -242,6 +271,17 @@ def main():
     plugin_input = json.loads(raw) if raw.strip() else {}
     args = plugin_input.get("args") or {}
     stash = Stash(plugin_input.get("server_connection") or {})
+
+    if args.get("mode") == "sync_tag" and args.get("tag_id"):
+        # One tag, from its button in the tag tree.
+        try:
+            summary = sync(stash, tag_id=args["tag_id"])
+        except Exception as exc:  # noqa: BLE001
+            write_plugin_output(error=f"Updating the tag's description failed: {exc}")
+            return
+        log_info(summary)
+        write_plugin_output(output=summary)
+        return
 
     hook = args.get("hookContext")
     if hook and hook.get("type") == "Tag.Update.Post" and "stash_ids" not in (hook.get("inputFields") or []):

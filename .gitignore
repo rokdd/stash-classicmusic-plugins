@@ -7,5 +7,5 @@ plugins/advanced-file-operations/logs/
 # Personal Claude Code settings
 .claude/settings.local.json
 
-# Record of descriptions written by StashDB Tag Descriptions
-plugins/stashdb-tag-descriptions/written-descriptions.json
+# Record of descriptions written by Tag Tree's StashDB sync
+plugins/tag-tree/written-descriptions.json

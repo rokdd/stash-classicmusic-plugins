@@ -1,7 +1,34 @@
 name: Tag Tree
-description: "Shows all your tags as a collapsible tree of parents and children, with each tag's image, scene and marker counts, and a search that keeps the path to every match. Opens from a button in the top navigation bar."
-version: 0.0.2
+description: "Shows all your tags as a collapsible tree of parents and children, with each tag's image, description, scene and marker counts, and a search. Also copies tag descriptions from StashDB for tags with a StashDB ID — right away for new or newly linked tags, every few days, or on demand — keeping descriptions you wrote yourself."
+version: 0.0.3
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-tree
+exec:
+  - python
+  - "{pluginDir}/stashdb_tag_descriptions.py"
+interface: raw
 ui:
   javascript:
     - tag-tree.js
+    - stashdb-auto-refresh.js
+hooks:
+  - name: Fetch description for a new or newly linked tag
+    description: When a tag is created, or its StashDB ID is set or changed, fetch its description from StashDB.
+    triggeredBy:
+      - Tag.Create.Post
+      - Tag.Update.Post
+    defaultArgs:
+      mode: hook
+tasks:
+  - name: Update tag descriptions from StashDB
+    description: Fetches the description of every tag that has a StashDB ID. Empty descriptions are filled; ones this plugin wrote before are updated; ones you wrote yourself are kept unless "Overwrite" is on.
+    defaultArgs:
+      mode: sync_all
+settings:
+  refreshDays:
+    displayName: Refresh every … days
+    description: "How often all tag descriptions are fetched again automatically, while Stash is open in a browser. Leave empty for every 7 days; 0 switches the automatic refresh off (the button on the tag tree page and the task in Settings → Tasks still work)."
+    type: NUMBER
+  overwrite:
+    displayName: Overwrite descriptions you wrote yourself
+    description: "Off: only empty descriptions, and ones this plugin wrote earlier, are replaced. On: every description is replaced with StashDB's."
+    type: BOOLEAN

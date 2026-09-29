@@ -3,7 +3,11 @@
 // Adds a page at /plugin/tag-tree that shows every tag as a collapsible
 // tree of parents and children, and a button in the top navigation bar
 // that opens it. Each tag shows its image (if it has a custom one), its
-// scene and marker counts, and links to its own tag page.
+// description, its scene and marker counts, and links to its own tag page.
+//
+// The page also has the manual controls for this plugin's StashDB side
+// (stashdb_tag_descriptions.py): a button that updates every tag's
+// description from StashDB, and a ↻ per tag linked to StashDB.
 //
 // A tag with several parents appears under each of them. A tag that is
 // (through some chain) its own ancestor is shown once on that path and
@@ -75,7 +79,9 @@
             id
             name
             aliases
+            description
             image_path
+            stash_ids { endpoint }
             scene_count
             scene_marker_count
             parents { id }
@@ -84,6 +90,25 @@
         }
       }`);
     return data.findTags.tags;
+  }
+
+  // Starts one of this plugin's tasks (see stashdb_tag_descriptions.py) and
+  // resolves once it has finished, by following the job in Stash's task
+  // queue — so the page can reload the tags and show the new descriptions.
+  const PLUGIN_ID = "tagTree";
+  const DONE_STATUSES = new Set(["FINISHED", "CANCELLED", "STOPPED", "FAILED"]);
+  async function runTaskAndWait(description, argsMap) {
+    const data = await callGQL(
+      "mutation($plugin_id: ID!, $description: String, $args_map: Map) { runPluginTask(plugin_id: $plugin_id, description: $description, args_map: $args_map) }",
+      { plugin_id: PLUGIN_ID, description, args_map: argsMap }
+    );
+    const jobId = data.runPluginTask;
+    if (!jobId) return;
+    for (let i = 0; i < 400; i++) { // gives up after ~20 minutes
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const job = (await callGQL("query($id: ID!) { findJob(input: { id: $id }) { status } }", { id: jobId })).findJob;
+      if (!job || DONE_STATUSES.has(job.status)) return;
+    }
   }
 
   // A tag without an uploaded image still has an image_path — Stash's
@@ -205,9 +230,34 @@
           },
         })
         : null,
-      h(Link, { to: `/tags/${tag.id}` }, tag.name),
-      isLoop ? h("span", { className: "text-muted", style: { fontSize: "0.8em" } }, "(loop — already above)") : null,
-      counts.length ? h("span", { className: "text-muted", style: { fontSize: "0.8em" } }, counts.join(" · ")) : null
+      h(
+        "div",
+        { style: { minWidth: 0, flex: "1" } },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "8px" } },
+          h(Link, { to: `/tags/${tag.id}` }, tag.name),
+          isLoop ? h("span", { className: "text-muted", style: { fontSize: "0.8em" } }, "(loop — already above)") : null,
+          counts.length ? h("span", { className: "text-muted", style: { fontSize: "0.8em" } }, counts.join(" · ")) : null,
+          (tag.stash_ids || []).length
+            ? h("button", {
+              type: "button",
+              className: "btn btn-link btn-sm p-0",
+              style: { fontSize: "0.8em" },
+              title: "Update this tag's description from StashDB",
+              disabled: ctx.busy.has(tag.id),
+              onClick: () => ctx.refreshTag(tag),
+            }, ctx.busy.has(tag.id) ? "updating…" : "↻ StashDB")
+            : null
+        ),
+        tag.description
+          ? h("div", {
+            className: "text-muted",
+            title: tag.description,
+            style: { fontSize: "0.85em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+          }, tag.description)
+          : null
+      )
     );
 
     return h(
@@ -229,10 +279,44 @@
     const [error, setError] = useState(null);
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState(loadExpanded);
+    // Tag ids whose description is being updated right now ("all" = every tag).
+    const [busy, setBusy] = useState(() => new Set());
 
+    const reload = useCallback(
+      () => fetchAllTags().then(setTags, (err) => setError(err.message || String(err))),
+      []
+    );
     useEffect(() => {
-      fetchAllTags().then(setTags, (err) => setError(err.message || String(err)));
+      reload();
+    }, [reload]);
+
+    const markBusy = useCallback((id, on) => {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        if (on) next.add(id);
+        else next.delete(id);
+        return next;
+      });
     }, []);
+    const runAndReload = useCallback(async (id, description, argsMap) => {
+      markBusy(id, true);
+      try {
+        await runTaskAndWait(description, argsMap);
+        await reload();
+      } catch (err) {
+        window.alert(`Couldn't update from StashDB: ${err.message || err}`);
+      } finally {
+        markBusy(id, false);
+      }
+    }, [markBusy, reload]);
+    const refreshTag = useCallback(
+      (tag) => runAndReload(tag.id, `Update description of "${tag.name}" from StashDB`, { mode: "sync_tag", tag_id: String(tag.id) }),
+      [runAndReload]
+    );
+    const refreshAll = useCallback(
+      () => runAndReload("all", "Update tag descriptions from StashDB", { mode: "sync_all" }),
+      [runAndReload]
+    );
 
     const index = useMemo(() => (tags ? buildIndex(tags) : null), [tags]);
     const visible = useMemo(() => (index ? visibleForSearch(index, search) : null), [index, search]);
@@ -258,7 +342,7 @@
       body = h("div", { className: "text-muted" }, "Loading tags…");
     } else {
       const roots = index.roots.filter((r) => !visible || visible.has(r.id));
-      const ctx = { index, visible, expanded, toggle };
+      const ctx = { index, visible, expanded, toggle, busy, refreshTag };
       body = roots.length
         ? h("ul", { style: { listStyle: "none", margin: 0, padding: 0 } },
           roots.map((r) => h(TagNode, { key: r.id, tag: r, path: [], ctx })))
@@ -288,6 +372,13 @@
         disabled: !index || visible !== null,
         onClick: () => updateExpanded(new Set()),
       }, "Collapse all"),
+      h("button", {
+        type: "button",
+        className: "btn btn-secondary",
+        disabled: !index || busy.has("all"),
+        title: "Fetch the description of every tag linked to StashDB (runs as a task in Settings → Tasks)",
+        onClick: refreshAll,
+      }, busy.has("all") ? "Updating from StashDB…" : "Update descriptions from StashDB"),
       tags ? h("span", { className: "text-muted", style: { fontSize: "0.85em" } }, `${tags.length} tags`) : null
     );
 

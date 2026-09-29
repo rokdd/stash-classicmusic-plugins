@@ -7,8 +7,7 @@ and classical music recordings — but useful for any library.
 |---|---|
 | [Advanced File Operations](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
-| [Tag Tree](plugins/tag-tree/) | All your tags as a collapsible parent/child tree |
-| [StashDB Tag Descriptions](plugins/stashdb-tag-descriptions/) | Tag descriptions from StashDB, kept up to date |
+| [Tag Tree](plugins/tag-tree/) | All your tags as a collapsible parent/child tree, with descriptions from StashDB |
 
 They're independent of each other — install any of them.
 
@@ -47,12 +46,11 @@ This one runs ffmpeg on the server, so the machine Stash runs on needs:
   `python3`), set Settings → System → **Python executable path** to e.g.
   `/usr/bin/python3`.
 
-**StashDB Tag Descriptions** also runs on the server, but needs only
-Python 3 itself — no extra modules. It uses the StashDB endpoint and API
-key you've set up under Settings → Metadata Providers.
+**Tag Tree** also runs on the server for its StashDB descriptions, but
+needs only Python 3 itself — no extra modules. It uses the StashDB
+endpoint and API key you've set up under Settings → Metadata Providers.
 
-Marker Improvements and Tag Tree run only in the browser and need nothing
-extra.
+Marker Improvements runs only in the browser and needs nothing extra.
 
 ## Features
 
@@ -118,19 +116,13 @@ Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.
   marker counts**.
 - **Search** by name or alias, with the path to every match opened.
 - **Expand all / collapse all**, and the open branches are remembered.
-
-Details: [Tag Tree README](plugins/tag-tree/README.md)
-
-### StashDB Tag Descriptions
-
-- **Copies tag descriptions from StashDB** for every tag with a StashDB ID.
-- **New or newly linked tags** get their description right away.
-- **Refreshes all tags every few days** (7 by default, adjustable), or any
-  time from Settings → Tasks.
+- **Descriptions from StashDB** for every tag with a StashDB ID: right
+  away for new or newly linked tags, every few days (adjustable), or on
+  demand — a button for all tags and a ↻ per tag on the tree page.
 - **Keeps your own text**: only empty descriptions and ones it wrote
   itself are replaced, unless you turn on "Overwrite".
 
-Details: [StashDB Tag Descriptions README](plugins/stashdb-tag-descriptions/README.md)
+Details: [Tag Tree README](plugins/tag-tree/README.md)
 
 ## License
 

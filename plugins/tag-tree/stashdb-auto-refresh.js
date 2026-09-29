@@ -1,4 +1,4 @@
-// StashDB Tag Descriptions — automatic refresh
+// Tag Tree — automatic refresh of StashDB tag descriptions
 //
 // Stash has no scheduler for plugin tasks, so this starts the "Update tag
 // descriptions from StashDB" task itself: once per page load, if the last
@@ -11,7 +11,7 @@
   "use strict";
 
   // Must match the filename of this plugin's yml manifest (minus .yml).
-  const PLUGIN_ID = "stashdbTagDescriptions";
+  const PLUGIN_ID = "tagTree";
   const DEFAULT_REFRESH_DAYS = 7;
   // Wait a little after the page loads, so this doesn't compete with
   // Stash's own requests while the page is still building up.
@@ -56,6 +56,6 @@
   }
 
   setTimeout(() => {
-    refreshIfDue().catch((err) => console.warn("[StashDB Tag Descriptions] Automatic refresh failed:", err));
+    refreshIfDue().catch((err) => console.warn("[Tag Tree] Automatic StashDB refresh failed:", err));
   }, START_DELAY_MS);
 })();
