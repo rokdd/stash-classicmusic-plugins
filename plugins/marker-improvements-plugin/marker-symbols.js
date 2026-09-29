@@ -176,8 +176,10 @@
     return `${m}:${s}`;
   }
 
+  // The scene player's video — not just the first <video> on the page,
+  // which can be a preview (e.g. in the Markers tab) on some layouts.
   function findVideoEl() {
-    return document.querySelector("video");
+    return document.querySelector(".video-js video, video.vjs-tech") || document.querySelector("video");
   }
 
   // -- state / cleanup --------------------------------------------------
@@ -186,6 +188,11 @@
   // clearOverlay() can remove just those without touching Stash's own
   // marker-range elements themselves.
   let mountedIcons = [];
+  // The marker ranges on screen when bubbles were last mounted (see
+  // rangeSignature), and a counter of mounts — so the page watcher near the
+  // end can tell when the scrubber no longer matches the bubbles.
+  let lastMountSignature = null;
+  let mountGeneration = 0;
   let placementTimer = null;
   // {el, prop, original} for every inline overflow style unclipAncestors()
   // overrode, so clearOverlay() can put each one back exactly as found.
@@ -536,6 +543,12 @@
     }
   }
 
+  // Where every marker range on the page sits, as one string: changes when
+  // a range is added, removed or moved, not when anything else changes.
+  function rangeSignature() {
+    return findMarkerRangeElements(document).map((t) => tickLeftPct(t).toFixed(3)).sort().join(",");
+  }
+
   function findMarkerRangeElements(root) {
     return Array.from((root || document).querySelectorAll(MARKER_RANGE_SELECTOR));
   }
@@ -699,6 +712,8 @@
   // every marker from Stash (sorted by timestamp), index for index, and
   // mounts each marker's icon(s) into its matched element.
   function mountIconsOnMarkerRanges(video, markers) {
+    lastMountSignature = rangeSignature();
+    mountGeneration++;
     const root = video.closest(".video-js, .vjs-container") || document;
     const ticks = findMarkerRangeElements(root).sort((a, b) => tickLeftPct(a) - tickLeftPct(b));
     const sortedMarkers = markers.slice().sort((a, b) => a.seconds - b.seconds);
@@ -1354,9 +1369,24 @@
   // when the scrubber's marker ranges change (one added, removed or moved
   // to a new time), reload too. Compared by count and position, so our own
   // bubbles being mounted into those ranges doesn't count as a change.
-  let lastRangeSignature = "";
-  const rangeSignature = () =>
-    findMarkerRangeElements(document).map((t) => tickLeftPct(t).toFixed(3)).sort().join(",");
+  //
+  // It also catches everything else that leaves the scrubber without
+  // bubbles, by comparing what's on screen with the last time they were
+  // mounted (see mountIconsOnMarkerRanges):
+  //   - the ranges differ from then: added, removed, moved, or appearing
+  //     only now — e.g. on a phone, where the player often doesn't load
+  //     the video (and so draws no ranges) until you tap play, long after
+  //     the placement retries gave up;
+  //   - the ranges are the same, but Stash redrew them after an edit and
+  //     our bubbles went with the old ones.
+  // Each situation asks for one reload, so a state that doesn't settle
+  // can't keep reloading.
+  let lastReloadRequest = null;
+  function requestReload(reason) {
+    if (reason === lastReloadRequest) return;
+    lastReloadRequest = reason;
+    scheduleMarkerReload();
+  }
   // The player rewrites inline styles several times a second while
   // playing, so the check runs at most every 250ms however often this fires.
   let rangeCheckPending = false;
@@ -1365,13 +1395,14 @@
     rangeCheckPending = true;
     setTimeout(() => {
       rangeCheckPending = false;
+      if (!currentSceneId()) return;
       const signature = rangeSignature();
-      if (signature === lastRangeSignature) return;
-      const hadRanges = lastRangeSignature !== "";
-      lastRangeSignature = signature;
-      // The first ranges appearing on page load are already handled by
-      // the regular placement retries.
-      if (hadRanges && signature) scheduleMarkerReload();
+      if (!signature) return; // no ranges (yet): nothing to put bubbles on
+      if (signature !== lastMountSignature) {
+        requestReload(`ranges:${signature}`);
+      } else if (mountedIcons.some((el) => !el.isConnected)) {
+        requestReload(`lost:${mountGeneration}`);
+      }
     }, 250);
   }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
 

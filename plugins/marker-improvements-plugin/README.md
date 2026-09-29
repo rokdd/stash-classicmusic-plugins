@@ -155,6 +155,13 @@ disappearing or moving) in case a Stash version saves some other way.
 Only a change to a marker's time or count is caught by that backup, not
 a change to its tags.
 
+It also puts the bubbles back whenever the scrubber and the bubbles no
+longer match — when Stash redraws its marker ranges after an edit, or
+when the ranges only appear late. The latter is common on phones: mobile
+browsers usually don't load the video until you tap play, and Stash only
+draws the ranges once it knows the video's length, so the bubbles appear
+then.
+
 ## Where the symbols show up
 
 Directly inside Stash's own colored marker indicator for that marker —
