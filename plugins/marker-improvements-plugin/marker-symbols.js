@@ -1640,10 +1640,7 @@
     return panel.contains(el) || panel.contains(document.activeElement);
   }
 
-  function hoveredTagName(el) {
-    const label = el.querySelector('[class*="multi-value__label"]');
-    return ownText(label || el);
-  }
+
 
   // An element's text without the parent-tag hint this plugin adds to
   // dropdown options (see annotateTagOptions), so names still match.
@@ -1654,6 +1651,38 @@
       text += node.textContent;
     });
     return text.trim();
+  }
+
+  // The tag an element (a dropdown option, a picked tag, a badge) shows,
+  // found by name. Stash's dropdown options can show more than the bare
+  // name — an alias in brackets, extra labels — so this tries, in order:
+  // the whole text, then without a trailing "(…)", then each separate piece
+  // of text inside it. Lookups are cached, so trying again costs nothing.
+  async function findTagIn(el) {
+    const candidates = [];
+    const seen = new Set();
+    const add = (text) => {
+      const name = (text || "").trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        candidates.push(name);
+      }
+    };
+    const withoutBrackets = (text) => (text || "").replace(/\s*\([^()]*\)\s*$/, "");
+    const full = ownText(el);
+    add(full);
+    add(withoutBrackets(full));
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.parentElement && node.parentElement.closest(".marker-symbols-parents")) continue;
+      add(node.textContent);
+      add(withoutBrackets(node.textContent));
+    }
+    for (const name of candidates.slice(0, 6)) {
+      const tag = await lookupTagByName(name);
+      if (tag) return tag;
+    }
+    return null;
   }
 
   let hoverTarget = null;
@@ -1667,8 +1696,7 @@
 
   async function showTagBubble(target) {
     hoverTarget = target;
-    const name = hoveredTagName(target);
-    const tag = name ? await lookupTagByName(name) : null;
+    const tag = await findTagIn(target.querySelector('[class*="multi-value__label"]') || target);
     // The pointer may have moved on while the lookup ran.
     if (hoverTarget !== target || !target.isConnected) return;
     let bubble = tag && makeMarkerIcons({ primary_tag: tag, tags: [], seconds: 0 }, null, { preview: true });
@@ -1748,7 +1776,7 @@
     const old = option.querySelector(".marker-symbols-parents");
     if (old) old.remove();
 
-    const tag = await lookupTagByName(name);
+    const tag = await findTagIn(option);
     // The option may show another tag by now (React reuses option
     // elements while you type), in which case that one gets its own pass.
     if (!tag || !option.isConnected || ownText(option) !== name) return;
