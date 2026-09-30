@@ -16,6 +16,13 @@ fi
 rm -rf "$outdir"
 mkdir -p "$outdir"
 
+# Prints its argument as a double-quoted YAML string, so a description with
+# a colon, quote or # in it can't break index.yml.
+yamlQuote()
+{
+    printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+}
+
 buildPlugin() 
 {
     f=$1
@@ -45,9 +52,9 @@ buildPlugin()
 
     # write to spec index
     echo "- id: $plugin_id
-  name: $name
+  name: $(yamlQuote "$name")
   metadata:
-    description: $description
+    description: $(yamlQuote "$description")
   version: $version
   date: $updated
   path: $plugin_id.zip
