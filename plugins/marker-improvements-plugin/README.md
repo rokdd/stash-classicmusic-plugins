@@ -148,7 +148,9 @@ hierarchy before you pick it. Tags without a parent look as before.
 The scene's **Markers** tab shows its own marker list in place of
 Stash's:
 
-- **One row per marker**: its screenshot on the left, and on the right
+- **One row per marker**: its screenshot on the left — playing the
+  marker's preview while you hover it, if Stash has generated one (Tasks →
+  Generate → Marker previews) — and on the right
   its title, start – end and length, primary tag, other tags, and the tag
   images its bubble shows (with your custom styles). A marker without an
   end time runs until the next marker, the last one to the end of the

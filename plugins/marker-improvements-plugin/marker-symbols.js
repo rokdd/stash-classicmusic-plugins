@@ -101,6 +101,7 @@
             ${extra}
             title
             screenshot
+            preview
             primary_tag { id name image_path }
             tags { id name image_path }
           }
@@ -1088,17 +1089,21 @@
       "background:rgba(255,255,255,0.04);";
     row.addEventListener("click", () => seekTo(m));
 
-    // Left: the marker's screenshot.
+    // Left: the marker's screenshot, playing its preview while hovered.
+    const thumbBox = document.createElement("div");
+    thumbBox.style.cssText =
+      `position:relative;width:${THUMB_WIDTH_PX}px;aspect-ratio:16/9;flex:none;border-radius:3px;overflow:hidden;background:#000;`;
     const thumb = document.createElement("img");
     thumb.src = m.screenshot || "";
     thumb.alt = "";
     thumb.loading = "lazy";
-    thumb.style.cssText =
-      `width:${THUMB_WIDTH_PX}px;aspect-ratio:16/9;object-fit:cover;flex:none;border-radius:3px;background:#000;`;
+    thumb.style.cssText = "width:100%;height:100%;object-fit:cover;display:block;";
     thumb.addEventListener("error", () => {
       thumb.style.visibility = "hidden";
     });
-    row.appendChild(thumb);
+    thumbBox.appendChild(thumb);
+    addPreviewOnHover(thumbBox, m);
+    row.appendChild(thumbBox);
 
     // Right: all the details.
     const details = document.createElement("div");
@@ -1179,6 +1184,37 @@
 
     row.appendChild(details);
     return row;
+  }
+
+  // Marker ids whose preview video failed to load — not generated (Tasks →
+  // Generate → Marker previews), so the screenshot stays for them.
+  const previewsMissing = new Set();
+
+  // While the pointer is over `box`, plays the marker's preview video on top
+  // of its screenshot: muted and looping, like Stash's own marker wall.
+  function addPreviewOnHover(box, marker) {
+    if (!marker.preview) return;
+    let video = null;
+    const stop = () => {
+      if (video) video.remove();
+      video = null;
+    };
+    box.addEventListener("mouseenter", () => {
+      if (video || previewsMissing.has(marker.id)) return;
+      video = document.createElement("video");
+      video.src = marker.preview;
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;";
+      video.addEventListener("error", () => {
+        previewsMissing.add(marker.id);
+        stop();
+      });
+      box.appendChild(video);
+      video.play().catch(() => {}); // e.g. stopped by leaving before it started
+    });
+    box.addEventListener("mouseleave", stop);
   }
 
   function removeTimeline() {
