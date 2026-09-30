@@ -39,6 +39,9 @@ are unaffected.
   again when a new video loads.
 - **At the start of the marker's range**: each bubble sits with its left
   edge at where its marker begins, its tail pointing at that spot.
+- **Out of the way of the seek preview**: while you hover the seek bar
+  itself, the bubbles fade away so Stash's preview frame shows; moving up
+  off the bar brings them back.
 - **Never on top of each other**: when markers sit close together, their
   bubbles stack upwards in rows instead of overlapping. A raised bubble
   gets a thin line down to its marker. The rows are worked out again

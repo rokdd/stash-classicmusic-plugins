@@ -758,6 +758,7 @@
   const NOT_STARTED_CLASS = "marker-symbols-not-started";
   const CURRENT_CLASS = "marker-symbols-current";
   const CURRENT_COLOR = "#f5a623";
+  const SEEKING_CLASS = "marker-symbols-seeking";
 
   function ensureStyleSheet() {
     if (document.getElementById("marker-symbols-style")) return;
@@ -771,9 +772,38 @@
       `.marker-symbols-bubble.${CURRENT_CLASS} { outline: 3px solid ${CURRENT_COLOR}; outline-offset: 1px; }`,
       `.marker-symbols-row.${CURRENT_CLASS} { background: rgba(245, 166, 35, 0.16) !important; box-shadow: inset 0 0 0 2px ${CURRENT_COLOR}; }`,
       ".marker-symbols-now { display: none; }",
+      // Stash's seek preview (the frame shown while hovering the seek bar)
+      // sits right where the bubbles are: keep it on top of them, and fade
+      // the bubbles while the pointer is on the bar itself (see
+      // ensureSeekPreviewRoom).
+      ".vjs-vtt-thumbnail-display, .vjs-thumbnail-holder, .vjs-preview-thumbnail, .vjs-mouse-display { z-index: 100 !important; }",
+      `.${SEEKING_CLASS} .marker-symbols-bubble:not(:hover) { opacity: 0.08; transition: opacity 0.1s; }`,
       `.marker-symbols-row.${CURRENT_CLASS} .marker-symbols-now { display: inline-block; }`,
     ].join("\n");
     document.head.appendChild(style);
+  }
+
+  // While the pointer is on the seek bar itself — the thin bar, not the
+  // bubbles above it — the player gets SEEKING_CLASS, which fades the
+  // bubbles so Stash's seek preview isn't hidden behind them. Moving up off
+  // the bar brings them back, still clickable.
+  function ensureSeekPreviewRoom(video) {
+    const root = video.closest(".video-js") || video.parentElement;
+    if (!root || root.__markerSymbolsSeekRoom) return;
+    root.__markerSymbolsSeekRoom = true;
+    const SLACK_PX = 6; // a little above and below the bar counts too
+    const update = (e) => {
+      const bar = root.querySelector(".vjs-progress-holder");
+      let onBar = false;
+      if (bar && !(e.target.closest && e.target.closest(".marker-symbols-bubble"))) {
+        const r = bar.getBoundingClientRect();
+        onBar = e.clientX >= r.left && e.clientX <= r.right &&
+          e.clientY >= r.top - SLACK_PX && e.clientY <= r.bottom + SLACK_PX;
+      }
+      root.classList.toggle(SEEKING_CLASS, onBar);
+    };
+    root.addEventListener("mousemove", update);
+    root.addEventListener("mouseleave", () => root.classList.remove(SEEKING_CLASS));
   }
 
   function ensureStartTracking(video) {
@@ -923,6 +953,7 @@
     console.table(pairingLog);
 
     ensureStartTracking(video);
+    ensureSeekPreviewRoom(video);
     if (bubbleResizeObserver) mountedIcons.forEach((b) => bubbleResizeObserver.observe(b));
     scheduleBubbleLayout();
   }
