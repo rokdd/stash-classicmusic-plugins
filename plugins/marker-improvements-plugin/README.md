@@ -153,7 +153,8 @@ Stash's:
 - **Click a row** to jump to that marker.
 - **Editing opens in place**: a row's **Edit** (or clicking a marker on the
   scrubber) opens Stash's edit form right below that marker's row, like an
-  accordion. Save, Cancel or **Close** folds it away again.
+  accordion, and the sidebar scrolls there — the marker's row at the top,
+  the form below it. Save, Cancel or **Close** folds it away again.
 - The marker playing right now is highlighted as the video plays.
 - **Hide / Show** collapses the list; your browser remembers the choice.
 

@@ -1386,7 +1386,7 @@
     holder.appendChild(form);
     movedForm = { form, placeholder, holder, row };
     setRowOpen(row, true);
-    holder.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    scrollToTop(row);
   }
 
   // Asks for the form to open under `marker`'s row, if the timeline view
@@ -1394,7 +1394,16 @@
   function requestAccordion(marker) {
     restoreForm();
     const row = document.querySelector(`#${TIMELINE_ID} [data-marker-id="${CSS.escape(String(marker.id))}"]`);
-    accordionRequest = row ? { markerId: String(marker.id), at: Date.now() } : null;
+    // With a row: the form opens under it. Without: it opens in Stash's
+    // usual place, and the sidebar just scrolls to it.
+    accordionRequest = { markerId: row ? String(marker.id) : null, at: Date.now() };
+  }
+
+  // Scrolls the sidebar (and whatever else scrolls around it) so `el` sits
+  // at the top — after the browser has laid the form out, so the scroll
+  // lands where the form really is.
+  function scrollToTop(el) {
+    requestAnimationFrame(() => el.scrollIntoView({ block: "start", behavior: "smooth" }));
   }
 
   function syncAccordion() {
@@ -1410,10 +1419,12 @@
     }
     const panel = findMarkersPanel();
     const form = panel && findStashMarkerForm(panel);
-    const row = document.querySelector(`#${TIMELINE_ID} [data-marker-id="${CSS.escape(accordionRequest.markerId)}"]`);
-    if (!form || !row) return;
+    if (!form) return;
+    const { markerId } = accordionRequest;
+    const row = markerId && document.querySelector(`#${TIMELINE_ID} [data-marker-id="${CSS.escape(markerId)}"]`);
     accordionRequest = null;
-    moveFormUnder(form, row);
+    if (row) moveFormUnder(form, row); // scrolls the row to the top
+    else scrollToTop(form);
   }
 
   // The form's Save, Cancel and Delete: put the form back before Stash's own
