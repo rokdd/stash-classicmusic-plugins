@@ -155,7 +155,9 @@ Stash's:
   scrubber) opens Stash's edit form right below that marker's row, like an
   accordion, and the sidebar scrolls there — the marker's row at the top,
   the form below it. Save, Cancel or **Close** folds it away again.
-- The marker playing right now is highlighted, and **the list follows
+- **The marker playing right now is highlighted** in amber: a frame and a
+  **▶ Playing** badge on its row, and an outline on its bubble on the
+  scrubber (also while the Markers tab isn't open). **The list follows
   playback**: when a new marker starts, its row scrolls to the middle of
   the sidebar. It holds still while you edit, while the list is
   collapsed, for a few seconds after you scroll yourself, and on phones

@@ -354,6 +354,7 @@
 
     const bubble = document.createElement("div");
     bubble.className = "marker-symbols-bubble";
+    if (!preview) bubble.dataset.markerId = String(marker.id);
     const placement = preview
       ? ["position:relative", "display:inline-flex"]
       : [
@@ -748,12 +749,23 @@
   // so they're unaffected). It's set again when a new video loads.
 
   const NOT_STARTED_CLASS = "marker-symbols-not-started";
+  const CURRENT_CLASS = "marker-symbols-current";
+  const CURRENT_COLOR = "#f5a623";
 
   function ensureStyleSheet() {
     if (document.getElementById("marker-symbols-style")) return;
     const style = document.createElement("style");
     style.id = "marker-symbols-style";
-    style.textContent = `.${NOT_STARTED_CLASS} .marker-symbols-bubble { display: none !important; }`;
+    style.textContent = [
+      `.${NOT_STARTED_CLASS} .marker-symbols-bubble { display: none !important; }`,
+      // The marker playing right now (see updateTimelineProgress): an
+      // amber outline on its scrubber bubble, and an amber frame, tint and
+      // "Playing" badge on its row in the marker list.
+      `.marker-symbols-bubble.${CURRENT_CLASS} { outline: 3px solid ${CURRENT_COLOR}; outline-offset: 1px; }`,
+      `.marker-symbols-row.${CURRENT_CLASS} { background: rgba(245, 166, 35, 0.16) !important; box-shadow: inset 0 0 0 2px ${CURRENT_COLOR}; }`,
+      ".marker-symbols-now { display: none; }",
+      `.marker-symbols-row.${CURRENT_CLASS} .marker-symbols-now { display: inline-block; }`,
+    ].join("\n");
     document.head.appendChild(style);
   }
 
@@ -1062,6 +1074,7 @@
     const row = document.createElement("div");
     row.dataset.markerIndex = String(m.index);
     row.dataset.markerId = String(m.id);
+    row.className = "marker-symbols-row";
     row.style.cssText =
       "display:flex;gap:12px;padding:8px;border-radius:4px;cursor:pointer;" +
       `border-left:4px solid ${colorFor(m.primary_tag && m.primary_tag.name)};margin-bottom:6px;` +
@@ -1090,6 +1103,11 @@
     title.textContent = name;
     title.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
     head.appendChild(title);
+    const now = document.createElement("span");
+    now.className = "badge marker-symbols-now";
+    now.textContent = "▶ Playing";
+    now.style.cssText = `background:${CURRENT_COLOR};color:#000;flex:none;`;
+    head.appendChild(now);
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "btn btn-link btn-sm marker-symbols-edit";
@@ -1283,14 +1301,19 @@
   // Highlights the marker playing right now, and scrolls the list to it
   // when a new one starts (see followRow).
   function updateTimelineProgress() {
-    const view = document.getElementById(TIMELINE_ID);
     const video = findVideoEl();
-    if (!view || !video) return;
+    if (!video) return;
     const t = video.currentTime;
     const playingMarkers = timelineMarkers.filter((m) => t >= m.start && t < m.end);
-    const playing = new Set(playingMarkers.map((m) => String(m.index)));
-    view.querySelectorAll("[data-marker-index]").forEach((row) => {
-      row.style.background = playing.has(row.dataset.markerIndex) ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)";
+    const playingIds = new Set(playingMarkers.map((m) => String(m.id)));
+    // The scrubber bubbles — whether or not the Markers tab is open.
+    document.querySelectorAll(".marker-symbols-bubble[data-marker-id]").forEach((bubble) => {
+      bubble.classList.toggle(CURRENT_CLASS, playingIds.has(bubble.dataset.markerId));
+    });
+    const view = document.getElementById(TIMELINE_ID);
+    if (!view) return;
+    view.querySelectorAll(".marker-symbols-row").forEach((row) => {
+      row.classList.toggle(CURRENT_CLASS, playingIds.has(row.dataset.markerId));
     });
     // With overlapping markers, follow the one that started last.
     const current = playingMarkers[playingMarkers.length - 1];
@@ -1346,14 +1369,20 @@
     video.addEventListener("timeupdate", updateTimelineProgress);
     // The scene's length is only known once the video has loaded, and the
     // last marker's end (and the bar's scale) depend on it.
-    video.addEventListener("loadedmetadata", renderTimeline);
+    video.addEventListener("loadedmetadata", () => {
+      timelineMarkers = prepareTimeline(timelineMarkers);
+      renderTimeline();
+    });
   }
 
   // The scene the marker list belongs to.
   let timelineSceneId = null;
 
   function showTimeline(markers) {
-    timelineMarkers = markers;
+    // Start and end right away, so the playing marker's bubble can be
+    // highlighted even while the Markers tab isn't open.
+    timelineMarkers = prepareTimeline(markers);
+    ensureStyleSheet();
     timelineSceneId = currentSceneId();
     const video = findVideoEl();
     if (video) ensureTimelineTracking(video);
