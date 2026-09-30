@@ -1,6 +1,6 @@
 name: Tag Tree
 description: "Shows all your tags as a collapsible tree of parents and children, with each tag's image, description, scene and marker counts, and a search. Also copies tag descriptions from StashDB for tags with a StashDB ID — right away for new or newly linked tags, every few days, or on demand — keeping descriptions you wrote yourself."
-version: 0.0.3
+version: 0.0.4
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-tree
 exec:
   - python

@@ -9,11 +9,17 @@ Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/ta
 
 ## Opening it
 
-A **sitemap icon** button appears in Stash's top navigation bar, next to
-its own utility buttons. Click it to open the tree, or go straight to
-`/plugin/tag-tree` on your Stash address.
+Stash's own **Tags** page gets a **Cards | Tree** switch above its list:
+**Tree** shows the tag tree in place of the cards, **Cards** brings back
+Stash's usual view. Your choice is remembered in the browser. Other tag
+lists — like the sub-tags on a tag's page — stay as they are.
 
-Needs Stash v0.25 or newer (the plugin API that lets a plugin add a page).
+The **sitemap icon** button in Stash's top navigation bar opens the Tags
+page straight in tree view. The older address `/plugin/tag-tree` still
+shows the tree as a page of its own.
+
+Needs Stash v0.25 or newer (the plugin API that lets a plugin extend
+Stash's pages).
 
 ## What it shows
 

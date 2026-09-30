@@ -274,7 +274,9 @@
     );
   }
 
-  function TagTreePage() {
+  // The tree with its toolbar. `embedded`: inside Stash's Tags page (see
+  // TagsPageWithTree), so without the page title and padding of its own.
+  function TagTreeView({ embedded }) {
     const [tags, setTags] = useState(null);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState("");
@@ -382,6 +384,7 @@
       tags ? h("span", { className: "text-muted", style: { fontSize: "0.85em" } }, `${tags.length} tags`) : null
     );
 
+    if (embedded) return h("div", null, toolbar, body);
     return h(
       "div",
       { className: "container-fluid", style: { padding: "16px 24px" } },
@@ -391,10 +394,92 @@
     );
   }
 
+  // The tree as a page of its own, at /plugin/tag-tree — kept so older
+  // links and bookmarks still work. The usual place is the Tags page.
+  function TagTreePage() {
+    return h(TagTreeView, { embedded: false });
+  }
+
+  // -- the tree as a view on Stash's own Tags page -----------------------------
+  //
+  // Stash's Tags page gets a Cards | Tree switch above its list. Tree shows
+  // TagTreeView in place of the cards; Cards is Stash's usual list. The
+  // choice is remembered in this browser. Only on the Tags page itself —
+  // other tag lists, like a tag's sub-tags, stay as they are.
+
+  const VIEW_KEY = "tagTree.tagsPageView";
+  const SHOW_TREE_EVENT = "tagTree:showTree";
+
+  function readView() {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "tree" ? "tree" : "cards";
+    } catch (e) {
+      return "cards";
+    }
+  }
+
+  function writeView(view) {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch (e) {
+      // Not remembered this time — nothing else depends on it.
+    }
+  }
+
+  function isMainTagsPage() {
+    return /\/tags\/?$/.test(window.location.pathname);
+  }
+
+  function TagsPageWithTree({ original }) {
+    const [view, setView] = useState(readView);
+    const choose = useCallback((next) => {
+      writeView(next);
+      setView(next);
+    }, []);
+    // The navbar button asks for the tree while this page may already be open.
+    useEffect(() => {
+      const show = () => choose("tree");
+      window.addEventListener(SHOW_TREE_EVENT, show);
+      return () => window.removeEventListener(SHOW_TREE_EVENT, show);
+    }, [choose]);
+
+    const option = (value, label) =>
+      h("button", {
+        type: "button",
+        className: `btn btn-sm ${view === value ? "btn-primary" : "btn-secondary"}`,
+        "aria-pressed": view === value,
+        onClick: () => choose(value),
+      }, label);
+    const switcher = h(
+      "div",
+      { style: { display: "flex", justifyContent: "flex-end", padding: "8px 15px 0" } },
+      h("div", { className: "btn-group", role: "group", "aria-label": "Tags view" },
+        option("cards", "Cards"),
+        option("tree", "Tree"))
+    );
+
+    return h(
+      React.Fragment,
+      null,
+      switcher,
+      view === "tree"
+        ? h("div", { className: "container-fluid", style: { padding: "8px 15px" } }, h(TagTreeView, { embedded: true }))
+        : original
+    );
+  }
+
+  if (api.patch && api.patch.after) {
+    // `after` gets the original render's arguments, then its result, last.
+    api.patch.after("TagList", function (...args) {
+      const result = args[args.length - 1];
+      return isMainTagsPage() ? h(TagsPageWithTree, { original: result }) : result;
+    });
+  }
+
   api.register.route(ROUTE, TagTreePage);
 
   // A button in the top navigation bar, next to Stash's own utility
-  // buttons, that opens the tree.
+  // buttons, that opens the Tags page with the tree view.
   if (api.patch && api.patch.before) {
     api.patch.before("MainNavBar.UtilityItems", function (props) {
       const Icon = api.components && api.components.Icon;
@@ -402,7 +487,15 @@
       const content = Icon && FA.faSitemap ? h(Icon, { icon: FA.faSitemap }) : "Tags";
       const link = h(
         NavLink,
-        { className: "nav-utility", to: ROUTE, title: "Tag tree" },
+        {
+          className: "nav-utility",
+          to: "/tags",
+          title: "Tag tree",
+          onClick: () => {
+            writeView("tree");
+            window.dispatchEvent(new Event(SHOW_TREE_EVENT));
+          },
+        },
         Button
           ? h(Button, { className: "minimal d-flex align-items-center h-100", title: "Tag tree" }, content)
           : content
