@@ -16,6 +16,9 @@ One folder per plugin; each is independent of the others.
 - **[`yt-dlp-downloader/`](yt-dlp-downloader/)** — download videos and
   playlists with yt-dlp into a library folder, with the scenes filled in
   from the video's info. Needs yt-dlp and Python 3 on the server.
+- **[`scrape-tag-merge/`](scrape-tag-merge/)** — scraping a scene from its
+  Edit tab adds the scraped tags to the existing ones instead of replacing
+  them. Browser only, nothing to install.
 
 Installing, updating and the full feature list are in the
 [main README](../README.md). Each folder's own README has the details.

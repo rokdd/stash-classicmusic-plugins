@@ -9,6 +9,7 @@ and classical music recordings — but useful for any library.
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
 | [Tag Tree](plugins/tag-tree/) | All your tags as a collapsible parent/child tree, with descriptions from StashDB |
 | [yt-dlp Downloader](plugins/yt-dlp-downloader/) | Download videos and playlists into your library, with title, date, description and cover filled in |
+| [Scrape Tag Merge](plugins/scrape-tag-merge/) | Scraping a scene adds tags to the existing ones instead of replacing them |
 
 They're independent of each other — install any of them.
 
@@ -143,6 +144,17 @@ Details: [Tag Tree README](plugins/tag-tree/README.md)
 - Thumbnails and video info never land in your library.
 
 Details: [yt-dlp Downloader README](plugins/yt-dlp-downloader/README.md)
+
+### Scrape Tag Merge
+
+- **Scrape with…** on a scene's Edit tab (a scraper or StashDB) offers the
+  scene's **existing tags plus the scraped ones**, instead of replacing
+  them.
+- Tags can still be removed in the dialog before applying; unmatched
+  scraped tags keep their create/link buttons.
+- A setting switches back to Stash's usual replace behaviour.
+
+Details: [Scrape Tag Merge README](plugins/scrape-tag-merge/README.md)
 
 ## License
 
