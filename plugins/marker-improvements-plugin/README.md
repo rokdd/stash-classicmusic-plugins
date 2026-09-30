@@ -32,6 +32,16 @@ all — there's no generic placeholder pin. If one particular tag's image
 URL fails to load, just that one icon is dropped — its other tag icons
 are unaffected.
 
+## When bubbles show, and where
+
+- **Only once the video has started**: before you first press play, the
+  scrubber shows no bubbles. They appear when playback starts, and hide
+  again when a new video loads.
+- **Never on top of each other**: when markers sit close together, their
+  bubbles stack upwards in rows instead of overlapping. A raised bubble
+  gets a thin line down to its marker. The rows are worked out again
+  whenever sizes change — images loading, the player resizing.
+
 ## Custom styles per tag
 
 Settings → Plugins → Marker Improvements → **Custom styles per tag**

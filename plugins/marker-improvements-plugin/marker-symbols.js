@@ -224,6 +224,9 @@
   let tickPairs = [];
 
   function clearOverlay() {
+    // (Only ever called after this script has finished loading, so the
+    // observer, defined further down, exists by then.)
+    if (bubbleResizeObserver) bubbleResizeObserver.disconnect();
     mountedIcons.forEach((el) => el.remove());
     mountedIcons = [];
     tickPairs = [];
@@ -738,6 +741,114 @@
     }, true);
   }
 
+  // -- bubbles only once the video has started ----------------------------------
+  //
+  // Before the video has played at all, the scrubber shows no bubbles. A
+  // class on the player marks that state and a style rule hides the bubbles
+  // inside it (the hover bubbles in the Markers tab aren't inside the player,
+  // so they're unaffected). It's set again when a new video loads.
+
+  const NOT_STARTED_CLASS = "marker-symbols-not-started";
+
+  function ensureStyleSheet() {
+    if (document.getElementById("marker-symbols-style")) return;
+    const style = document.createElement("style");
+    style.id = "marker-symbols-style";
+    style.textContent = `.${NOT_STARTED_CLASS} .marker-symbols-bubble { display: none !important; }`;
+    document.head.appendChild(style);
+  }
+
+  function ensureStartTracking(video) {
+    ensureStyleSheet();
+    const root = video.closest(".video-js") || video.parentElement;
+    const update = () => {
+      // `played` is empty until the video has actually played, and is
+      // emptied again when a new video loads.
+      const started = video.played && video.played.length > 0;
+      root.classList.toggle(NOT_STARTED_CLASS, !started);
+      if (started) scheduleBubbleLayout();
+    };
+    update();
+    if (video.__markerSymbolsStartBound) return;
+    video.__markerSymbolsStartBound = true;
+    ["playing", "emptied", "loadstart"].forEach((type) => video.addEventListener(type, update));
+  }
+
+  // -- bubbles don't overlap -------------------------------------------------------
+  //
+  // Bubbles of markers close together would sit on top of each other. This
+  // stacks them in rows instead: left to right, each bubble goes into the
+  // lowest row where it doesn't touch the bubble before it, and each row sits
+  // above the tallest bubble of the row below. A raised bubble gets a thin
+  // line down to its marker, so it's still clear which marker it belongs to.
+  //
+  // Sizes change as images load, when the player is resized, and when the
+  // ranges (and so the bubbles) are shown or hidden, so a ResizeObserver
+  // re-runs the layout whenever any bubble changes size.
+
+  const BUBBLE_GAP_PX = 4;
+  let layoutPending = false;
+  const bubbleResizeObserver =
+    typeof ResizeObserver === "function" ? new ResizeObserver(() => scheduleBubbleLayout()) : null;
+
+  function scheduleBubbleLayout() {
+    if (layoutPending) return;
+    layoutPending = true;
+    requestAnimationFrame(() => {
+      layoutPending = false;
+      layoutBubbles();
+    });
+  }
+
+  function setBubbleLift(bubble, lift) {
+    bubble.style.marginBottom = `${6 + lift}px`;
+    let line = bubble.querySelector(".marker-symbols-connector");
+    if (!lift) {
+      if (line) line.remove();
+      return;
+    }
+    if (!line) {
+      line = document.createElement("div");
+      line.className = "marker-symbols-connector";
+      line.style.cssText =
+        "position:absolute;left:50%;top:100%;width:2px;margin-left:-1px;background:inherit;pointer-events:none;";
+      bubble.appendChild(line);
+    }
+    line.style.height = `${lift + 6}px`;
+  }
+
+  function layoutBubbles() {
+    // Only bubbles on screen right now: a hidden one has no size.
+    const items = mountedIcons
+      .filter((b) => b.isConnected && b.offsetWidth)
+      .map((b) => {
+        const tick = b.parentElement.getBoundingClientRect();
+        const center = tick.left + tick.width / 2; // bubbles are centered on their marker
+        return { b, left: center - b.offsetWidth / 2, right: center + b.offsetWidth / 2, height: b.offsetHeight };
+      })
+      .sort((x, y) => x.left - y.left);
+
+    const rows = []; // per row: right edge of its last bubble, tallest bubble
+    items.forEach((item) => {
+      let row = rows.findIndex((r) => r.right + BUBBLE_GAP_PX <= item.left);
+      if (row === -1) {
+        row = rows.length;
+        rows.push({ right: -Infinity, height: 0 });
+      }
+      rows[row].right = item.right;
+      rows[row].height = Math.max(rows[row].height, item.height);
+      item.row = row;
+    });
+
+    const lifts = [];
+    let lift = 0;
+    rows.forEach((r, i) => {
+      lifts[i] = lift;
+      lift += r.height + BUBBLE_GAP_PX;
+    });
+    items.forEach((item) => setBubbleLift(item.b, lifts[item.row]));
+  }
+
   // Pairs every .vjs-marker-range found (sorted left-to-right) against
   // every marker from Stash (sorted by timestamp), index for index, and
   // mounts each marker's icon(s) into its matched element.
@@ -791,6 +902,10 @@
       "marker has no tag with a real custom image). Pairing detail:"
     );
     console.table(pairingLog);
+
+    ensureStartTracking(video);
+    if (bubbleResizeObserver) mountedIcons.forEach((b) => bubbleResizeObserver.observe(b));
+    scheduleBubbleLayout();
   }
 
   async function placeSymbols(sceneId, attempt) {
