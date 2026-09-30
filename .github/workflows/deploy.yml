@@ -4,6 +4,8 @@ on:
   push:
       paths:
       - 'plugins/**'
+      - 'build_site.sh'
+      - '.github/workflows/**'
       branches:
       - main
   # Allows you to run this workflow manually from the Actions tab
