@@ -14,9 +14,11 @@ Stash's own **Tags** page gets a **Cards | Tree** switch above its list:
 Stash's usual view. Your choice is remembered in the browser. Other tag
 lists — like the sub-tags on a tag's page — stay as they are.
 
-The **sitemap icon** button in Stash's top navigation bar opens the Tags
-page straight in tree view. The older address `/plugin/tag-tree` still
-shows the tree as a page of its own.
+Optionally, a **sitemap icon** button in Stash's top navigation bar opens
+the Tags page straight in tree view — turn on Settings → Plugins → Tag Tree
+→ **Show a tag tree button in the top bar** (off by default; reload the
+page after changing it). The older address `/plugin/tag-tree` still shows
+the tree as a page of its own.
 
 Needs Stash v0.25 or newer (the plugin API that lets a plugin extend
 Stash's pages).
@@ -78,6 +80,7 @@ Settings → Plugins → Tag Tree:
 
 | Setting | Effect |
 |---|---|
+| Show a tag tree button in the top bar | Adds the navigation bar button that opens the tree. Off by default. |
 | Refresh every … days | How often all tags are refreshed automatically. Empty = every 7 days; 0 = off (the task still works). |
 | Overwrite descriptions you wrote yourself | Replace every description with StashDB's, not just empty ones and the plugin's own. |
 

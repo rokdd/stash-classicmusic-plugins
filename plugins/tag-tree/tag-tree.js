@@ -479,28 +479,54 @@
   api.register.route(ROUTE, TagTreePage);
 
   // A button in the top navigation bar, next to Stash's own utility
-  // buttons, that opens the Tags page with the tree view.
+  // buttons, that opens the Tags page with the tree view — only with the
+  // "Show a tag tree button in the top bar" setting on.
+  //
+  // The navigation bar is drawn before the setting has loaded, so the
+  // button is a small component that draws nothing until it knows the
+  // setting is on, and redraws itself once the setting arrives.
+  let navbarButtonWanted = false;
+  const navbarListeners = new Set();
+  callGQL("query { configuration { plugins } }")
+    .then((data) => {
+      const settings = (data.configuration.plugins || {})[PLUGIN_ID] || {};
+      navbarButtonWanted = settings.showNavbarButton === true;
+      navbarListeners.forEach((redraw) => redraw());
+    })
+    .catch((err) => console.warn("[Tag Tree] Couldn't read plugin settings:", err));
+
+  function NavbarTreeButton() {
+    const [, redraw] = useState(0);
+    useEffect(() => {
+      const listener = () => redraw((n) => n + 1);
+      navbarListeners.add(listener);
+      return () => navbarListeners.delete(listener);
+    }, []);
+    if (!navbarButtonWanted) return null;
+
+    const Icon = api.components && api.components.Icon;
+    const Button = api.libraries.Bootstrap && api.libraries.Bootstrap.Button;
+    const content = Icon && FA.faSitemap ? h(Icon, { icon: FA.faSitemap }) : "Tags";
+    return h(
+      NavLink,
+      {
+        className: "nav-utility",
+        to: "/tags",
+        title: "Tag tree",
+        onClick: () => {
+          writeView("tree");
+          window.dispatchEvent(new Event(SHOW_TREE_EVENT));
+        },
+      },
+      Button
+        ? h(Button, { className: "minimal d-flex align-items-center h-100", title: "Tag tree" }, content)
+        : content
+    );
+  }
+
   if (api.patch && api.patch.before) {
     api.patch.before("MainNavBar.UtilityItems", function (props) {
-      const Icon = api.components && api.components.Icon;
-      const Button = api.libraries.Bootstrap && api.libraries.Bootstrap.Button;
-      const content = Icon && FA.faSitemap ? h(Icon, { icon: FA.faSitemap }) : "Tags";
-      const link = h(
-        NavLink,
-        {
-          className: "nav-utility",
-          to: "/tags",
-          title: "Tag tree",
-          onClick: () => {
-            writeView("tree");
-            window.dispatchEvent(new Event(SHOW_TREE_EVENT));
-          },
-        },
-        Button
-          ? h(Button, { className: "minimal d-flex align-items-center h-100", title: "Tag tree" }, content)
-          : content
-      );
-      return [{ ...props, children: h(React.Fragment, null, props.children, link) }];
+      return [{ ...props, children: h(React.Fragment, null, props.children, h(NavbarTreeButton)) }];
     });
   }
 })();

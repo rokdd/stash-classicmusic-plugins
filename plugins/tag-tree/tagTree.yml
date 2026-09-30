@@ -1,6 +1,6 @@
 name: Tag Tree
 description: "Shows all your tags as a collapsible tree of parents and children, with each tag's image, description, scene and marker counts, and a search. Also copies tag descriptions from StashDB for tags with a StashDB ID — right away for new or newly linked tags, every few days, or on demand — keeping descriptions you wrote yourself."
-version: 0.0.4
+version: 0.0.5
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-tree
 exec:
   - python
@@ -24,6 +24,10 @@ tasks:
     defaultArgs:
       mode: sync_all
 settings:
+  showNavbarButton:
+    displayName: Show a tag tree button in the top bar
+    description: "Adds a button to Stash's top navigation bar that opens the Tags page in tree view. Off: the tree is still there as the Tree view on the Tags page."
+    type: BOOLEAN
   refreshDays:
     displayName: Refresh every … days
     description: "How often all tag descriptions are fetched again automatically, while Stash is open in a browser. Leave empty for every 7 days; 0 switches the automatic refresh off (the button on the tag tree page and the task in Settings → Tasks still work)."

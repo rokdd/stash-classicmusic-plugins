@@ -118,7 +118,7 @@ Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.
 ### Tag Tree
 
 - **All tags as a tree** of parents and sub-tags, as a **Tree** view on
-  Stash's own Tags page (next to the usual cards), or straight from a
+  Stash's own Tags page (next to the usual cards) — optionally also from a
   button in the top navigation bar.
 - Each tag with its **image**, a **link** to its page, and its **scene and
   marker counts**.
