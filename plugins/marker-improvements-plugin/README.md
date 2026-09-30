@@ -130,33 +130,33 @@ or `Solo (Piano, Violin)` for a tag with several parents. That tells
 apart tags with similar names and shows where a tag sits in your
 hierarchy before you pick it. Tags without a parent look as before.
 
-## Timeline view in the Markers tab
+## Marker list in the Markers tab
 
-The scene's **Markers** tab gets a timeline view above Stash's own marker
-list:
+The scene's **Markers** tab shows its own marker list in place of
+Stash's:
 
-- **Timeline bar** — the whole scene, with every marker drawn from its
-  start to its end (a marker without an end time runs until the next
-  marker, the last one to the end of the scene). Overlapping markers get
-  their own lane; markers with the same primary tag share a color. A line
-  shows where playback is. Click a segment to jump there.
-- **Marker list** — one row per marker: its screenshot on the left, and on
-  the right its title, start – end and length, primary tag, other tags,
-  and the tag images its bubble shows (with your custom styles). Click a
-  row to jump there; **Edit** opens Stash's edit form for that marker.
+- **One row per marker**: its screenshot on the left, and on the right
+  its title, start – end and length, primary tag, other tags, and the tag
+  images its bubble shows (with your custom styles). A marker without an
+  end time runs until the next marker, the last one to the end of the
+  scene. Markers with the same primary tag share a color stripe.
+- **Click a row** to jump to that marker.
 - **Editing opens in place**: a row's **Edit** (or clicking a marker on the
   scrubber) opens Stash's edit form right below that marker's row, like an
   accordion. Save, Cancel or **Close** folds it away again.
 - The marker playing right now is highlighted as the video plays.
-- **Hide / Show** collapses the view; your browser remembers the choice.
+- **Hide / Show** collapses the list; your browser remembers the choice.
+
+Stash's own marker list is hidden — only the list itself: its **Create
+Marker** button and its edit form stay. Turn on Settings → Plugins →
+Marker Improvements → **Also show Stash's own marker list** to see both.
 
 Marker end times need Stash v0.27 or newer; on older versions every
 marker runs until the next one.
 
 The edit form is Stash's own, moved into place: the plugin leaves a
 placeholder where Stash put it and moves it back the moment you save,
-cancel or delete, before Stash handles that click. Editing a marker from
-Stash's own list below still opens the form in Stash's usual place.
+cancel or delete, before Stash handles that click.
 
 ## Staying up to date
 

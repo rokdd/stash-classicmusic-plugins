@@ -213,6 +213,8 @@
   // Whether clicking a marker's range or icon opens Stash's marker editor
   // (the "Click on a marker opens the edit marker dialog" setting).
   let editOnClick = true;
+  // The "Also show Stash's own marker list" setting.
+  let showStashMarkerList = false;
   // With the "Custom styles also match parent tags" setting on: tag id →
   // lowercased names of every tag above it in the hierarchy (parents,
   // their parents, …). Empty with the setting off.
@@ -808,6 +810,7 @@
     tagStyles = parseTagStyles(settings.tagStyles || "");
     bubbleStyles = parseTagStyles(settings.bubbleStyles || "");
     editOnClick = settings.editMarkerOnClick !== false;
+    showStashMarkerList = settings.showStashMarkerList === true;
     tagAncestorNames = new Map();
     if (settings.styleParentTags && (tagStyles.size || bubbleStyles.size)) {
       try {
@@ -859,18 +862,18 @@
     placeSymbols(sceneId, 0);
   }
 
-  // -- marker timeline view in the Markers tab ---------------------------------
+  // -- marker list view in the Markers tab -------------------------------------
   //
-  // Above Stash's own marker list in the scene's Markers tab: a timeline bar
-  // with every marker drawn from its start to its end, and a list with one
-  // row per marker — its screenshot on the left, all its details on the
-  // right. Clicking a segment or row jumps to that marker; the row's Edit
-  // button opens Stash's own edit form (see openMarkerEditor). The marker
-  // playing right now is highlighted, following playback.
+  // At the top of the scene's Markers tab: a list with one row per marker —
+  // its screenshot on the left, all its details on the right. Clicking a
+  // row jumps to that marker; the row's Edit button opens Stash's own edit
+  // form (see openMarkerEditor). The marker playing right now is
+  // highlighted, following playback. Stash's own marker list below it is
+  // hidden (see hideStashMarkerList), unless the "Also show Stash's own
+  // marker list" setting is on.
 
   const TIMELINE_ID = "marker-symbols-timeline";
   const TIMELINE_COLLAPSED_KEY = "markerImprovements.timelineCollapsed";
-  const LANE_HEIGHT_PX = 22;
   const THUMB_WIDTH_PX = 144;
 
   // Markers of the scene on screen, sorted by start, each with `start`,
@@ -930,61 +933,6 @@
   function seekTo(marker) {
     const video = findVideoEl();
     if (video) video.currentTime = marker.start;
-  }
-
-  function buildTimelineBar(markers, duration) {
-    // Lanes: each marker goes into the first lane where it doesn't overlap
-    // the one before it.
-    const laneEnds = [];
-    const lanes = markers.map((m) => {
-      let lane = laneEnds.findIndex((end) => end <= m.start);
-      if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(0);
-      }
-      laneEnds[lane] = Math.max(m.end, m.start + duration * 0.005);
-      return lane;
-    });
-
-    const bar = document.createElement("div");
-    bar.style.cssText =
-      `position:relative;height:${laneEnds.length * LANE_HEIGHT_PX + 4}px;margin-bottom:12px;` +
-      "background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;";
-
-    markers.forEach((m, i) => {
-      const name = m.title || (m.primary_tag && m.primary_tag.name) || "marker";
-      const seg = document.createElement("div");
-      seg.dataset.markerIndex = String(m.index);
-      seg.title = `${formatDuration(m.start)}–${formatDuration(m.end)} ${name}`;
-      seg.style.cssText = [
-        "position:absolute",
-        `left:${(m.start / duration) * 100}%`,
-        `width:max(3px, ${((m.end - m.start) / duration) * 100}%)`,
-        `top:${2 + lanes[i] * LANE_HEIGHT_PX}px`,
-        `height:${LANE_HEIGHT_PX - 3}px`,
-        `background:${colorFor(m.primary_tag && m.primary_tag.name)}`,
-        "border-radius:2px",
-        "box-sizing:border-box",
-        "border:1px solid rgba(0,0,0,0.35)",
-        "color:#fff",
-        "font-size:11px",
-        `line-height:${LANE_HEIGHT_PX - 5}px`,
-        "padding:0 4px",
-        "white-space:nowrap",
-        "overflow:hidden",
-        "text-overflow:ellipsis",
-        "cursor:pointer",
-      ].join(";");
-      seg.textContent = name;
-      seg.addEventListener("click", () => seekTo(m));
-      bar.appendChild(seg);
-    });
-
-    const playhead = document.createElement("div");
-    playhead.className = "marker-symbols-playhead";
-    playhead.style.cssText = "position:absolute;top:0;bottom:0;width:2px;background:#fff;pointer-events:none;left:0;";
-    bar.appendChild(playhead);
-    return bar;
   }
 
   function buildMarkerRow(m) {
@@ -1103,8 +1051,6 @@
       return;
     }
     timelineMarkers = prepareTimeline(timelineMarkers);
-    const duration =
-      sceneDuration() || Math.max(...timelineMarkers.map((m) => m.end), timelineMarkers[timelineMarkers.length - 1].start + 1);
 
     removeTimeline();
     const view = document.createElement("div");
@@ -1114,7 +1060,7 @@
     const header = document.createElement("div");
     header.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;";
     const heading = document.createElement("strong");
-    heading.textContent = `Timeline · ${timelineMarkers.length} marker${timelineMarkers.length === 1 ? "" : "s"}`;
+    heading.textContent = `${timelineMarkers.length} marker${timelineMarkers.length === 1 ? "" : "s"}`;
     header.appendChild(heading);
     const toggle = document.createElement("button");
     toggle.type = "button";
@@ -1124,7 +1070,6 @@
     view.appendChild(header);
 
     const body = document.createElement("div");
-    body.appendChild(buildTimelineBar(timelineMarkers, duration));
     timelineMarkers.forEach((m) => body.appendChild(buildMarkerRow(m)));
     view.appendChild(body);
 
@@ -1141,25 +1086,44 @@
 
     panel.insertBefore(view, panel.firstChild);
     updateTimelineProgress();
+    hideStashMarkerList(panel);
   }
 
-  // Moves the playhead and highlights the marker playing right now.
+  // Hides Stash's own marker list in the Markers tab, which this view
+  // replaces. Only the list: the "Create Marker" button and Stash's edit
+  // form stay. Nothing is removed — its rows and their Edit buttons stay in
+  // the page, hidden, because openMarkerEditor presses those for us.
+  //
+  // Stash doesn't label the list, so this goes by content: a part of the
+  // tab that shows marker times (like "1:23") is list; the "Create Marker"
+  // button bar has none. A part that holds something to keep as well as
+  // times — the form, or a regular button like "Create Marker" (the list's
+  // own buttons are link-style) — is looked into, so just the list inside
+  // it is hidden.
+  function hideStashMarkerList(container) {
+    if (showStashMarkerList) return;
+    for (const child of Array.from(container.children)) {
+      if (child.id === TIMELINE_ID || child.dataset.markerSymbolsHidden) continue;
+      if (child.tagName === "FORM" || child.matches("button.btn-primary")) continue;
+      if (!/\d+:\d{2}/.test(child.textContent)) continue;
+      if (child.querySelector("form, button.btn-primary")) {
+        hideStashMarkerList(child);
+        continue;
+      }
+      child.style.display = "none";
+      child.dataset.markerSymbolsHidden = "1";
+    }
+  }
+
+  // Highlights the marker playing right now.
   function updateTimelineProgress() {
     const view = document.getElementById(TIMELINE_ID);
     const video = findVideoEl();
     if (!view || !video) return;
     const t = video.currentTime;
-    const duration = sceneDuration();
-    const playhead = view.querySelector(".marker-symbols-playhead");
-    if (playhead && duration) playhead.style.left = `calc(${(t / duration) * 100}% - 1px)`;
     const playing = new Set(timelineMarkers.filter((m) => t >= m.start && t < m.end).map((m) => String(m.index)));
-    view.querySelectorAll("[data-marker-index]").forEach((el) => {
-      const on = playing.has(el.dataset.markerIndex);
-      if (el.tagName === "DIV" && el.parentElement === view.lastChild) {
-        el.style.background = on ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)";
-      } else {
-        el.style.outline = on ? "2px solid #fff" : "none";
-      }
+    view.querySelectorAll("[data-marker-index]").forEach((row) => {
+      row.style.background = playing.has(row.dataset.markerIndex) ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)";
     });
   }
 
@@ -1190,6 +1154,8 @@
       const panel = findMarkersPanel();
       const view = document.getElementById(TIMELINE_ID);
       if (panel && timelineMarkers.length && (!view || view.parentElement !== panel)) renderTimeline();
+      // Stash redraws its list at times (e.g. after an edit): hide it again.
+      else if (panel && view) hideStashMarkerList(panel);
     }, 200);
   }).observe(document.body, { childList: true, subtree: true });
 

@@ -107,9 +107,9 @@ Details: [Advanced File Operations README](plugins/advanced-file-operations/READ
   too, so one rule for `Strings` styles all its sub-tags.
 - **Custom styles per bubble**: the same rules for a marker's whole
   bubble, e.g. `Concerto { background: #ffe9b0 }`.
-- **Timeline view** in the Markers tab: a bar of all markers from start
-  to end, and a list with each marker's screenshot and full details —
-  click to jump, highlighted while playing.
+- **Marker list** in the Markers tab, in place of Stash's: each marker's
+  screenshot and full details — click to jump, highlighted while playing,
+  and editing opens right below the marker.
 - **Stays up to date**: bubbles redraw by themselves after a marker is
   saved, added or deleted.
 
