@@ -1591,6 +1591,19 @@
   document.addEventListener("click", restoreBeforeStash, true);
   document.addEventListener("submit", restoreBeforeStash, true);
 
+  // Stash's "Create Marker" button — its regular (primary) button in the
+  // Markers tab, outside any form: scroll to the new form once it appears,
+  // like editing does (see syncAccordion). Any edit form open in the list
+  // goes back first, before Stash swaps it for the new one.
+  document.addEventListener("click", (e) => {
+    const button = e.target.closest ? e.target.closest("button.btn-primary") : null;
+    if (!button || button.closest("form") || button.closest(`#${TIMELINE_ID}`)) return;
+    const panel = findMarkersPanel();
+    if (!panel || !panel.contains(button)) return;
+    restoreForm();
+    accordionRequest = { markerId: null, at: Date.now() };
+  }, true);
+
   // The row's Edit button, while its form is open: close it with the form's
   // own Cancel, so Stash leaves edit mode too.
   function closeAccordion() {
