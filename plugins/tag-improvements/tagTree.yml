@@ -1,7 +1,7 @@
-name: Tag Tree
-description: "Shows all your tags as a collapsible tree of parents and children, with each tag's image, description, scene and marker counts, and a search. Also copies tag descriptions from StashDB for tags with a StashDB ID — right away for new or newly linked tags, every few days, or on demand — keeping descriptions you wrote yourself."
-version: 0.0.6
-url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-tree
+name: Tag Improvements
+description: "Tag tools for Stash: a collapsible tree of all tags on the Tags page (with images, descriptions and counts); tag descriptions copied from StashDB and kept up to date; and scraping a scene from its Edit tab adds the scraped tags to the existing ones instead of replacing them."
+version: 0.0.7
+url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-improvements
 exec:
   - python
   - "{pluginDir}/stashdb_tag_descriptions.py"
@@ -10,6 +10,7 @@ ui:
   javascript:
     - tag-tree.js
     - stashdb-auto-refresh.js
+    - scrape-tag-merge.js
 hooks:
   - name: Fetch description for a new or newly linked tag
     description: When a tag is created, or its StashDB ID is set or changed, fetch its description from StashDB.
@@ -24,6 +25,10 @@ tasks:
     defaultArgs:
       mode: sync_all
 settings:
+  replaceTags:
+    displayName: Replace tags instead (Stash's default)
+    description: "Off (the default): scraping a scene from its Edit tab offers its existing tags plus the scraped ones. On: the scraped tags replace the existing ones, as in Stash without this plugin."
+    type: BOOLEAN
   showNavbarButton:
     displayName: Show a tag tree button in the top bar
     description: "Adds a button to Stash's top navigation bar that opens the Tags page in tree view. Off: the tree is still there as the Tree view on the Tags page."

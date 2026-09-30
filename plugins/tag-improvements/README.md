@@ -1,11 +1,16 @@
-# Tag Tree (Stash plugin)
+# Tag Improvements (Stash plugin)
 
-Shows all your tags as a collapsible tree of parents and children — the
-hierarchy you set up with each tag's *Parent tags* / *Sub-tags* — on its
-own page, and keeps tag descriptions up to date from StashDB (see
-[StashDB descriptions](#stashdb-descriptions)).
+Tag tools for Stash, in one plugin (formerly called **Tag Tree**):
 
-Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-tree
+- **[Tag tree](#opening-it)** — all your tags as a collapsible tree of
+  parents and children, as a view on Stash's own Tags page.
+- **[StashDB descriptions](#stashdb-descriptions)** — tag descriptions
+  copied from StashDB and kept up to date.
+- **[Merging tags when scraping](#merging-tags-when-scraping-a-scene)** —
+  scraping a scene adds the scraped tags to the existing ones instead of
+  replacing them.
+
+Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-improvements
 
 ## Opening it
 
@@ -15,7 +20,7 @@ Stash's usual view. Your choice is remembered in the browser. Other tag
 lists — like the sub-tags on a tag's page — stay as they are.
 
 Optionally, a **sitemap icon** button in Stash's top navigation bar opens
-the Tags page straight in tree view — turn on Settings → Plugins → Tag Tree
+the Tags page straight in tree view — turn on Settings → Plugins → Tag Improvements
 → **Show a tag tree button in the top bar** (off by default; reload the
 page after changing it). The older address `/plugin/tag-tree` still shows
 the tree as a page of its own.
@@ -76,7 +81,7 @@ description with StashDB's instead.
 
 ### Settings
 
-Settings → Plugins → Tag Tree:
+Settings → Plugins → Tag Improvements:
 
 | Setting | Effect |
 |---|---|
@@ -99,3 +104,50 @@ That plugin is now part of Tag Tree. Uninstall it (Settings → Plugins),
 or its hooks run alongside Tag Tree's. Your settings there need setting
 again under Tag Tree; the record of which descriptions it wrote is picked
 up automatically from its old folder, so your own texts stay protected.
+
+## Merging tags when scraping a scene
+
+When you scrape a scene from its **Edit** tab — **Scrape with…** a scraper
+or StashDB — Stash normally *replaces* the scene's tags with the scraped
+ones. With this plugin the scrape dialog offers the scene's **existing
+tags plus the scraped ones** instead.
+
+### What you see
+
+In the scrape dialog's **Tags** row, the scraped (right) side lists:
+
+1. the scene's current tags, then
+2. the scraped tags that matched a tag you already have and aren't on the
+   scene yet, and
+3. scraped tags Stash couldn't match to one of your tags — with their
+   usual create/link buttons.
+
+Everything else about the dialog is Stash's own: you can remove tags on
+the right before applying, or pick the left (existing) side to keep the
+tags as they were. Other fields — title, date, performers, … — behave as
+before.
+
+The Tagger view isn't affected; it has its own merge setting.
+
+### Settings
+
+Settings → Plugins → Tag Improvements → **Replace tags instead (Stash's
+default)**: turn on to get Stash's usual replace behaviour back.
+
+### How it works
+
+The scrape dialog gets its data from Stash's scrape queries
+(`scrapeSingleScene`, `scrapeSceneURL`). The plugin watches the page's
+requests and, for those answers only, adds the scene's current tags to
+the scraped tag list before the dialog reads it — so no part of Stash's
+own page is patched. Only on a scene's own page, and if anything goes
+wrong it leaves Stash's answer untouched.
+
+Scenes only for now; galleries and images scrape the same way and can
+follow.
+
+### Coming from the separate "Scrape Tag Merge" plugin
+
+That plugin is now part of Tag Improvements. Uninstall it (Settings →
+Plugins); its "Replace tags instead" setting, if you changed it, needs
+setting again here.

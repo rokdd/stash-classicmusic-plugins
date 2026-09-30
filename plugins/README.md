@@ -9,16 +9,13 @@ One folder per plugin; each is independent of the others.
 - **[`marker-improvements-plugin/`](marker-improvements-plugin/)** — tag
   images on the video scrubber, click-to-edit markers, per-tag styles.
   Browser only, nothing to install.
-- **[`tag-tree/`](tag-tree/)** — all tags as a collapsible parent/child
-  tree, plus tag descriptions from StashDB, filled in for new tags and
-  refreshed every few days. Needs Python 3 on the server, no extra
+- **[`tag-improvements/`](tag-improvements/)** — a tag tree on the Tags
+  page, tag descriptions from StashDB, and scraping that adds tags instead
+  of replacing them. Needs Python 3 on the server (for StashDB), no extra
   modules.
 - **[`yt-dlp-downloader/`](yt-dlp-downloader/)** — download videos and
   playlists with yt-dlp into a library folder, with the scenes filled in
   from the video's info. Needs yt-dlp and Python 3 on the server.
-- **[`scrape-tag-merge/`](scrape-tag-merge/)** — scraping a scene from its
-  Edit tab adds the scraped tags to the existing ones instead of replacing
-  them. Browser only, nothing to install.
 
 Installing, updating and the full feature list are in the
 [main README](../README.md). Each folder's own README has the details.

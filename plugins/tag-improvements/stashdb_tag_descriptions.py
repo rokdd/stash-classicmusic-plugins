@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-StashDB tag descriptions — the backend of the Tag Tree plugin.
+StashDB tag descriptions — the backend of the Tag Improvements plugin.
 
 Copies each tag's description from StashDB (or any other stash-box set up
 under Settings > Metadata Providers) for tags that have a StashDB ID:
@@ -37,7 +37,7 @@ BATCH_SIZE = 50
 WRITTEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "written-descriptions.json")
 
 # Where the separate "StashDB Tag Descriptions" plugin kept that record
-# before it became part of Tag Tree: its own folder, a sibling of this one
+# before it became part of Tag Improvements (then called Tag Tree): its own folder, a sibling of this one
 # (named by plugin id when installed from a plugin source, or by folder
 # name when copied by hand). Read once if ours doesn't exist yet.
 OLD_WRITTEN_FILES = [

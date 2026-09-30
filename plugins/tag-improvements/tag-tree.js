@@ -1,4 +1,4 @@
-// Tag Tree — UI addon
+// Tag Improvements — tag tree view
 //
 // Adds a page at /plugin/tag-tree that shows every tag as a collapsible
 // tree of parents and children, and a button in the top navigation bar
@@ -22,7 +22,7 @@
 
   const api = window.PluginApi;
   if (!api || !api.React || !api.register || !api.register.route) {
-    console.warn("[Tag Tree] This Stash version has no PluginApi.register.route — the tag tree needs Stash v0.25 or newer.");
+    console.warn("[Tag Improvements] This Stash version has no PluginApi.register.route — the tag tree needs Stash v0.25 or newer.");
     return;
   }
 
@@ -493,7 +493,7 @@
       navbarButtonWanted = settings.showNavbarButton === true;
       navbarListeners.forEach((redraw) => redraw());
     })
-    .catch((err) => console.warn("[Tag Tree] Couldn't read plugin settings:", err));
+    .catch((err) => console.warn("[Tag Improvements] Couldn't read plugin settings:", err));
 
   function NavbarTreeButton() {
     const [, redraw] = useState(0);

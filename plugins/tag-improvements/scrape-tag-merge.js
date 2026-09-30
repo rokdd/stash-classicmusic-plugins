@@ -1,4 +1,4 @@
-// Scrape Tag Merge — UI addon
+// Tag Improvements — scrape tag merge
 //
 // On a scene's Edit tab, "Scrape with…" (a scraper or StashDB) normally
 // *replaces* the scene's tags with the scraped ones: Stash's scrape dialog
@@ -21,7 +21,7 @@
   "use strict";
 
   // Must match the filename of this plugin's yml manifest (minus .yml).
-  const PLUGIN_ID = "sceneScrapeTagMerge";
+  const PLUGIN_ID = "tagTree";
 
   const originalFetch = window.fetch;
   if (typeof originalFetch !== "function" || originalFetch.__scrapeTagMergeWrapped) return;
