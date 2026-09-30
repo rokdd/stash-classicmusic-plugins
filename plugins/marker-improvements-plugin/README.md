@@ -37,6 +37,8 @@ are unaffected.
 - **Only once the video has started**: before you first press play, the
   scrubber shows no bubbles. They appear when playback starts, and hide
   again when a new video loads.
+- **At the start of the marker's range**: each bubble sits with its left
+  edge at where its marker begins, its tail pointing at that spot.
 - **Never on top of each other**: when markers sit close together, their
   bubbles stack upwards in rows instead of overlapping. A raised bubble
   gets a thin line down to its marker. The rows are worked out again
@@ -83,9 +85,10 @@ Concerto { background: #ffe9b0; border: 2px solid #c90 }
 ```
 
 The little tail under the bubble takes on the bubble's background, so a
-custom background covers both. The bubble is positioned with
-`transform: translateX(-50%)` — keep that in any `transform` you set
-(e.g. `transform: translateX(-50%) scale(1.2)`), or it shifts sideways.
+custom background covers both. Bubbles are aligned to the start of their
+marker's range; to make one bigger without it drifting away from there,
+scale it from its bottom-left corner:
+`transform: scale(1.2); transform-origin: left bottom`.
 
 **Matching parent tags too.** Turn on Settings → Plugins → Marker
 Improvements → **Custom styles also match parent tags**, and a rule in

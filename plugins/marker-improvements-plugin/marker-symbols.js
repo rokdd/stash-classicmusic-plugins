@@ -52,6 +52,10 @@
   // Height of a tag icon in the bubbles (scrubber and hover), and in the
   // Markers tab's timeline list. Wide icons get up to twice this in width.
   const ICON_SIZE_PX = 88;
+  // The bubble starts this far left of its marker range's start, so its
+  // tail (this far in from the bubble's left edge) points exactly at the
+  // start of the range.
+  const TAIL_INSET_PX = 8;
   const LIST_ICON_SIZE_PX = 56;
   // Corner rounding of the bubble and of each image in it. 0 = square.
   const BUBBLE_RADIUS_PX = 0;
@@ -359,9 +363,10 @@
       ? ["position:relative", "display:inline-flex"]
       : [
         "position:absolute",
-        "left:50%",
+        // Aligned to the start of the marker's range (its left edge), not
+        // centered on it.
+        `left:-${TAIL_INSET_PX}px`,
         "bottom:100%",
-        "transform:translateX(-50%)",
         "margin-bottom:6px",
         "display:flex",
       ];
@@ -388,11 +393,12 @@
     ].join(";");
 
     // The tail: a small square rotated 45° so one corner points straight
-    // down at the marker, half-overlapping the bubble's own bottom edge.
+    // down at the start of the marker's range, half-overlapping the
+    // bubble's own bottom edge.
     const tail = document.createElement("div");
     tail.style.cssText = [
       "position:absolute",
-      "left:50%",
+      `left:${TAIL_INSET_PX}px`,
       "top:100%",
       "width:8px",
       "height:8px",
@@ -822,7 +828,8 @@
       line = document.createElement("div");
       line.className = "marker-symbols-connector";
       line.style.cssText =
-        "position:absolute;left:50%;top:100%;width:2px;margin-left:-1px;background:inherit;pointer-events:none;";
+        `position:absolute;left:${TAIL_INSET_PX}px;top:100%;width:2px;margin-left:-1px;` +
+        "background:inherit;pointer-events:none;";
       bubble.appendChild(line);
     }
     line.style.height = `${lift + 6}px`;
@@ -834,8 +841,8 @@
       .filter((b) => b.isConnected && b.offsetWidth)
       .map((b) => {
         const tick = b.parentElement.getBoundingClientRect();
-        const center = tick.left + tick.width / 2; // bubbles are centered on their marker
-        return { b, left: center - b.offsetWidth / 2, right: center + b.offsetWidth / 2, height: b.offsetHeight };
+        const left = tick.left - TAIL_INSET_PX; // bubbles start at their range's start
+        return { b, left, right: left + b.offsetWidth, height: b.offsetHeight };
       })
       .sort((x, y) => x.left - y.left);
 
