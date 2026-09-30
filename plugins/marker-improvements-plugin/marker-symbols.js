@@ -428,6 +428,9 @@
         "object-fit:contain",
         `border-radius:${ICON_RADIUS_PX}px`,
         "border:1px solid rgba(0,0,0,0.2)",
+        // Always a white background behind the image — transparent areas
+        // of a tag image show white, whatever is behind the bubble.
+        "background:#fff",
         "mix-blend-mode:multiply",
       ].join(";");
       if (!preview) img.addEventListener("click", jumpToMarker);
@@ -1071,7 +1074,7 @@
         img.dataset.tagId = t.id || "";
         img.style.cssText =
           `height:${LIST_ICON_SIZE_PX}px;width:auto;max-width:${LIST_ICON_SIZE_PX * 2}px;` +
-          "object-fit:contain;background:rgba(255,255,255,0.92);";
+          "object-fit:contain;background:#fff;";
         img.addEventListener("error", () => img.remove());
         icons.appendChild(img);
       });

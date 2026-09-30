@@ -225,7 +225,7 @@
             width: "auto",
             maxWidth: `${IMAGE_HEIGHT_PX * 2}px`,
             objectFit: "contain",
-            background: "rgba(255,255,255,0.92)",
+            background: "#fff",
             flex: "none",
           },
         })
