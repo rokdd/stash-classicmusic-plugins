@@ -1199,6 +1199,7 @@
     }
     timelineRenderPending = false;
     timelineMarkers = prepareTimeline(timelineMarkers);
+    lastFollowedIndex = null; // scroll to the playing marker again in the new list
 
     removeTimeline();
     const view = document.createElement("div");
@@ -1279,16 +1280,64 @@
     }
   }
 
-  // Highlights the marker playing right now.
+  // Highlights the marker playing right now, and scrolls the list to it
+  // when a new one starts (see followRow).
   function updateTimelineProgress() {
     const view = document.getElementById(TIMELINE_ID);
     const video = findVideoEl();
     if (!view || !video) return;
     const t = video.currentTime;
-    const playing = new Set(timelineMarkers.filter((m) => t >= m.start && t < m.end).map((m) => String(m.index)));
+    const playingMarkers = timelineMarkers.filter((m) => t >= m.start && t < m.end);
+    const playing = new Set(playingMarkers.map((m) => String(m.index)));
     view.querySelectorAll("[data-marker-index]").forEach((row) => {
       row.style.background = playing.has(row.dataset.markerIndex) ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)";
     });
+    // With overlapping markers, follow the one that started last.
+    const current = playingMarkers[playingMarkers.length - 1];
+    if (current && current.index !== lastFollowedIndex) {
+      lastFollowedIndex = current.index;
+      followRow(view.querySelector(`[data-marker-index="${current.index}"]`));
+    }
+  }
+
+  // -- the list follows playback ------------------------------------------------
+  //
+  // When a new marker starts playing, its row scrolls to the middle of the
+  // sidebar. Only the sidebar itself scrolls: on a phone, where the whole
+  // page scrolls instead, it doesn't move at all — that would pull the
+  // video out of view. It also holds still while an edit form is open, while
+  // the list is collapsed, and for a few seconds after you scroll yourself.
+
+  const FOLLOW_PAUSE_AFTER_USER_SCROLL_MS = 5000;
+  let lastFollowedIndex = null;
+  let lastUserScroll = 0;
+
+  // The nearest element around the list that scrolls on its own (the
+  // sidebar), or null when it's the page that scrolls.
+  function scrollBoxOf(el) {
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+      const overflow = getComputedStyle(node).overflowY;
+      if ((overflow === "auto" || overflow === "scroll") && node.scrollHeight > node.clientHeight) return node;
+    }
+    return null;
+  }
+
+  function followRow(row) {
+    if (!row || !row.offsetParent) return; // not on screen, or the list is collapsed
+    if (movedForm || Date.now() - lastUserScroll < FOLLOW_PAUSE_AFTER_USER_SCROLL_MS) return;
+    const box = scrollBoxOf(row);
+    if (!box) return;
+    if (!box.__markerSymbolsScrollWatched) {
+      box.__markerSymbolsScrollWatched = true;
+      const noteUserScroll = () => {
+        lastUserScroll = Date.now();
+      };
+      ["wheel", "touchmove", "keydown"].forEach((type) => box.addEventListener(type, noteUserScroll, { passive: true }));
+    }
+    const boxRect = box.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const top = box.scrollTop + (rowRect.top - boxRect.top) - (boxRect.height - rowRect.height) / 2;
+    box.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   }
 
   function ensureTimelineTracking(video) {
