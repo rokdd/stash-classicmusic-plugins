@@ -370,11 +370,9 @@
       "align-items:center",
       "gap:2px",
       "padding:3px 4px",
-      // Light background: mix-blend-mode:multiply on the images (below)
-      // only reads correctly against a light backdrop — a white/light
-      // area behind an image blends away cleanly, while a dark one just
-      // crushes the whole image toward black.
-      "background:rgba(255,255,255,0.92)",
+      // Solid white, like the images' own background (below), so an
+      // image's white or transparent areas and the bubble around it match.
+      "background:#fff",
       `border-radius:${BUBBLE_RADIUS_PX}px`,
       "box-shadow:0 2px 6px rgba(0,0,0,0.55)",
       // Always visible/interactive — this is a real child of the marker's
@@ -434,9 +432,10 @@
         `border-radius:${ICON_RADIUS_PX}px`,
         "border:1px solid rgba(0,0,0,0.2)",
         // Always a white background behind the image — transparent areas
-        // of a tag image show white, whatever is behind the bubble.
+        // of a tag image show white, whatever is behind the bubble. (No
+        // blend mode: blending mixed that white with the video showing
+        // through the bubble, which came out grey.)
         "background:#fff",
-        "mix-blend-mode:multiply",
       ].join(";");
       if (!preview) img.addEventListener("click", jumpToMarker);
       // If this particular tag's image fails to load, just drop it — the
@@ -1582,7 +1581,7 @@
       bubble = document.createElement("div");
       bubble.className = "marker-symbols-bubble";
       bubble.style.cssText =
-        "display:inline-flex;flex-direction:column;padding:3px 4px;background:rgba(255,255,255,0.92);" +
+        "display:inline-flex;flex-direction:column;padding:3px 4px;background:#fff;" +
         `border-radius:${BUBBLE_RADIUS_PX}px;box-shadow:0 2px 6px rgba(0,0,0,0.55);`;
     }
     if (!bubble) return;
