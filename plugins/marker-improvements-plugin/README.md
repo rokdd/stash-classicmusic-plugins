@@ -159,7 +159,7 @@ Stash's:
 - **Hide / Show** collapses the list; your browser remembers the choice.
 
 Stash's own marker list is hidden — only the list itself: its **Create
-Marker** button and its edit form stay. Turn on Settings → Plugins →
+Marker** button (above the plugin's list) and its edit form stay. Turn on Settings → Plugins →
 Marker Improvements → **Also show Stash's own marker list** to see both.
 
 Marker end times need Stash v0.27 or newer; on older versions every

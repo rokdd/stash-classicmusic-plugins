@@ -1234,8 +1234,23 @@
     });
 
     panel.insertBefore(view, panel.firstChild);
+    placeTimeline(panel, view);
     updateTimelineProgress();
     hideStashMarkerList(panel);
+  }
+
+  // Puts the list right after Stash's "Create Marker" button, so the button
+  // sits above the markers. Stash doesn't label that button, so it's found
+  // as the tab's regular (primary) button outside any form — the list's own
+  // buttons are link-style. While it isn't there (e.g. Stash shows its form
+  // in that spot), the list stays where it is.
+  function placeTimeline(panel, view) {
+    const create = Array.from(panel.querySelectorAll("button.btn-primary")).find(
+      (b) => !b.closest(`#${TIMELINE_ID}`) && !b.closest("form")
+    );
+    let anchor = create;
+    while (anchor && anchor.parentElement !== panel) anchor = anchor.parentElement;
+    if (anchor && anchor.nextSibling !== view) anchor.after(view);
   }
 
   // Hides Stash's own marker list in the Markers tab, which this view
@@ -1317,7 +1332,11 @@
       const view = document.getElementById(TIMELINE_ID);
       if (panel && timelineMarkers.length && (!view || view.parentElement !== panel)) renderTimeline();
       // Stash redraws its list at times (e.g. after an edit): hide it again.
-      else if (panel && view) hideStashMarkerList(panel);
+      else if (panel && view) {
+        // Stash may draw its button only after the list is placed.
+        placeTimeline(panel, view);
+        hideStashMarkerList(panel);
+      }
     }, 200);
   }).observe(document.body, { childList: true, subtree: true });
 
