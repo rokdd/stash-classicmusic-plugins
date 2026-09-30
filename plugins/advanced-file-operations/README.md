@@ -208,7 +208,11 @@ index (moov atom) sitting at the end of an .mp4, so the browser has to
 fetch the end before it can play or seek; audio browsers can't play from
 an .mp4 (AC3, DTS, PCM, … — re-encoded to AAC; the video itself is copied
 untouched); and a container browsers can't play directly
-(.mkv, .avi, …), remuxed into .mp4. If the video codec itself doesn't fit
+(.mkv, .avi, …), remuxed into .mp4. It also retags H.265 video marked
+`hev1` as `hvc1`: Safari and Apple devices only play H.265 from an .mp4
+tagged `hvc1`, and fall back to Stash's live transcoding otherwise. That
+only helps Safari, iPhone, iPad and Mac — Firefox, and Chrome without
+hardware H.265 decoding, can't play H.265 at all, whatever the tag. If the video codec itself doesn't fit
 in an .mp4, it says so and stops rather than re-encoding a healthy file —
 use Convert to H265 for that.
 

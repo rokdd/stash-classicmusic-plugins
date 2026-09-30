@@ -623,6 +623,27 @@ def probe_ok(path):
 BROWSER_AUDIO_CODECS = {"aac", "mp3", "flac"}
 
 
+def probe_video_codec_and_tag(path):
+    """(codec_name, codec_tag_string) of the first video stream in `path`,
+    e.g. ("hevc", "hev1"). ("", "") if there's no video or ffprobe couldn't tell."""
+    try:
+        result = subprocess.run(
+            [
+                FFPROBE_BIN, "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=codec_name,codec_tag_string",
+                "-of", "default=nw=1",
+                path,
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
+        info = dict(line.strip().split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        return info.get("codec_name", "").lower(), info.get("codec_tag_string", "").lower()
+    except Exception as exc:  # noqa: BLE001
+        log_warn(f"Couldn't read video codec tag of {path}: {exc}")
+        return "", ""
+
+
 def probe_audio_codecs(path):
     """Codec names of every audio stream in `path`, e.g. ["aac", "ac3"].
     Empty if there's no audio, or ffprobe couldn't tell."""
@@ -707,6 +728,11 @@ def streaming_problems(path):
     bad_audio = [c for c in probe_audio_codecs(path) if c not in BROWSER_AUDIO_CODECS]
     if bad_audio and ext != ".webm":
         problems.append(f"{', '.join(bad_audio)} audio, which browsers can't play from an .mp4")
+    # Safari/Apple players only play H.265 from an .mp4/.mov tagged hvc1;
+    # hev1 (what many encoders write) makes them refuse it.
+    codec, tag = probe_video_codec_and_tag(path)
+    if codec == "hevc" and tag != "hvc1" and ext in {".mp4", ".m4v", ".mov"}:
+        problems.append(f"H.265 video tagged '{tag or 'unknown'}' instead of 'hvc1', which Safari/Apple players refuse to play")
     return problems
 
 
@@ -1475,10 +1501,16 @@ def remux_repair(src_path, on_progress=None, lossless_audio=False):
     except Exception:  # noqa: BLE001
         duration = None
 
+    # Safari/Apple players only play H.265 from an .mp4 when it's tagged
+    # hvc1; ffmpeg keeps/writes hev1 on a plain stream copy. Only the first
+    # video stream is tagged, so e.g. an attached cover picture isn't.
+    codec, _tag = probe_video_codec_and_tag(src_path)
+    video_tag_args = ["-tag:v:0", "hvc1"] if codec == "hevc" else []
+
     # Streams are copied as-is, except audio a browser can't play, which
-    # becomes AAC; +faststart puts the index at the start of the file. So
-    # the result also streams well — which is all the streaming fix in
-    # run_repair_scene needs, too.
+    # becomes AAC; +faststart puts the index at the start of the file; H.265
+    # is tagged hvc1. So the result also streams well — which is all the
+    # streaming fix in run_repair_scene needs, too.
     cmd = [
         FFMPEG_BIN, "-y",
         "-err_detect", "ignore_err",
@@ -1486,6 +1518,7 @@ def remux_repair(src_path, on_progress=None, lossless_audio=False):
         "-i", src_path,
         "-map", "0",
         "-c", "copy",
+        *video_tag_args,
         *browser_audio_args(src_path, lossless=lossless_audio),
         "-movflags", "+faststart",
         tmp_path,
