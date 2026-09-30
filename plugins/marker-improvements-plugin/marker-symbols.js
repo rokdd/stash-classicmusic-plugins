@@ -568,8 +568,12 @@
 
   // Where every marker range on the page sits, as one string: changes when
   // a range is added, removed or moved, not when anything else changes.
+  // Rounded to 0.1% of the bar: finer than that, a position read from the
+  // layout (when Stash doesn't set it as a percentage) can shift slightly
+  // just because something else on the page resized — e.g. a dropdown
+  // opening — which would look like the markers moved.
   function rangeSignature() {
-    return findMarkerRangeElements(document).map((t) => tickLeftPct(t).toFixed(3)).sort().join(",");
+    return findMarkerRangeElements(document).map((t) => tickLeftPct(t).toFixed(1)).sort().join(",");
   }
 
   function findMarkerRangeElements(root) {
@@ -855,8 +859,12 @@
 
   function refreshForCurrentPage() {
     clearOverlay();
-    timelineMarkers = [];
-    removeTimeline();
+    // The marker list stays while its scene does: renderTimeline only
+    // rebuilds it once the fresh markers turn out to differ.
+    if (currentSceneId() !== timelineSceneId) {
+      timelineMarkers = [];
+      removeTimeline();
+    }
     const sceneId = currentSceneId();
     if (!sceneId) return;
     placeSymbols(sceneId, 0);
@@ -1044,17 +1052,44 @@
 
   // (Re)builds the view at the top of the Markers tab. Does nothing until
   // that tab is on screen; the observer below brings us back when it is.
+  // What the list shows, as one string — the list is only rebuilt when this
+  // changes. (Rebuilding redraws the whole tab, so the page jumps, and it
+  // would close an edit form that's open in the list.)
+  function timelineKey(markers) {
+    return JSON.stringify([
+      Math.round(sceneDuration() || 0),
+      markers.map((m) => [
+        m.id, m.seconds, m.end_seconds, m.title, m.screenshot,
+        m.primary_tag && m.primary_tag.id, (m.tags || []).map((t) => t.id),
+      ]),
+    ]);
+  }
+
+  // Set while a rebuild waits for the open edit form to close.
+  let timelineRenderPending = false;
+
   function renderTimeline() {
     const panel = findMarkersPanel();
     if (!panel || !timelineMarkers.length) {
       removeTimeline();
       return;
     }
+    const key = timelineKey(timelineMarkers);
+    const existing = document.getElementById(TIMELINE_ID);
+    if (existing && existing.parentElement === panel && existing.dataset.key === key) return;
+    if (movedForm) {
+      // Don't pull the form out from under someone typing: rebuild once
+      // it's closed (see restoreForm).
+      timelineRenderPending = true;
+      return;
+    }
+    timelineRenderPending = false;
     timelineMarkers = prepareTimeline(timelineMarkers);
 
     removeTimeline();
     const view = document.createElement("div");
     view.id = TIMELINE_ID;
+    view.dataset.key = key;
     view.style.cssText = "margin-bottom:16px;";
 
     const header = document.createElement("div");
@@ -1136,12 +1171,25 @@
     video.addEventListener("loadedmetadata", renderTimeline);
   }
 
+  // The scene the marker list belongs to.
+  let timelineSceneId = null;
+
   function showTimeline(markers) {
     timelineMarkers = markers;
+    timelineSceneId = currentSceneId();
     const video = findVideoEl();
     if (video) ensureTimelineTracking(video);
     renderTimeline();
   }
+
+  // Stash redraws its own marker list at times (e.g. while you edit), which
+  // would show it again. This hides it right away — observer callbacks run
+  // before the browser paints, so it never shows up in between.
+  new MutationObserver(() => {
+    if (showStashMarkerList) return;
+    const view = document.getElementById(TIMELINE_ID);
+    if (view && view.parentElement) hideStashMarkerList(view.parentElement);
+  }).observe(document.body, { childList: true, subtree: true });
 
   // The Markers tab is only rendered when it's opened, and re-rendered by
   // Stash at times, so the view is put back whenever it's missing.
@@ -1205,6 +1253,9 @@
     placeholder.remove();
     holder.remove();
     if (row.isConnected) setRowOpen(row, false);
+    // A rebuild that waited for the form to close — after Stash has
+    // handled the click that closed it.
+    if (timelineRenderPending) setTimeout(renderTimeline, 0);
   }
 
   function moveFormUnder(form, row) {
