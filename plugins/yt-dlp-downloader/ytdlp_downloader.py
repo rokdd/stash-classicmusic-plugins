@@ -266,7 +266,7 @@ def run_download(stash, args):
             line = line.rstrip("\n")
             if line.startswith(_RESULT_PREFIX):
                 video_id, _, filepath = line[len(_RESULT_PREFIX):].partition("\t")
-                results.append({"id": video_id, "path": filepath})
+                results.append({"id": video_id, "path": filepath, "pasted_url": url})
                 log_info(f"Downloaded {os.path.basename(filepath)}")
                 continue
             match = _PROGRESS_RE.search(line)
@@ -287,15 +287,22 @@ def run_download(stash, args):
         write_plugin_output(error=f"Nothing was downloaded ({len(failed)} URL(s) failed — see the log above).")
         return
 
-    # Pair each file with its info and thumbnail by the video's id.
+    # Pair each file with its info and thumbnail by the video's id, and the
+    # URL that was pasted to get it.
     items = []
     for r in results:
         info = os.path.join(sidecar_dir, f"{r['id']}.info.json")
         thumb = os.path.join(sidecar_dir, f"{r['id']}.jpg")
-        items.append([r["path"], info if os.path.isfile(info) else "", thumb if os.path.isfile(thumb) else ""])
+        items.append([
+            r["path"],
+            info if os.path.isfile(info) else "",
+            thumb if os.path.isfile(thumb) else "",
+            r["pasted_url"],
+        ])
 
     log_info("Queueing a scan of the new files, then a task to fill in their scenes...")
-    stash.scan(sorted({os.path.dirname(p) for p, _, _ in items}) if len(items) > 20 else [p for p, _, _ in items])
+    paths = [item[0] for item in items]
+    stash.scan(sorted({os.path.dirname(p) for p in paths}) if len(items) > 20 else paths)
     try:
         stash.run_plugin_task(
             f"Finish downloads ({len(items)} video{'s' if len(items) != 1 else ''})",
@@ -320,11 +327,13 @@ def run_download(stash, args):
 # Filling in the new scenes
 # ---------------------------------------------------------------------------
 
-def scene_input_from_info(scene_id, info, thumb_path):
+def scene_input_from_info(scene_id, info, thumb_path, pasted_url=""):
     scene = {"id": scene_id}
     if info.get("title"):
         scene["title"] = info["title"]
-    url = info.get("webpage_url") or info.get("original_url")
+    # The video's canonical page when yt-dlp knows it; otherwise the URL
+    # that was pasted to get it, so the scene always links to its source.
+    url = info.get("webpage_url") or info.get("original_url") or pasted_url
     if url:
         scene["urls"] = [url]
     raw_date = info.get("release_date") or info.get("upload_date") or ""
@@ -345,7 +354,11 @@ def run_finalize(stash, args):
         write_plugin_output(error=f"finalize got an invalid items argument: {exc}")
         return
     done, missing = 0, 0
-    for index, (path, info_path, thumb_path) in enumerate(items, start=1):
+    for index, item in enumerate(items, start=1):
+        # [path, info, thumbnail, pasted URL] — the pasted URL is missing in
+        # tasks queued by version 0.0.1 of this plugin.
+        path, info_path, thumb_path = item[:3]
+        pasted_url = item[3] if len(item) > 3 else ""
         log_progress((index - 1) / max(len(items), 1))
         scene_id = stash.find_scene_by_path(path)
         if not scene_id:
@@ -360,7 +373,7 @@ def run_finalize(stash, args):
             except (OSError, ValueError) as exc:
                 log_warn(f"Couldn't read the info for {os.path.basename(path)}: {exc}")
         try:
-            stash.update_scene(scene_input_from_info(scene_id, info, thumb_path))
+            stash.update_scene(scene_input_from_info(scene_id, info, thumb_path, pasted_url))
             done += 1
             log_info(f"Filled in scene {scene_id}: {info.get('title') or os.path.basename(path)}")
         except Exception as exc:  # noqa: BLE001

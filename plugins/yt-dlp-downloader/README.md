@@ -33,7 +33,7 @@ fills each one in:
 | Scene field | From |
 |---|---|
 | Title | the video's title |
-| URL | the video's page |
+| URL | the video's canonical page — or, when the site doesn't report one, the URL you pasted |
 | Date | its release or upload date |
 | Details | its description |
 | Cover | its thumbnail |

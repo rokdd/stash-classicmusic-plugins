@@ -1,6 +1,6 @@
 name: yt-dlp Downloader
 description: "Download videos or whole playlists with yt-dlp straight into one of your library folders, from a button in Stash's top bar. Each new scene gets its title, source URL, upload date, description and thumbnail as cover filled in automatically."
-version: 0.0.1
+version: 0.0.2
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/yt-dlp-downloader
 exec:
   - python
