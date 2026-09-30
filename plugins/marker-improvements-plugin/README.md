@@ -115,7 +115,9 @@ the scrubber:
 - tags you've already picked in that form,
 - tag badges in the Markers tab's list of markers.
 
-A tag without an image shows nothing. Stash only shows tag *names* in
+The tag's description, if it has one, shows underneath the image
+(cut off after eight lines). A tag with a description but no image shows
+just the description; one with neither shows nothing. Stash only shows tag *names* in
 those places, so the plugin looks each one up once to find its image. If
 a Stash update changes how the form or list is built, the bubble just
 doesn't appear there; nothing else is affected.

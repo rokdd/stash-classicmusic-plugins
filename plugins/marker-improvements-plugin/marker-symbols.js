@@ -1357,7 +1357,7 @@
       const query = `
         query($name: String!) {
           findTags(tag_filter: { name: { value: $name, modifier: EQUALS } }, filter: { per_page: 1 }) {
-            tags { id name image_path parents { id name } }
+            tags { id name description image_path parents { id name } }
           }
         }`;
       tagsByName.set(key, callGQL(query, { name })
@@ -1429,8 +1429,38 @@
     const tag = name ? await lookupTagByName(name) : null;
     // The pointer may have moved on while the lookup ran.
     if (hoverTarget !== target || !target.isConnected) return;
-    const bubble = tag && makeMarkerIcons({ primary_tag: tag, tags: [], seconds: 0 }, null, { preview: true });
+    let bubble = tag && makeMarkerIcons({ primary_tag: tag, tags: [], seconds: 0 }, null, { preview: true });
+    const description = ((tag && tag.description) || "").trim();
+    if (!bubble && description) {
+      // No image, but a description worth showing: a plain bubble for it.
+      bubble = document.createElement("div");
+      bubble.className = "marker-symbols-bubble";
+      bubble.style.cssText =
+        "display:inline-flex;flex-direction:column;padding:3px 4px;background:rgba(255,255,255,0.92);" +
+        `border-radius:${BUBBLE_RADIUS_PX}px;box-shadow:0 2px 6px rgba(0,0,0,0.55);`;
+    }
     if (!bubble) return;
+    if (description) {
+      // Under the image: the tag's description, cut off after a few lines
+      // so a long one doesn't cover the page.
+      const text = document.createElement("div");
+      text.className = "marker-symbols-description";
+      text.textContent = description;
+      text.style.cssText = [
+        "max-width:280px",
+        "margin-top:4px",
+        "color:#222",
+        "font-size:12px",
+        "line-height:1.35",
+        "text-align:left",
+        "white-space:pre-line",
+        "overflow:hidden",
+        "display:-webkit-box",
+        "-webkit-box-orient:vertical",
+        "-webkit-line-clamp:8",
+      ].join(";");
+      bubble.appendChild(text);
+    }
 
     if (hoverBubble) hoverBubble.remove();
     bubble.style.position = "fixed";
