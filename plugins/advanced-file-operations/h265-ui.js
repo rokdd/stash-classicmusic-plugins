@@ -1,4 +1,4 @@
-// Advanced File Operations — UI addon
+// Scene Improvements — UI addon
 //
 // Adds three actions to the "⋮" operations menu on individual scene pages
 // (Stash's own menu with Rescan, Generate, Delete, …):
@@ -743,7 +743,7 @@
           closeMenu();
         }, 1200);
       } catch (err) {
-        console.error(`[Advanced File Operations] ${id} failed:`, err);
+        console.error(`[Scene Improvements] ${id} failed:`, err);
         window.alert(`Couldn't start the task: ${err.message || err}`);
         item.textContent = "Failed — see console";
         item.style.color = "#e35d6a";
@@ -791,7 +791,7 @@
         convertItem.style.cursor = "not-allowed";
       })
       .catch((err) => {
-        console.warn("[Advanced File Operations] Couldn't check current codec:", err);
+        console.warn("[Scene Improvements] Couldn't check current codec:", err);
       });
 
     const splitItem = makeMenuItem({

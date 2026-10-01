@@ -1,4 +1,4 @@
-// Advanced File Operations — File Tools page
+// Scene Improvements — File Tools page
 //
 // A page at /plugin/file-tools with three tabs:
 //   - Torrent check: which videos in a folder of .torrent files are
@@ -404,7 +404,7 @@
       buttonWanted = settings.showToolsButton === true;
       listeners.forEach((redraw) => redraw());
     })
-    .catch((err) => console.warn("[Advanced File Operations] Couldn't read plugin settings:", err));
+    .catch((err) => console.warn("[Scene Improvements] Couldn't read plugin settings:", err));
 
   function ToolsButton() {
     const [, redraw] = useState(0);

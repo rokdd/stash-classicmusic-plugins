@@ -1,7 +1,7 @@
 _site/
 *.zip
 
-# Background-run logs written by Advanced File Operations
+# Background-run logs written by Scene Improvements
 plugins/advanced-file-operations/logs/
 
 # Personal Claude Code settings
@@ -10,5 +10,5 @@ plugins/advanced-file-operations/logs/
 # Record of descriptions written by Tag Improvements' StashDB sync
 plugins/tag-improvements/written-descriptions.json
 
-# Task history kept by Advanced File Operations
+# Task history kept by Scene Improvements
 plugins/advanced-file-operations/task-history.json

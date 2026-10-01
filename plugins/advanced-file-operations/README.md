@@ -1,4 +1,6 @@
-# Advanced File Operations (Stash plugin)
+# Scene Improvements (Stash plugin)
+
+*Formerly called **Advanced File Operations**.*
 
 Three per-scene/library video tools in one plugin: convert to H.265,
 split a scene at its markers, and repair a corrupt file. ffmpeg does all
@@ -176,7 +178,7 @@ are queued as usual when it's done.
 
 ### Settings
 
-Settings → Plugins → Advanced File Operations:
+Settings → Plugins → Scene Improvements:
 
 | Setting | Effect |
 |---|---|
@@ -200,7 +202,7 @@ Only download what you have the right to.
 
 #### Coming from the separate "yt-dlp Downloader" plugin
 
-That plugin is now part of Advanced File Operations. Uninstall it
+That plugin is now part of Scene Improvements. Uninstall it
 (Settings → Plugins); its settings (path to yt-dlp, cookies file, extra
 options) need setting again here.
 

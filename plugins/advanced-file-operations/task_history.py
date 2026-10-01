@@ -1,5 +1,5 @@
 """
-Task history — part of the Advanced File Operations plugin.
+Task history — part of the Scene Improvements plugin.
 
 Stash keeps no history of finished tasks: its task list only shows what's
 queued or running, and keeps just the last 10 finished ones for lookups.

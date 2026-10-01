@@ -5,7 +5,7 @@ and classical music recordings — but useful for any library.
 
 | Plugin | What it's for |
 |---|---|
-| [Advanced File Operations](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
+| [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, and scraping that adds tags instead of replacing them |
 
@@ -31,7 +31,7 @@ if a change doesn't show up, so the browser doesn't keep the old script.
 into your Stash plugins directory (Settings → Plugins shows where), then
 Settings → Plugins → **Reload plugins**.
 
-### Extra setup for Advanced File Operations
+### Extra setup for Scene Improvements
 
 This one runs ffmpeg on the server, so the machine Stash runs on needs:
 
@@ -57,7 +57,9 @@ Marker Improvements runs only in the browser and needs nothing extra.
 
 ## Features
 
-### Advanced File Operations
+### Scene Improvements
+
+Formerly **Advanced File Operations**.
 
 Adds **Convert to H265…**, **Split at Markers…** and **Repair File…** to
 each scene's "⋮" operations menu, plus two library-wide conversion tasks
@@ -93,7 +95,7 @@ under Settings → Tasks.
     — also under the running tasks on Settings → Tasks — with an ignore
     list for tasks you don't want in it.
 
-Details: [Advanced File Operations README](plugins/advanced-file-operations/README.md)
+Details: [Scene Improvements README](plugins/advanced-file-operations/README.md)
 
 ### Marker Improvements
 

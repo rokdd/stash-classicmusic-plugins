@@ -1,4 +1,4 @@
-// Advanced File Operations — task history
+// Scene Improvements — task history
 //
 // Stash keeps no history of finished tasks: its task list only shows what's
 // queued or running. This records every task as it finishes and shows the
@@ -110,7 +110,7 @@
         busy = false;
       }
     };
-    catchUp().catch((err) => console.warn("[Advanced File Operations] Task history catch-up failed:", err));
+    catchUp().catch((err) => console.warn("[Scene Improvements] Task history catch-up failed:", err));
     // Every 3 seconds while the page is in view, every 15 otherwise.
     let timer = null;
     const schedule = () => {

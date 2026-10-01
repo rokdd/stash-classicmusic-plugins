@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Advanced File Operations — a Stash plugin.
+Scene Improvements — a Stash plugin.
 
 Three video tools for your Stash library:
   - H265 conversion: re-encodes non-HEVC video to H.265 at a chosen

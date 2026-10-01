@@ -1,5 +1,5 @@
 """
-Torrent check — part of the Advanced File Operations plugin.
+Torrent check — part of the Scene Improvements plugin.
 
 Reads every .torrent file in a folder on the server, lists the videos in
 each, and looks for each video in the Stash library by fuzzy file-name

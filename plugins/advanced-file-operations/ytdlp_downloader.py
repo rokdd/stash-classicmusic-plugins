@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-yt-dlp downloads — part of the Advanced File Operations plugin (it was a
+yt-dlp downloads — part of the Scene Improvements plugin (it was a
 plugin of its own, "yt-dlp Downloader", before). Started from the File
 Tools page's Download tab; h265_transcode.py hands the "ytdlp_*" modes
 over to run() here.
