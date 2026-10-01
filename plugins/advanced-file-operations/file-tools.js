@@ -332,7 +332,6 @@
     const last = sections[sections.length - 1];
     if (!last) return;
     const heading = last.querySelector("h1, h2, h3, h4, h5, h6");
-    const card = last.querySelector(".card");
 
     const section = document.createElement(last.tagName.toLowerCase());
     section.id = TOOLS_SECTION_ID;
@@ -340,15 +339,10 @@
     const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
     if (heading) title.className = heading.className;
     title.textContent = "Scene Improvements";
+    // Its own colours, set explicitly — dark panel, light text — so the
+    // tables are readable whatever Stash's card styles do.
     const box = document.createElement("div");
-    box.className = card ? card.className : "card";
-    // The card's own colours, so text stays readable in any theme.
-    if (card) {
-      const look = getComputedStyle(card);
-      box.style.color = look.color;
-      box.style.backgroundColor = look.backgroundColor;
-    }
-    box.style.padding = box.style.padding || "16px";
+    box.style.cssText = "background:#262d33;color:#f2f2f2;border-radius:6px;padding:16px;";
     section.append(title, box);
     last.after(section);
 

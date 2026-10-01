@@ -126,31 +126,16 @@
 
   // -- the history view ------------------------------------------------------------
   //
-  // Drawn like Stash's own task queue: the same card ("job-table") and the
-  // same entries ("job" items with a status icon, the description, and a
-  // line below), so it picks up Stash's own styling. Where a queued task
-  // has a stop button, a finished one here has a button to remove it.
+  // Laid out like Stash's own task queue — one entry per task with a
+  // status icon, the description and a line below — but with colours of
+  // its own, so it's readable whatever Stash's styles do. Where a queued
+  // task has a stop button, a finished one here has a button to remove it.
 
   if (!api || !api.React) return;
   const React = api.React;
   const h = React.createElement;
-  const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
+  const { useState, useEffect, useCallback, useMemo } = React;
 
-  // A text colour that's readable on whatever `el` really sits on: walks up
-  // to the first element with a visible background, and picks light text
-  // for a dark one, dark text for a light one. Copying the queue's colours
-  // wasn't enough — Stash can colour its text further down than the card.
-  function readableTextColor(el) {
-    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
-      const m = getComputedStyle(node).backgroundColor.match(/rgba?\(([^)]+)\)/);
-      if (!m) continue;
-      const [r, g, b, a = 1] = m[1].split(",").map((v) => parseFloat(v));
-      if (a < 0.1) continue; // transparent: look further up
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance < 0.5 ? "#f2f2f2" : "#1e1e1e";
-    }
-    return "#f2f2f2"; // nothing found: Stash's default theme is dark
-  }
   const FA = (api.libraries && api.libraries.FontAwesomeSolid) || {};
 
   const STATUS = {
@@ -183,11 +168,7 @@
 
   const entryKey = (e) => `${e.id}|${e.addTime}`;
 
-  // `cardClassName` / `cardStyle`: on Settings → Tasks, taken from Stash's
-  // own queue card above, so both look exactly alike (see placeOnTasksPage).
-  function TaskHistoryView({ cardClassName, cardStyle } = {}) {
-    const cardRef = useRef(null);
-    const [textColor, setTextColor] = useState(null);
+  function TaskHistoryView() {
     const [entries, setEntries] = useState(null);
     const [error, setError] = useState(null);
     const [filter, setFilter] = useState("all");
@@ -216,18 +197,14 @@
     );
     const count = (s) => (entries || []).filter((e) => e.status === s).length;
 
-    // Worked out once the card is on the page (and again if it changes).
-    useLayoutEffect(() => {
-      if (cardRef.current) setTextColor(readableTextColor(cardRef.current));
-    }, [entries]);
-    const text = textColor ? { color: textColor } : {};
 
-    return h("div", {
-      ref: cardRef,
-      className: cardClassName || "card job-table",
-      style: { ...(cardStyle || {}), ...text },
-    },
-      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "0 0 8px" } },
+    // Its own look, set explicitly — dark panel, light text — rather than
+    // Stash's queue classes: those also colour the entries (e.g. per
+    // status), which made the text unreadable on some setups.
+    const PANEL = { background: "#262d33", color: "#f2f2f2", borderRadius: "6px", padding: "10px 14px" };
+    const DIM = { color: "#b8c0c8", fontSize: "0.85em" };
+    return h("div", { style: PANEL },
+      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", paddingBottom: "8px" } },
         h("select", {
           className: "form-control form-control-sm", style: { maxWidth: "190px" }, value: filter,
           onChange: (e) => setFilter(e.target.value),
@@ -238,28 +215,31 @@
           type: "button", className: "btn btn-secondary btn-sm", style: { marginLeft: "auto" },
           onClick: clear, disabled: !entries || !entries.length,
         }, "Clear history")),
-      error && h("div", { className: "text-danger" }, error),
-      h("ul", null,
-        !entries && !error && h("span", { className: "empty-queue-message", style: text }, "Loading…"),
-        entries && !shown.length && h("span", { className: "empty-queue-message", style: text },
-          entries.length ? "No tasks with this status." : "No finished tasks yet — they appear here as they finish."),
+      error && h("div", { style: { color: "#ff8a80" } }, error),
+      !entries && !error && h("div", { style: DIM }, "Loading…"),
+      entries && !shown.length && h("div", { style: DIM },
+        entries.length ? "No tasks with this status." : "No finished tasks yet — they appear here as they finish."),
+      shown.length > 0 && h("ul", { style: { listStyle: "none", margin: 0, padding: 0 } },
         shown.map((e) => {
-          const st = STATUS[e.status] || { label: e.status, icon: "faCircle", fallback: "•", color: "#6c757d" };
+          const st = STATUS[e.status] || { label: e.status, icon: "faCircle", fallback: "•", color: "#9aa4ad" };
           const took = formatDuration(e.startTime, e.endTime);
-          return h("li", { key: entryKey(e), className: `job ${String(e.status || "").toLowerCase()}` },
-            h("div", null,
-              h("button", {
-                type: "button", className: "btn btn-sm minimal stop", title: "Remove from the history",
-                onClick: () => remove(e),
-              }, icon("faXmark", "×") ),
-              h("div", { className: "job-status" },
-                h("div", null,
-                  h("span", { style: { color: st.color }, title: st.label }, icon(st.icon, st.fallback)),
-                  " ",
-                  h("span", { style: text }, e.description)),
-                h("div", { style: { ...text, opacity: 0.75, fontSize: "0.85em" } },
-                  `${st.label} ${formatTime(e.endTime || e.startTime || e.addTime)}${took ? ` · took ${took}` : ""}`),
-                e.error && h("div", { className: "job-error" }, e.error))));
+          return h("li", {
+            key: entryKey(e),
+            style: {
+              display: "flex", gap: "10px", alignItems: "flex-start", padding: "8px 0",
+              borderTop: "1px solid rgba(255,255,255,0.1)", color: "#f2f2f2",
+            },
+          },
+            h("button", {
+              type: "button", title: "Remove from the history", onClick: () => remove(e),
+              style: { background: "none", border: 0, color: "#9aa4ad", padding: "0 2px", cursor: "pointer", flex: "none" },
+            }, icon("faXmark", "×")),
+            h("span", { style: { color: st.color, flex: "none" }, title: st.label }, icon(st.icon, st.fallback)),
+            h("div", { style: { minWidth: 0, flex: 1 } },
+              h("div", { style: { color: "#f2f2f2", wordBreak: "break-word" } }, e.description),
+              h("div", { style: DIM },
+                `${st.label} ${formatTime(e.endTime || e.startTime || e.addTime)}${took ? ` · took ${took}` : ""}`),
+              e.error && h("div", { style: { color: "#ff8a80", fontSize: "0.85em", wordBreak: "break-word" } }, e.error)));
         })));
   }
 
@@ -295,13 +275,7 @@
     container.append(title, body);
     (section || queue).after(container);
 
-    // The queue card's own classes and its actual colours on the page, so
-    // the text is as readable as the queue's whatever the theme.
-    const look = getComputedStyle(queue);
-    const view = h(TaskHistoryView, {
-      cardClassName: queue.className,
-      cardStyle: { backgroundColor: look.backgroundColor },
-    });
+    const view = h(TaskHistoryView);
     const ReactDOM = api.ReactDOM;
     if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(body).render(view);
     else if (ReactDOM && ReactDOM.render) ReactDOM.render(view, body);
