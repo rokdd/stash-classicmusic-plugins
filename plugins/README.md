@@ -3,7 +3,8 @@
 One folder per plugin; each is independent of the others.
 
 - **[`advanced-file-operations/`](advanced-file-operations/)** — H.265
-  conversion, split a scene at its markers, repair a broken file. Runs
+  conversion, split a scene at its markers, repair a broken file, a
+  torrent check and yt-dlp downloads. Runs
   ffmpeg on the server, so it needs ffmpeg with libx265 and Python 3 with
   `requests` there.
 - **[`marker-improvements-plugin/`](marker-improvements-plugin/)** — tag
@@ -13,9 +14,6 @@ One folder per plugin; each is independent of the others.
   page, tag descriptions from StashDB, and scraping that adds tags instead
   of replacing them. Needs Python 3 on the server (for StashDB), no extra
   modules.
-- **[`yt-dlp-downloader/`](yt-dlp-downloader/)** — download videos and
-  playlists with yt-dlp into a library folder, with the scenes filled in
-  from the video's info. Needs yt-dlp and Python 3 on the server.
 
 Installing, updating and the full feature list are in the
 [main README](../README.md). Each folder's own README has the details.

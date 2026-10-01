@@ -5,10 +5,9 @@ and classical music recordings — but useful for any library.
 
 | Plugin | What it's for |
 |---|---|
-| [Advanced File Operations](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file |
+| [Advanced File Operations](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, and scraping that adds tags instead of replacing them |
-| [yt-dlp Downloader](plugins/yt-dlp-downloader/) | Download videos and playlists into your library, with title, date, description and cover filled in |
 
 They're independent of each other — install any of them.
 
@@ -51,11 +50,8 @@ This one runs ffmpeg on the server, so the machine Stash runs on needs:
 needs only Python 3 itself — no extra modules. It uses the StashDB
 endpoint and API key you've set up under Settings → Metadata Providers.
 
-### Extra setup for yt-dlp Downloader
-
-- **yt-dlp** on the server: `sudo apt install yt-dlp` on Debian/Ubuntu, or
-  `pip install yt-dlp` for the newest version.
-- ffmpeg and Python 3, which Stash and the other plugins need anyway.
+For the **yt-dlp download** tool it also needs **yt-dlp** on the server:
+`sudo apt install yt-dlp`, or `pip install yt-dlp` for the newest version.
 
 Marker Improvements runs only in the browser and needs nothing extra.
 
@@ -87,6 +83,12 @@ under Settings → Tasks.
 - **Run in the background** (optional, per task): the work runs outside
   Stash's one-at-a-time task queue, so other tasks don't wait behind a
   long conversion; progress goes to a log file on the server.
+- **File Tools page** (a toolbox button in the top bar, optional):
+  - **Torrent check**: which videos in a folder of `.torrent` files are
+    already in your library — fuzzy matched by file name, with the
+    certainty in %, sizes, resolution and codec side by side.
+  - **Download with yt-dlp** into a library folder; the new scenes get
+    title, source URL, upload date, description and cover filled in.
 
 Details: [Advanced File Operations README](plugins/advanced-file-operations/README.md)
 
@@ -140,18 +142,6 @@ Tag Merge** plugin.
 - A setting switches back to Stash's usual replace behaviour.
 
 Details: [Tag Improvements README](plugins/tag-improvements/README.md)
-
-### yt-dlp Downloader
-
-- **Download button** in Stash's top bar: paste URLs (playlists too), pick
-  a library folder, subfolder and quality.
-- **Scenes filled in automatically**: title, source URL, upload date,
-  description, and the thumbnail as cover.
-- **Progress in Settings → Tasks**, or **in the background** so other
-  tasks don't wait.
-- Thumbnails and video info never land in your library.
-
-Details: [yt-dlp Downloader README](plugins/yt-dlp-downloader/README.md)
 
 ## License
 

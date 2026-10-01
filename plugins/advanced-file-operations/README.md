@@ -93,6 +93,113 @@ and already scanned into Stash by that point, it just needs one manual
 "Set as primary" click in the scene's Files tab instead of happening on
 its own.
 
+## File Tools page
+
+A **toolbox** button in Stash's top navigation bar opens the File Tools
+page (turn it off with **Show a File Tools button in the top bar**; the
+page stays at `/plugin/file-tools`). It has two tabs.
+
+### Torrent check
+
+Which videos in your `.torrent` files do you already have? Enter a folder
+on the server with `.torrent` files (or set a default with the **Torrent
+folder** setting) and **Run check**. The table lists every video in every
+torrent next to its best-matching scene:
+
+| Column | |
+|---|---|
+| Match | how certain it's the same video, in %, and the verdict: **In library** (85 % and up), **Possible match** (60 %+) or **Not found** |
+| Torrent / file | the video's path inside the torrent, and the torrent file |
+| Size | the video's size |
+| Res. / codec | resolution and codec — guessed from the name ("1080p", "x265"), since a .torrent file only has names and sizes |
+| Scene, size, res. / codec | the matching scene (a link) with its file's real size, resolution and codec |
+
+Filter by verdict with the drop-down; the best matches come first.
+
+How it matches: both file names are reduced to their words, leaving out
+release tags that say nothing about the content (1080p, x265, WEB-DL,
+DDP5.1, …). The score combines how similar the names are with how many of
+the torrent file's words the library name has. **Numbers decide**:
+"Symphony No. 5" and "Symphony No. 7" never match, however alike the rest
+is. **An identical file size** counts as the same file, whatever it's
+called now. Sample clips inside a torrent are skipped; torrent files that
+can't be read are listed under the table.
+
+The check runs right away (not as a task), reading your whole library's
+file list once, so it takes a few seconds on a large library.
+
+### Download (yt-dlp)
+
+Download videos — or whole playlists — with [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+straight into one of your library folders: paste URLs (one per line),
+pick the folder, an optional subfolder and the quality, and **Download**.
+Progress shows in Settings → Tasks; tick **Run in the background** to keep
+the task queue free. Your last folder, subfolder and quality are
+remembered.
+
+Needs **yt-dlp** on the server: `sudo apt install yt-dlp`, or
+`pip install yt-dlp` for the newest version (sites change often; an old
+yt-dlp is the most common reason a download fails).
+
+#### What happens after the download
+
+Stash runs one task at a time, so the download can't wait for its own
+scan. Instead it queues a scan of the new files and a **Finish downloads**
+task behind it. That one runs once the scan has created the scenes, and
+fills each one in:
+
+| Scene field | From |
+|---|---|
+| Title | the video's title |
+| URL | the video's canonical page — or, when the site doesn't report one, the URL you pasted |
+| Date | its release or upload date |
+| Details | its description |
+| Cover | its thumbnail |
+
+Until it has run, the new scenes show up with just their file name. The
+video information and thumbnails are kept in a temporary folder, not in
+your library (so Stash doesn't import the thumbnails as images), and
+deleted once the scenes are filled in.
+
+### Running in the background
+
+Tick **Run in the background** in the dialog and the download runs
+outside Stash's one-at-a-time task queue, so other tasks don't wait
+behind it. The task finishes at once and names a log file (in a `logs`
+folder inside the plugin's folder) with the download's progress, and the
+command to stop it (`kill -- -<pid>`). The scan and **Finish downloads**
+are queued as usual when it's done.
+
+### Settings
+
+Settings → Plugins → Advanced File Operations:
+
+| Setting | Effect |
+|---|---|
+| Path to yt-dlp | Leave empty if `yt-dlp` is on the server's PATH; otherwise its full path. |
+| Cookies file | A `cookies.txt` on the server, for sites that need a login. |
+| Extra yt-dlp options | Passed to yt-dlp as they are, e.g. `--limit-rate 5M --embed-subs`. |
+
+### Requirements
+
+- **yt-dlp** on the machine Stash runs on — Debian/Ubuntu:
+  `sudo apt install yt-dlp`, or `pip install yt-dlp` for the newest
+  version (sites change often; an old yt-dlp is the most common reason a
+  download fails).
+- **ffmpeg**, for merging video and audio — Stash needs it anyway.
+- **Python 3** — standard library only, nothing else to install.
+- The library folder you save into must be one of Stash's library paths
+  (Settings → Library); the dialog only offers those.
+
+
+Only download what you have the right to.
+
+#### Coming from the separate "yt-dlp Downloader" plugin
+
+That plugin is now part of Advanced File Operations. Uninstall it
+(Settings → Plugins); its settings (path to yt-dlp, cookies file, extra
+options) need setting again here.
+
 ## Splitting a scene at its markers
 
 Choose **Split at Markers…** from the scene's ⋮ menu. It opens a

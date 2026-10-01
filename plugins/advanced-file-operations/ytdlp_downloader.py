@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-yt-dlp Downloader — a Stash plugin.
+yt-dlp downloads — part of the Advanced File Operations plugin (it was a
+plugin of its own, "yt-dlp Downloader", before). Started from the File
+Tools page's Download tab; h265_transcode.py hands the "ytdlp_*" modes
+over to run() here.
 
 Downloads videos (or whole playlists) with yt-dlp into one of your Stash
 library folders, then fills in each new scene from the video's own info:
 title, source URL, upload date, description, and its thumbnail as cover.
 
 Modes (the "mode" arg):
-  - download: runs yt-dlp for the given URLs, then queues a scan of the new
+  - ytdlp_download: runs yt-dlp for the given URLs, then queues a scan of the new
     files and a "finalize" task behind it. Stash runs one task at a time,
     so the scan can't start while this task runs — the finalize task,
     queued after the scan, finds the scenes it created.
-  - finalize: fills in the new scenes, then removes the downloaded info
+  - ytdlp_finalize: fills in the new scenes, then removes the downloaded info
     and thumbnail files, which were kept in a temporary folder so they
     never land in your library.
   - download with background=true: the same, but detached from Stash's
@@ -35,8 +38,8 @@ import urllib.error
 import urllib.request
 
 # Stash's id for this plugin — the yml manifest's filename minus ".yml".
-# Must match PLUGIN_ID in ytdlp-ui.js.
-PLUGIN_ID = "ytdlpDownloader"
+# Must match PLUGIN_ID in file-tools.js.
+PLUGIN_ID = "advancedFileOperations"
 
 # yt-dlp format selections for the dialog's quality choices. "bv*+ba"
 # picks the best video and best audio stream and merges them; "/b" falls
@@ -306,7 +309,7 @@ def run_download(stash, args):
     try:
         stash.run_plugin_task(
             f"Finish downloads ({len(items)} video{'s' if len(items) != 1 else ''})",
-            {"mode": "finalize", "items": json.dumps(items), "sidecar_dir": sidecar_dir},
+            {"mode": "ytdlp_finalize", "items": json.dumps(items), "sidecar_dir": sidecar_dir},
         )
     except Exception as exc:  # noqa: BLE001
         write_plugin_output(
@@ -433,10 +436,9 @@ def start_in_background(plugin_input):
     write_plugin_output(output=f"Downloading in the background (process {proc.pid}). Log: {log_path} — stop it with: {stop}")
 
 
-def main():
+def run(plugin_input):
+    """Runs one "ytdlp_*" mode for the given plugin input."""
     global BACKGROUND
-    raw = sys.stdin.read()
-    plugin_input = json.loads(raw) if raw.strip() else {}
     args = plugin_input.get("args") or {}
     if str(args.get("background", "false")).lower() == "true":
         start_in_background(plugin_input)
@@ -445,13 +447,15 @@ def main():
 
     stash = Stash(plugin_input.get("server_connection") or {})
     mode = args.get("mode")
-    if mode == "download":
+    if mode == "ytdlp_download":
         run_download(stash, args)
-    elif mode == "finalize":
+    elif mode == "ytdlp_finalize":
         run_finalize(stash, args)
     else:
-        write_plugin_output(error="Start a download from the download button in Stash's top bar.")
+        write_plugin_output(error="Start a download from the File Tools page's Download tab.")
 
 
 if __name__ == "__main__":
-    main()
+    # Background runs start this file directly (see start_in_background).
+    raw = sys.stdin.read()
+    run(json.loads(raw) if raw.strip() else {})

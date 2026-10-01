@@ -496,6 +496,16 @@ class StashClient:
 
     # -- library ----------------------------------------------------------
 
+    def plugin_settings(self):
+        """This plugin's saved settings (Settings > Plugins), or {} if this
+        Stash version can't report them."""
+        try:
+            data = self.call("query { configuration { plugins } }")
+            return ((data.get("configuration") or {}).get("plugins") or {}).get(PLUGIN_ID) or {}
+        except Exception as exc:  # noqa: BLE001
+            log_warn(f"Couldn't read plugin settings, using defaults: {exc}")
+            return {}
+
     def run_plugin_task(self, description, args_map):
         """Queues another run of this plugin as a new Stash job. Tries the
         modern args_map form first (Stash v0.25+), falling back to the
@@ -1920,6 +1930,23 @@ def main():
     server_connection = plugin_input.get("server_connection", {})
     args = plugin_input.get("args", {}) or {}
     mode = args.get("mode", "convert_library")
+
+    # The File Tools page (file-tools.js): downloads and the torrent check
+    # live in modules of their own next to this script.
+    if mode.startswith("ytdlp_"):
+        import ytdlp_downloader  # handles its own background runs
+        ytdlp_downloader.run(plugin_input)
+        return
+    if mode == "torrent_check":
+        import torrent_check
+        client = StashClient(server_connection)
+        try:
+            result = torrent_check.run(client.call, args, client.plugin_settings())
+        except Exception as exc:  # noqa: BLE001
+            write_plugin_output(error=str(exc))
+            return
+        write_plugin_output(output=result)
+        return
 
     if str(args.get("background", "false")).lower() == "true":
         start_in_background(plugin_input)
