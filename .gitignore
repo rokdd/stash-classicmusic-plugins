@@ -10,3 +10,5 @@ plugins/advanced-file-operations/logs/
 # Record of descriptions written by Tag Improvements' StashDB sync
 plugins/tag-improvements/written-descriptions.json
 
+# Task history kept by Advanced File Operations
+plugins/advanced-file-operations/task-history.json

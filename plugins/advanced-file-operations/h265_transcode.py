@@ -1937,6 +1937,13 @@ def main():
         import ytdlp_downloader  # handles its own background runs
         ytdlp_downloader.run(plugin_input)
         return
+    if mode.startswith("history_"):
+        import task_history
+        try:
+            write_plugin_output(output=task_history.run(args, StashClient(server_connection).plugin_settings()))
+        except Exception as exc:  # noqa: BLE001
+            write_plugin_output(error=str(exc))
+        return
     if mode == "torrent_check":
         import torrent_check
         client = StashClient(server_connection)

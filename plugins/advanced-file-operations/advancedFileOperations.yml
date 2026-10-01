@@ -1,6 +1,6 @@
 name: Advanced File Operations
 description: "Video tools for Stash — per scene: H.265 conversion, split at markers, and repair (corrupt files and files that stream badly). On a File Tools page: a torrent check (which videos in your .torrent files are already in the library, with match certainty) and downloads with yt-dlp into your library."
-version: 0.0.4
+version: 0.0.5
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/advanced-file-operations
 exec:
   - python
@@ -9,6 +9,7 @@ interface: raw
 ui:
   javascript:
     - h265-ui.js
+    - task-history.js
     - file-tools.js
 tasks:
   - name: Convert Library to H265 (replace originals)
@@ -39,6 +40,10 @@ settings:
   torrentFolder:
     displayName: Torrent folder
     description: "Default folder on the server with the .torrent files the torrent check reads. Can be changed on the File Tools page for each check."
+    type: STRING
+  historyIgnore:
+    displayName: "Task history: ignore"
+    description: "Tasks to leave out of the task history, separated by commas. A name without * matches every task whose description contains it; with * it's a pattern for the whole description. Example: Scan*, Generate*, (automatic)"
     type: STRING
   ytdlpPath:
     displayName: Path to yt-dlp

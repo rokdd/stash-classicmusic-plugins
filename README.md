@@ -89,6 +89,9 @@ under Settings → Tasks.
     certainty in %, sizes, resolution and codec side by side.
   - **Download with yt-dlp** into a library folder; the new scenes get
     title, source URL, upload date, description and cover filled in.
+  - **Task history**: every finished task with status, duration and error
+    — also under the running tasks on Settings → Tasks — with an ignore
+    list for tasks you don't want in it.
 
 Details: [Advanced File Operations README](plugins/advanced-file-operations/README.md)
 

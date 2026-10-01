@@ -1,6 +1,6 @@
 // Advanced File Operations — File Tools page
 //
-// A page at /plugin/file-tools with two tools:
+// A page at /plugin/file-tools with three tabs:
 //   - Torrent check: which videos in a folder of .torrent files are
 //     already in the library (fuzzy file-name match, see torrent_check.py),
 //     as a table with sizes, codec, resolution and the match's certainty.
@@ -8,6 +8,7 @@
 //     as soon as it's done — no task queue.
 //   - Download: downloads with yt-dlp into a library folder (see
 //     ytdlp_downloader.py), as a Stash task.
+//   - Task history: finished tasks (see task-history.js).
 // A button in the top navigation bar opens the page — on by default,
 // switchable with the "Show a File Tools button in the top bar" setting.
 
@@ -265,8 +266,12 @@
       h("h2", null, "File Tools"),
       h("ul", { className: "nav nav-tabs", style: { marginBottom: "16px" } },
         tabButton("torrents", "Torrent check"),
-        tabButton("download", "Download (yt-dlp)")),
-      tab === "torrents" ? h(TorrentCheck) : h(Download));
+        tabButton("download", "Download (yt-dlp)"),
+        tabButton("history", "Task history")),
+      tab === "torrents" ? h(TorrentCheck)
+        : tab === "download" ? h(Download)
+          // From task-history.js, loaded before this file.
+          : window.AFOTaskHistory ? h(window.AFOTaskHistory.View) : h("p", null, "Task history isn't available."));
   }
 
   api.register.route(ROUTE, FileToolsPage);

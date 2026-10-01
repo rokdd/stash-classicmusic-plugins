@@ -97,7 +97,7 @@ its own.
 
 A **toolbox** button in Stash's top navigation bar opens the File Tools
 page (turn it off with **Show a File Tools button in the top bar**; the
-page stays at `/plugin/file-tools`). It has two tabs.
+page stays at `/plugin/file-tools`). It has three tabs.
 
 ### Torrent check
 
@@ -199,6 +199,29 @@ Only download what you have the right to.
 That plugin is now part of Advanced File Operations. Uninstall it
 (Settings → Plugins); its settings (path to yt-dlp, cookies file, extra
 options) need setting again here.
+
+### Task history
+
+Stash keeps no history of finished tasks — its task list only shows what's
+queued or running. This plugin records every task as it finishes and
+shows the history **under the running tasks on Settings → Tasks**, and as
+the **Task history** tab here: when it ended, the task, its status
+(finished, failed, cancelled — with the error for failed ones) and how
+long it took. Filter by status, refresh, or clear it.
+
+- Tasks are recorded while any Stash page is open. Stash still remembers
+  its last 10 finished tasks, so ones that finished while no page was open
+  are picked up the next time one is — as long as they're among those 10.
+- The history is kept on the server (`task-history.json` in the plugin's
+  folder), so every browser and device shows the same list; the newest
+  500 tasks are kept.
+- **Task history: ignore** (Settings → Plugins → Advanced File
+  Operations) leaves tasks out, separated by commas: a name without `*`
+  matches every task whose description contains it, with `*` it's a
+  pattern for the whole description — e.g. `Scan*, Generate*, (automatic)`.
+  Ignored tasks aren't recorded, and ones recorded before are hidden.
+- If a Stash version builds the Tasks page differently, the history just
+  doesn't show there; this tab always has it.
 
 ## Splitting a scene at its markers
 
