@@ -245,7 +245,11 @@
           const took = formatDuration(e.startTime, e.endTime);
           return h("li", {
             key: entryKey(e),
+            // Stash's queue box hides every list item (opacity 0) unless it
+            // has "fade-in" — the class Stash gives its own entries.
+            className: "fade-in",
             style: {
+              opacity: 1,
               display: "flex", gap: "10px", alignItems: "flex-start", padding: "8px 0",
               borderTop: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`, color: TEXT,
             },
@@ -287,6 +291,10 @@
     // queue's, in the same column. The readable panel goes inside the box.
     const box = document.createElement("div");
     box.className = queue.className;
+    // The queue box is fixed at 10em high; the history may grow to three
+    // times that before it scrolls.
+    box.style.height = "auto";
+    box.style.maxHeight = "30em";
     const section = queue.closest(".setting-section");
     let container;
     if (section) {
