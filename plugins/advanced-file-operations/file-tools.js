@@ -326,9 +326,15 @@
   const TOOLS_SECTION_ID = "afo-file-tools-section";
 
   function placeOnToolsPage() {
-    if (!/\/settings/.test(window.location.pathname) || !/tab=tools/.test(window.location.search)) return;
     if (document.getElementById(TOOLS_SECTION_ID)) return;
-    const sections = Array.from(document.querySelectorAll(".setting-section"));
+    // Stash keeps every settings tab in the page (only the open one shows),
+    // so "the last section on the page" may belong to a hidden tab. The
+    // Tools tab is found by its own links to Stash's tools instead, and the
+    // section goes after the last section in that tab.
+    const toolLink = document.querySelector('a[href$="/sceneFilenameParser"], a[href$="/sceneDuplicateChecker"]');
+    const pane = toolLink && (toolLink.closest(".tab-pane") || toolLink.closest(".setting-section")?.parentElement);
+    if (!pane) return;
+    const sections = Array.from(pane.querySelectorAll(".setting-section"));
     const last = sections[sections.length - 1];
     if (!last) return;
     const heading = last.querySelector("h1, h2, h3, h4, h5, h6");
