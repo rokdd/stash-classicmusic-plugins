@@ -134,7 +134,20 @@
   if (!api || !api.React) return;
   const React = api.React;
   const h = React.createElement;
-  const { useState, useEffect, useCallback, useMemo } = React;
+  const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
+
+  // Whether `el` really sits on a dark background: walks up to the first
+  // element with a visible background colour and checks its brightness.
+  function onDarkBackground(el) {
+    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+      const m = getComputedStyle(node).backgroundColor.match(/rgba?\(([^)]+)\)/);
+      if (!m) continue;
+      const [r, g, b, a = 1] = m[1].split(",").map((v) => parseFloat(v));
+      if (a < 0.1) continue; // transparent: look further up
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+    }
+    return true; // nothing found: Stash's default theme is dark
+  }
 
   const FA = (api.libraries && api.libraries.FontAwesomeSolid) || {};
 
@@ -169,6 +182,8 @@
   const entryKey = (e) => `${e.id}|${e.addTime}`;
 
   function TaskHistoryView() {
+    const rootRef = useRef(null);
+    const [dark, setDark] = useState(true);
     const [entries, setEntries] = useState(null);
     const [error, setError] = useState(null);
     const [filter, setFilter] = useState("all");
@@ -198,12 +213,17 @@
     const count = (s) => (entries || []).filter((e) => e.status === s).length;
 
 
-    // Its own look, set explicitly — dark panel, light text — rather than
-    // Stash's queue classes: those also colour the entries (e.g. per
-    // status), which made the text unreadable on some setups.
-    const PANEL = { background: "#262d33", color: "#f2f2f2", borderRadius: "6px", padding: "10px 14px" };
-    const DIM = { color: "#b8c0c8", fontSize: "0.85em" };
-    return h("div", { style: PANEL },
+    // No background of its own — it sits in the queue's own box (see
+    // placeOnTasksPage) and takes that box's background. The text colours
+    // are set explicitly to suit it (light on dark, dark on light), and no
+    // Stash entry classes are used, which used to override them.
+    useLayoutEffect(() => {
+      if (rootRef.current) setDark(onDarkBackground(rootRef.current));
+    }, [entries]);
+    const TEXT = dark ? "#f2f2f2" : "#1e1e1e";
+    const DIM = { color: dark ? "#b8c0c8" : "#5a6470", fontSize: "0.85em" };
+    const ERROR = dark ? "#ff8a80" : "#b3261e";
+    return h("div", { ref: rootRef, style: { color: TEXT } },
       h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", paddingBottom: "8px" } },
         h("select", {
           className: "form-control form-control-sm", style: { maxWidth: "190px" }, value: filter,
@@ -215,7 +235,7 @@
           type: "button", className: "btn btn-secondary btn-sm", style: { marginLeft: "auto" },
           onClick: clear, disabled: !entries || !entries.length,
         }, "Clear history")),
-      error && h("div", { style: { color: "#ff8a80" } }, error),
+      error && h("div", { style: { color: ERROR } }, error),
       !entries && !error && h("div", { style: DIM }, "Loading…"),
       entries && !shown.length && h("div", { style: DIM },
         entries.length ? "No tasks with this status." : "No finished tasks yet — they appear here as they finish."),
@@ -227,7 +247,7 @@
             key: entryKey(e),
             style: {
               display: "flex", gap: "10px", alignItems: "flex-start", padding: "8px 0",
-              borderTop: "1px solid rgba(255,255,255,0.1)", color: "#f2f2f2",
+              borderTop: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`, color: TEXT,
             },
           },
             h("button", {
@@ -236,10 +256,10 @@
             }, icon("faXmark", "×")),
             h("span", { style: { color: st.color, flex: "none" }, title: st.label }, icon(st.icon, st.fallback)),
             h("div", { style: { minWidth: 0, flex: 1 } },
-              h("div", { style: { color: "#f2f2f2", wordBreak: "break-word" } }, e.description),
+              h("div", { style: { color: TEXT, wordBreak: "break-word" } }, e.description),
               h("div", { style: DIM },
                 `${st.label} ${formatTime(e.endTime || e.startTime || e.addTime)}${took ? ` · took ${took}` : ""}`),
-              e.error && h("div", { style: { color: "#ff8a80", fontSize: "0.85em", wordBreak: "break-word" } }, e.error)));
+              e.error && h("div", { style: { color: ERROR, fontSize: "0.85em", wordBreak: "break-word" } }, e.error)));
         })));
   }
 
