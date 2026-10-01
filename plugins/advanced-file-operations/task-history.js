@@ -134,7 +134,23 @@
   if (!api || !api.React) return;
   const React = api.React;
   const h = React.createElement;
-  const { useState, useEffect, useCallback, useMemo } = React;
+  const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
+
+  // A text colour that's readable on whatever `el` really sits on: walks up
+  // to the first element with a visible background, and picks light text
+  // for a dark one, dark text for a light one. Copying the queue's colours
+  // wasn't enough — Stash can colour its text further down than the card.
+  function readableTextColor(el) {
+    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+      const m = getComputedStyle(node).backgroundColor.match(/rgba?\(([^)]+)\)/);
+      if (!m) continue;
+      const [r, g, b, a = 1] = m[1].split(",").map((v) => parseFloat(v));
+      if (a < 0.1) continue; // transparent: look further up
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance < 0.5 ? "#f2f2f2" : "#1e1e1e";
+    }
+    return "#f2f2f2"; // nothing found: Stash's default theme is dark
+  }
   const FA = (api.libraries && api.libraries.FontAwesomeSolid) || {};
 
   const STATUS = {
@@ -170,6 +186,8 @@
   // `cardClassName` / `cardStyle`: on Settings → Tasks, taken from Stash's
   // own queue card above, so both look exactly alike (see placeOnTasksPage).
   function TaskHistoryView({ cardClassName, cardStyle } = {}) {
+    const cardRef = useRef(null);
+    const [textColor, setTextColor] = useState(null);
     const [entries, setEntries] = useState(null);
     const [error, setError] = useState(null);
     const [filter, setFilter] = useState("all");
@@ -198,7 +216,17 @@
     );
     const count = (s) => (entries || []).filter((e) => e.status === s).length;
 
-    return h("div", { className: cardClassName || "card job-table", style: cardStyle || { color: "inherit" } },
+    // Worked out once the card is on the page (and again if it changes).
+    useLayoutEffect(() => {
+      if (cardRef.current) setTextColor(readableTextColor(cardRef.current));
+    }, [entries]);
+    const text = textColor ? { color: textColor } : {};
+
+    return h("div", {
+      ref: cardRef,
+      className: cardClassName || "card job-table",
+      style: { ...(cardStyle || {}), ...text },
+    },
       h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "0 0 8px" } },
         h("select", {
           className: "form-control form-control-sm", style: { maxWidth: "190px" }, value: filter,
@@ -212,8 +240,8 @@
         }, "Clear history")),
       error && h("div", { className: "text-danger" }, error),
       h("ul", null,
-        !entries && !error && h("span", { className: "empty-queue-message" }, "Loading…"),
-        entries && !shown.length && h("span", { className: "empty-queue-message" },
+        !entries && !error && h("span", { className: "empty-queue-message", style: text }, "Loading…"),
+        entries && !shown.length && h("span", { className: "empty-queue-message", style: text },
           entries.length ? "No tasks with this status." : "No finished tasks yet — they appear here as they finish."),
         shown.map((e) => {
           const st = STATUS[e.status] || { label: e.status, icon: "faCircle", fallback: "•", color: "#6c757d" };
@@ -228,8 +256,8 @@
                 h("div", null,
                   h("span", { style: { color: st.color }, title: st.label }, icon(st.icon, st.fallback)),
                   " ",
-                  h("span", null, e.description)),
-                h("div", { style: { opacity: 0.7, fontSize: "0.85em" } },
+                  h("span", { style: text }, e.description)),
+                h("div", { style: { ...text, opacity: 0.75, fontSize: "0.85em" } },
                   `${st.label} ${formatTime(e.endTime || e.startTime || e.addTime)}${took ? ` · took ${took}` : ""}`),
                 e.error && h("div", { className: "job-error" }, e.error))));
         })));
@@ -272,7 +300,7 @@
     const look = getComputedStyle(queue);
     const view = h(TaskHistoryView, {
       cardClassName: queue.className,
-      cardStyle: { color: look.color, backgroundColor: look.backgroundColor },
+      cardStyle: { backgroundColor: look.backgroundColor },
     });
     const ReactDOM = api.ReactDOM;
     if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(body).render(view);
