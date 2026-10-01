@@ -101,7 +101,8 @@ page stays at `/plugin/file-tools`). It has three tabs.
 
 ### Torrent check
 
-Which videos in your `.torrent` files do you already have? Enter a folder
+Which videos in your `.torrent` files (also `.torrent.added`) do you
+already have? Enter one or more folders, separated by `;`
 on the server with `.torrent` files (or set a default with the **Torrent
 folder** setting) and **Run check**. The table lists every video in every
 torrent next to its best-matching scene:
@@ -123,7 +124,10 @@ the torrent file's words the library name has. **Numbers decide**:
 "Symphony No. 5" and "Symphony No. 7" never match, however alike the rest
 is. **An identical file size** counts as the same file, whatever it's
 called now. Sample clips inside a torrent are skipped; torrent files that
-can't be read are listed under the table.
+can't be read are listed under the table. Each torrent has a **Delete torrent**
+button that deletes just that `.torrent` file (after asking) — only files
+inside the folders being checked. Opening the tab runs the check right
+away for the folders you used last, or the **Torrent folder** setting's.
 
 The check runs right away (not as a task), reading your whole library's
 file list once, so it takes a few seconds on a large library.

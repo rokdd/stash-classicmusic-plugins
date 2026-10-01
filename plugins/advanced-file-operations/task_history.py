@@ -113,7 +113,8 @@ def record_background(description, started, error=None, settings=None):
     Stash's task list only ever saw its quick start, not the work itself.
     Kept like any finished task, so the ignore list applies too."""
     entry = {
-        "id": f"bg-{os.getpid()}",
+        # Unique per run: the process id alone could be reused later.
+        "id": f"bg-{os.getpid()}-{int(__import__('time').time() * 1000)}",
         "description": f"{description} (background)",
         "status": "FAILED" if error else "FINISHED",
         "addTime": started,

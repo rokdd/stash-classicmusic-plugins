@@ -110,6 +110,24 @@
       run(true);
     }, []);
 
+    // Deletes a torrent file (after asking), and drops its rows from the table.
+    const deleteTorrent = async (row) => {
+      const path = `${row.torrent_folder}/${row.torrent}`;
+      if (!window.confirm(`Delete the torrent file?\n\n${path}\n\n(Only the .torrent file — no video is touched.)`)) return;
+      try {
+        await gql(
+          "mutation($plugin_id: ID!, $args: Map) { runPluginOperation(plugin_id: $plugin_id, args: $args) }",
+          { plugin_id: PLUGIN_ID, args: { mode: "torrent_check", folder: result.folder, delete: path } }
+        );
+        setResult((prev) => ({
+          ...prev,
+          rows: prev.rows.filter((r) => !(r.torrent === row.torrent && r.torrent_folder === row.torrent_folder)),
+        }));
+      } catch (err) {
+        window.alert(`Couldn't delete it: ${err.message || err}`);
+      }
+    };
+
     const rows = useMemo(() => {
       if (!result) return [];
       return result.rows
@@ -135,7 +153,11 @@
             h("div", { style: muted }, st.label)),
           h("td", { style: { ...cell, wordBreak: "break-word" } },
             h("div", null, r.file),
-            h("div", { style: muted }, r.torrent, r.torrent_folder ? ` — ${r.torrent_folder}` : "")),
+            h("div", { style: muted }, r.torrent, r.torrent_folder ? ` — ${r.torrent_folder}` : ""),
+            h("button", {
+              type: "button", className: "btn btn-link btn-sm text-danger", style: { padding: 0 },
+              title: "Delete this .torrent file", onClick: () => deleteTorrent(r),
+            }, "Delete torrent")),
           h("td", { style: cell }, formatSize(r.size)),
           h("td", { style: cell }, [r.resolution_guess, r.codec_guess].filter(Boolean).join(" · ") || "–"),
           h("td", { style: { ...cell, wordBreak: "break-word" } },

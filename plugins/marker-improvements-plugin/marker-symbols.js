@@ -102,6 +102,7 @@
             title
             screenshot
             preview
+            stream
             primary_tag { id name image_path }
             tags { id name image_path }
           }
@@ -1217,32 +1218,52 @@
     return row;
   }
 
-  // Marker ids whose preview video failed to load — not generated (Tasks →
-  // Generate → Marker previews), so the screenshot stays for them.
-  const previewsMissing = new Set();
+  // Marker ids whose preview video couldn't be played — not generated
+  // (Tasks → Generate → Marker previews) — so their animated preview image
+  // is shown instead, or the screenshot stays if there's none either.
+  const videosMissing = new Set();
 
-  // While the pointer is over `box`, plays the marker's preview video on top
-  // of its screenshot: muted and looping, like Stash's own marker wall.
+  // While the pointer is over `box`, plays the marker's preview on top of
+  // its screenshot, like Stash's own marker wall: the marker video (Stash's
+  // `stream`) muted and looping, or — if that can't play — the animated
+  // preview image (Stash's `preview`, a WebP).
   function addPreviewOnHover(box, marker) {
-    if (!marker.preview) return;
-    let video = null;
+    if (!marker.stream && !marker.preview) return;
+    let shown = null;
+    const cover = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;";
     const stop = () => {
-      if (video) video.remove();
-      video = null;
+      if (shown) shown.remove();
+      shown = null;
+    };
+    const showImage = () => {
+      stop();
+      if (!marker.preview) return;
+      const img = document.createElement("img");
+      img.src = marker.preview;
+      img.alt = "";
+      img.style.cssText = cover;
+      img.addEventListener("error", stop);
+      box.appendChild(img);
+      shown = img;
     };
     box.addEventListener("mouseenter", () => {
-      if (video || previewsMissing.has(marker.id)) return;
-      video = document.createElement("video");
-      video.src = marker.preview;
+      if (shown) return;
+      if (!marker.stream || videosMissing.has(marker.id)) {
+        showImage();
+        return;
+      }
+      const video = document.createElement("video");
+      video.src = marker.stream;
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
-      video.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;";
+      video.style.cssText = cover;
       video.addEventListener("error", () => {
-        previewsMissing.add(marker.id);
-        stop();
+        videosMissing.add(marker.id);
+        if (shown === video) showImage();
       });
       box.appendChild(video);
+      shown = video;
       video.play().catch(() => {}); // e.g. stopped by leaving before it started
     });
     box.addEventListener("mouseleave", stop);

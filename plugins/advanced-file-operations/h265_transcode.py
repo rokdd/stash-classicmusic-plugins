@@ -1976,7 +1976,10 @@ def _main(plugin_input):
         import torrent_check
         client = StashClient(server_connection)
         try:
-            result = torrent_check.run(client.call, args, client.plugin_settings())
+            if args.get("delete"):
+                result = torrent_check.delete_torrent(args["delete"], args, client.plugin_settings())
+            else:
+                result = torrent_check.run(client.call, args, client.plugin_settings())
         except Exception as exc:  # noqa: BLE001
             write_plugin_output(error=str(exc))
             return

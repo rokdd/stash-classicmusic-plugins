@@ -166,7 +166,9 @@
 
   const entryKey = (e) => `${e.id}|${e.addTime}`;
 
-  function TaskHistoryView() {
+  // `cardClassName` / `cardStyle`: on Settings → Tasks, taken from Stash's
+  // own queue card above, so both look exactly alike (see placeOnTasksPage).
+  function TaskHistoryView({ cardClassName, cardStyle } = {}) {
     const [entries, setEntries] = useState(null);
     const [error, setError] = useState(null);
     const [filter, setFilter] = useState("all");
@@ -195,7 +197,7 @@
     );
     const count = (s) => (entries || []).filter((e) => e.status === s).length;
 
-    return h("div", { className: "card job-table" },
+    return h("div", { className: cardClassName || "card job-table", style: cardStyle || { color: "inherit" } },
       h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "0 0 8px" } },
         h("select", {
           className: "form-control form-control-sm", style: { maxWidth: "190px" }, value: filter,
@@ -264,9 +266,16 @@
     container.append(title, body);
     (section || queue).after(container);
 
+    // The queue card's own classes and its actual colours on the page, so
+    // the text is as readable as the queue's whatever the theme.
+    const look = getComputedStyle(queue);
+    const view = h(TaskHistoryView, {
+      cardClassName: queue.className,
+      cardStyle: { color: look.color, backgroundColor: look.backgroundColor },
+    });
     const ReactDOM = api.ReactDOM;
-    if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(body).render(h(TaskHistoryView));
-    else if (ReactDOM && ReactDOM.render) ReactDOM.render(h(TaskHistoryView), body);
+    if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(body).render(view);
+    else if (ReactDOM && ReactDOM.render) ReactDOM.render(view, body);
   }
 
   let placePending = false;

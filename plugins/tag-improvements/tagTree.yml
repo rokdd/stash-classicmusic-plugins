@@ -1,6 +1,6 @@
 name: Tag Improvements
 description: "Tag tools for Stash: a collapsible tree of all tags on the Tags page (with images, descriptions and counts); tag descriptions copied from StashDB and kept up to date; and scraping a scene from its Edit tab adds the scraped tags to the existing ones instead of replacing them."
-version: 0.0.8
+version: 0.0.9
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-improvements
 exec:
   - python

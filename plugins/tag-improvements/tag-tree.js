@@ -201,7 +201,20 @@
 
     const row = h(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: "8px", padding: "3px 0", minHeight: `${IMAGE_HEIGHT_PX + 6}px` } },
+      {
+        style: {
+          display: "flex", alignItems: "center", gap: "8px", padding: "3px 0",
+          minHeight: `${IMAGE_HEIGHT_PX + 6}px`, cursor: kids.length ? "pointer" : "default",
+        },
+        // Clicking the row next to the name opens/closes it too — not when
+        // the click is on the tag's link or one of the row's buttons.
+        onClick: (e) => {
+          if (!kids.length || e.target.closest("a, button")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          ctx.toggle(key);
+        },
+      },
       kids.length
         ? h(
           "button",
@@ -210,7 +223,13 @@
             className: "btn btn-link p-0",
             style: { width: "20px", color: "inherit", flex: "none" },
             title: open ? "Collapse" : "Expand",
-            onClick: () => ctx.toggle(key),
+            // On Stash's Tags page the tree sits inside Stash's own list,
+            // which also handles clicks — keep this one to ourselves.
+            onClick: (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              ctx.toggle(key);
+            },
           },
           h(Chevron, { open })
         )

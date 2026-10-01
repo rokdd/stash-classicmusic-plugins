@@ -28,6 +28,10 @@ import difflib
 import os
 import re
 
+# Torrent files: plain ".torrent", and ".torrent.added", which some
+# clients (e.g. rTorrent's watch folders) rename a torrent to once added.
+TORRENT_SUFFIXES = (".torrent", ".torrent.added")
+
 VIDEO_EXTENSIONS = {
     ".mp4", ".m4v", ".mkv", ".avi", ".wmv", ".mov", ".webm", ".mpg", ".mpeg",
     ".ts", ".m2ts", ".flv", ".vob", ".3gp",
@@ -202,6 +206,23 @@ def library_files(gql):
     return files
 
 
+def delete_torrent(path, args, settings):
+    """Deletes one torrent file — only a .torrent/.torrent.added file that
+    sits directly in one of the folders being checked, so this can't be
+    used to delete anything else on the server."""
+    given = (args.get("folder") or settings.get("torrentFolder") or "").strip()
+    folders = {os.path.realpath(f.strip()) for f in given.split(";") if f.strip()}
+    real = os.path.realpath(path or "")
+    if not real.lower().endswith(TORRENT_SUFFIXES):
+        raise ValueError("Only .torrent files can be deleted here.")
+    if os.path.dirname(real) not in folders:
+        raise ValueError("That file isn't in one of the torrent folders being checked.")
+    if not os.path.isfile(real):
+        raise ValueError("That torrent file doesn't exist (any more).")
+    os.remove(real)
+    return {"deleted": path}
+
+
 def run(gql, args, settings):
     # One or several folders, separated by ";".
     given = (args.get("folder") or settings.get("torrentFolder") or "").strip()
@@ -226,7 +247,7 @@ def run(gql, args, settings):
     rows, unreadable = [], []
     skipped_samples = 0
     torrent_paths = sorted(
-        os.path.join(folder, n) for folder in folders for n in os.listdir(folder) if n.lower().endswith(".torrent")
+        os.path.join(folder, n) for folder in folders for n in os.listdir(folder) if n.lower().endswith(TORRENT_SUFFIXES)
     )
     for torrent_path in torrent_paths:
         try:
