@@ -124,17 +124,29 @@
   startRecording();
 
   // -- the history view ------------------------------------------------------------
+  //
+  // Drawn like Stash's own task queue: the same card ("job-table") and the
+  // same entries ("job" items with a status icon, the description, and a
+  // line below), so it picks up Stash's own styling. Where a queued task
+  // has a stop button, a finished one here has a button to remove it.
 
   if (!api || !api.React) return;
   const React = api.React;
   const h = React.createElement;
   const { useState, useEffect, useCallback, useMemo } = React;
+  const FA = (api.libraries && api.libraries.FontAwesomeSolid) || {};
 
   const STATUS = {
-    FINISHED: { label: "Finished", color: "#2e9e4f" },
-    FAILED: { label: "Failed", color: "#c0392b" },
-    CANCELLED: { label: "Cancelled", color: "#6c757d" },
+    FINISHED: { label: "Finished", icon: "faCheck", fallback: "✓", color: "#2e9e4f" },
+    FAILED: { label: "Failed", icon: "faCircleExclamation", fallback: "!", color: "#c0392b" },
+    CANCELLED: { label: "Cancelled", icon: "faBan", fallback: "⊘", color: "#6c757d" },
   };
+
+  function icon(name, fallback) {
+    const Icon = api.components && api.components.Icon;
+    const glyph = FA[name] || (name === "faCircleExclamation" && FA.faExclamationCircle);
+    return Icon && glyph ? h(Icon, { icon: glyph, className: "fa-fw" }) : h("span", null, fallback);
+  }
 
   function formatTime(iso) {
     if (!iso) return "–";
@@ -144,13 +156,15 @@
 
   function formatDuration(start, end) {
     const ms = new Date(end) - new Date(start);
-    if (!start || !end || Number.isNaN(ms) || ms < 0) return "–";
+    if (!start || !end || Number.isNaN(ms) || ms < 0) return "";
     const s = Math.round(ms / 1000);
     if (s < 60) return `${s}s`;
     const m = Math.floor(s / 60);
     if (m < 60) return `${m}m ${s % 60}s`;
     return `${Math.floor(m / 60)}h ${m % 60}m`;
   }
+
+  const entryKey = (e) => `${e.id}|${e.addTime}`;
 
   function TaskHistoryView() {
     const [entries, setEntries] = useState(null);
@@ -168,6 +182,8 @@
       return () => window.removeEventListener(CHANGED_EVENT, load);
     }, [load]);
 
+    const remove = (e) =>
+      operation({ mode: "history_remove", key: entryKey(e) }).then(load).catch((err) => setError(err.message || String(err)));
     const clear = () => {
       if (!window.confirm("Clear the whole task history?")) return;
       operation({ mode: "history_clear" }).then(load).catch((err) => setError(err.message || String(err)));
@@ -177,59 +193,77 @@
       () => (entries || []).filter((e) => filter === "all" || e.status === filter),
       [entries, filter]
     );
-    const cell = { padding: "6px 8px", verticalAlign: "top", borderTop: "1px solid rgba(255,255,255,0.1)" };
+    const count = (s) => (entries || []).filter((e) => e.status === s).length;
 
-    return h("div", null,
-      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" } },
-        h("select", { className: "form-control", style: { maxWidth: "200px" }, value: filter, onChange: (e) => setFilter(e.target.value) },
+    return h("div", { className: "card job-table" },
+      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "0 0 8px" } },
+        h("select", {
+          className: "form-control form-control-sm", style: { maxWidth: "190px" }, value: filter,
+          onChange: (e) => setFilter(e.target.value),
+        },
           h("option", { value: "all" }, `All (${(entries || []).length})`),
-          Object.keys(STATUS).map((s) => h("option", { key: s, value: s },
-            `${STATUS[s].label} (${(entries || []).filter((e) => e.status === s).length})`))),
-        h("button", { type: "button", className: "btn btn-secondary btn-sm", onClick: load }, "Refresh"),
-        h("button", { type: "button", className: "btn btn-secondary btn-sm", onClick: clear, disabled: !entries || !entries.length }, "Clear history")),
+          Object.keys(STATUS).map((s) => h("option", { key: s, value: s }, `${STATUS[s].label} (${count(s)})`))),
+        h("button", {
+          type: "button", className: "btn btn-secondary btn-sm", style: { marginLeft: "auto" },
+          onClick: clear, disabled: !entries || !entries.length,
+        }, "Clear history")),
       error && h("div", { className: "text-danger" }, error),
-      !entries && !error && h("div", { className: "text-muted" }, "Loading…"),
-      entries && !shown.length && h("div", { className: "text-muted" },
-        entries.length ? "No tasks with this status." : "No finished tasks recorded yet — they appear here as they finish."),
-      shown.length > 0 && h("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "0.9em" } },
-        h("thead", null, h("tr", null, ["Ended", "Task", "Status", "Duration"].map((t) =>
-          h("th", { key: t, style: { ...cell, borderTop: "none", textAlign: "left" } }, t)))),
-        h("tbody", null, shown.map((e) => {
-          const st = STATUS[e.status] || { label: e.status, color: "#6c757d" };
-          return h("tr", { key: `${e.id}|${e.addTime}` },
-            h("td", { style: { ...cell, whiteSpace: "nowrap" } }, formatTime(e.endTime || e.startTime || e.addTime)),
-            h("td", { style: { ...cell, wordBreak: "break-word" } },
-              e.description,
-              e.error && h("div", { className: "text-danger", style: { fontSize: "0.9em" } }, e.error)),
-            h("td", { style: cell }, h("span", { className: "badge", style: { background: st.color, color: "#fff" } }, st.label)),
-            h("td", { style: { ...cell, whiteSpace: "nowrap" } }, formatDuration(e.startTime, e.endTime)));
-        }))));
+      h("ul", null,
+        !entries && !error && h("span", { className: "empty-queue-message" }, "Loading…"),
+        entries && !shown.length && h("span", { className: "empty-queue-message" },
+          entries.length ? "No tasks with this status." : "No finished tasks yet — they appear here as they finish."),
+        shown.map((e) => {
+          const st = STATUS[e.status] || { label: e.status, icon: "faCircle", fallback: "•", color: "#6c757d" };
+          const took = formatDuration(e.startTime, e.endTime);
+          return h("li", { key: entryKey(e), className: `job ${String(e.status || "").toLowerCase()}` },
+            h("div", null,
+              h("button", {
+                type: "button", className: "btn btn-sm minimal stop", title: "Remove from the history",
+                onClick: () => remove(e),
+              }, icon("faXmark", "×") ),
+              h("div", { className: "job-status" },
+                h("div", null,
+                  h("span", { style: { color: st.color }, title: st.label }, icon(st.icon, st.fallback)),
+                  " ",
+                  h("span", null, e.description)),
+                h("div", { style: { opacity: 0.7, fontSize: "0.85em" } },
+                  `${st.label} ${formatTime(e.endTime || e.startTime || e.addTime)}${took ? ` · took ${took}` : ""}`),
+                e.error && h("div", { className: "job-error" }, e.error))));
+        })));
   }
 
   window.AFOTaskHistory = { View: TaskHistoryView };
 
-  // -- under the running tasks on Settings → Tasks ---------------------------------
+  // -- underneath the task queue on Settings → Tasks ------------------------------
   //
-  // Stash's task list there (its "job-table") isn't a component plugins can
-  // extend, so the history is placed right after it on the page. If a Stash
-  // version builds that page differently, it just doesn't appear there — the
-  // File Tools page's Task history tab still has it.
+  // Stash's queue there isn't a component plugins can extend, so the history
+  // goes right after the queue's section on the page, built the same way:
+  // the same kind of section and heading as the queue's, titled "Task
+  // History". If a Stash version builds that page differently, it just
+  // doesn't appear there — the File Tools page's Task history tab has it.
 
   const CONTAINER_ID = "afo-task-history";
+
   function placeOnTasksPage() {
     if (!/\/settings/.test(window.location.pathname) || !/tab=tasks/.test(window.location.search)) return;
     if (document.getElementById(CONTAINER_ID)) return;
-    const jobTable = document.querySelector(".job-table");
-    if (!jobTable) return;
-    const container = document.createElement("div");
+    // Stash's own queue — not this history, which uses the same class.
+    const queue = Array.from(document.querySelectorAll(".job-table")).find((el) => !el.closest(`#${CONTAINER_ID}`));
+    if (!queue) return;
+
+    // The queue's own section and heading, to copy their look.
+    const section = queue.closest(".setting-section") || queue.parentElement;
+    const heading = section && section.querySelector("h1, h2, h3, h4, h5, h6");
+    const container = document.createElement(section ? section.tagName.toLowerCase() : "div");
     container.id = CONTAINER_ID;
-    container.className = "card";
-    container.style.cssText = "padding:12px 16px;margin:16px 0;";
-    const heading = document.createElement("h5");
-    heading.textContent = "Task history";
+    container.className = section ? section.className : "";
+    const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
+    if (heading) title.className = heading.className;
+    title.textContent = "Task History";
     const body = document.createElement("div");
-    container.append(heading, body);
-    jobTable.after(container);
+    container.append(title, body);
+    (section || queue).after(container);
+
     const ReactDOM = api.ReactDOM;
     if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(body).render(h(TaskHistoryView));
     else if (ReactDOM && ReactDOM.render) ReactDOM.render(h(TaskHistoryView), body);

@@ -204,10 +204,11 @@ options) need setting again here.
 
 Stash keeps no history of finished tasks — its task list only shows what's
 queued or running. This plugin records every task as it finishes and
-shows the history **under the running tasks on Settings → Tasks**, and as
-the **Task history** tab here: when it ended, the task, its status
-(finished, failed, cancelled — with the error for failed ones) and how
-long it took. Filter by status, refresh, or clear it.
+shows the history as **Task History right underneath the Job Queue on
+Settings → Tasks** — drawn just like the queue, one entry per task with
+its status icon, description, when it ended and how long it took, and
+the error for failed ones — and as the **Task history** tab here. Filter
+by status, remove single entries with their **×**, or clear it.
 
 - Tasks are recorded while any Stash page is open. Stash still remembers
   its last 10 finished tasks, so ones that finished while no page was open

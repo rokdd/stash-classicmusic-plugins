@@ -11,6 +11,7 @@ the same history. Runs through Stash's runPluginOperation:
   - history_add:   args "entries" — a JSON list of finished tasks
   - history_list:  returns the history, newest first, and the highest
                    task id seen (so a page can look for ones it missed)
+  - history_remove: args "key" ("<id>|<addTime>") — removes one entry
   - history_clear: empties it
 
 Tasks matching the "Task history: ignore" setting aren't kept, and ones
@@ -111,6 +112,14 @@ def run(args, settings=None):
         data = _load()
         entries = [e for e in data.get("entries") or [] if not ignored(e, rules)]
         return {"entries": entries, "last_id": data.get("last_id") or 0}
+    if mode == "history_remove":
+        data = _load()
+        key = args.get("key")
+        before = len(data.get("entries") or [])
+        data["entries"] = [e for e in data.get("entries") or [] if _key(e) != key]
+        if len(data["entries"]) != before:
+            _save(data)
+        return {"removed": before - len(data["entries"])}
     if mode == "history_clear":
         _save({"entries": [], "last_id": _load().get("last_id") or 0})
         return {"cleared": True}
