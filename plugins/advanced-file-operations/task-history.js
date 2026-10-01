@@ -262,18 +262,39 @@
     const queue = Array.from(document.querySelectorAll(".job-table")).find((el) => !el.closest(`#${CONTAINER_ID}`));
     if (!queue) return;
 
-    // The queue's own section and heading, to copy their look.
-    const section = queue.closest(".setting-section") || queue.parentElement;
-    const heading = section && section.querySelector("h1, h2, h3, h4, h5, h6");
-    const container = document.createElement(section ? section.tagName.toLowerCase() : "div");
+    // Built like the queue: a box with exactly the queue card's classes —
+    // so the same width, margins and spacing — under a heading like the
+    // queue's, in the same column. The readable panel goes inside the box.
+    const box = document.createElement("div");
+    box.className = queue.className;
+    const section = queue.closest(".setting-section");
+    let container;
+    if (section) {
+      // The queue sits in a settings section: a section of the same kind
+      // right after it.
+      const heading = section.querySelector("h1, h2, h3, h4, h5, h6");
+      container = document.createElement(section.tagName.toLowerCase());
+      container.className = section.className;
+      const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
+      if (heading) title.className = heading.className;
+      title.textContent = "Task History";
+      container.append(title, box);
+      section.after(container);
+    } else {
+      // Otherwise: heading and box right after the queue's own box, in the
+      // same parent — the queue's heading (if it has one just above it)
+      // copied for the look.
+      const prev = queue.previousElementSibling;
+      const heading = prev && /^H[1-6]$/.test(prev.tagName) ? prev : null;
+      container = document.createElement("div");
+      const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h5");
+      if (heading) title.className = heading.className;
+      title.textContent = "Task History";
+      container.append(title, box);
+      queue.after(container);
+    }
     container.id = CONTAINER_ID;
-    container.className = section ? section.className : "";
-    const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
-    if (heading) title.className = heading.className;
-    title.textContent = "Task History";
-    const body = document.createElement("div");
-    container.append(title, body);
-    (section || queue).after(container);
+    const body = box;
 
     const view = h(TaskHistoryView);
     const ReactDOM = api.ReactDOM;
