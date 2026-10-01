@@ -118,12 +118,16 @@
       argsMap.quality = opts.quality || "visually_lossless";
     }
     argsMap.background = opts.background ? "true" : "false";
-    return runTask(`Convert ${await sceneLabel(sceneId)} to H265${backgroundSuffix(opts)}`, argsMap);
+    // Also passed along, so a background run can name itself in the task history.
+    argsMap.task_description = `Convert ${await sceneLabel(sceneId)} to H265`;
+    return runTask(`${argsMap.task_description}${backgroundSuffix(opts)}`, argsMap);
   }
 
   async function runRepairScene(sceneId, opts) {
-    return runTask(`Repair ${await sceneLabel(sceneId)}${backgroundSuffix(opts)}`, {
+    const description = `Repair ${await sceneLabel(sceneId)}`;
+    return runTask(`${description}${backgroundSuffix(opts)}`, {
       background: opts.background ? "true" : "false",
+      task_description: description,
       mode: "repair_scene",
       scene_id: String(sceneId),
       keep_original: opts.keepOriginal ? "true" : "false",
@@ -144,7 +148,8 @@
       argsMap.cut_seconds = opts.cutSeconds.join(",");
     }
     argsMap.background = opts.background ? "true" : "false";
-    return runTask(`Split ${await sceneLabel(sceneId)} at markers${backgroundSuffix(opts)}`, argsMap);
+    argsMap.task_description = `Split ${await sceneLabel(sceneId)} at markers`;
+    return runTask(`${argsMap.task_description}${backgroundSuffix(opts)}`, argsMap);
   }
 
   // Asks for each marker's end_seconds too (Stash v0.27+). Older versions

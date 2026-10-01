@@ -1,6 +1,6 @@
 name: Advanced File Operations
 description: "Video tools for Stash — per scene: H.265 conversion, split at markers, and repair (corrupt files and files that stream badly). On a File Tools page: a torrent check (which videos in your .torrent files are already in the library, with match certainty) and downloads with yt-dlp into your library."
-version: 0.0.6
+version: 0.0.7
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/advanced-file-operations
 exec:
   - python
@@ -39,7 +39,7 @@ settings:
     type: BOOLEAN
   torrentFolder:
     displayName: Torrent folder
-    description: "Default folder on the server with the .torrent files the torrent check reads. Can be changed on the File Tools page for each check."
+    description: "Folder(s) on the server with the .torrent files the torrent check reads — several separated by ; (e.g. /data/torrents; /data/watch). The check runs for them as soon as you open the Torrent check tab; you can enter others there for a single check."
     type: STRING
   historyIgnore:
     displayName: "Task history: ignore"

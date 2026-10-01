@@ -203,11 +203,14 @@ def library_files(gql):
 
 
 def run(gql, args, settings):
-    folder = (args.get("folder") or settings.get("torrentFolder") or "").strip()
-    if not folder:
+    # One or several folders, separated by ";".
+    given = (args.get("folder") or settings.get("torrentFolder") or "").strip()
+    folders = [f.strip() for f in given.split(";") if f.strip()]
+    if not folders:
         raise ValueError("No torrent folder given — enter one, or set a default in the plugin's settings.")
-    if not os.path.isdir(folder):
-        raise ValueError(f"Torrent folder doesn't exist on the server: {folder}")
+    missing = [f for f in folders if not os.path.isdir(f)]
+    if missing:
+        raise ValueError("Torrent folder doesn't exist on the server: " + "; ".join(missing))
 
     library = library_files(gql)
     # Word → library files containing it, to only compare likely candidates.
@@ -223,7 +226,7 @@ def run(gql, args, settings):
     rows, unreadable = [], []
     skipped_samples = 0
     torrent_paths = sorted(
-        os.path.join(folder, n) for n in os.listdir(folder) if n.lower().endswith(".torrent")
+        os.path.join(folder, n) for folder in folders for n in os.listdir(folder) if n.lower().endswith(".torrent")
     )
     for torrent_path in torrent_paths:
         try:
@@ -252,6 +255,7 @@ def run(gql, args, settings):
                     best, best_pct = lib, pct
             rows.append({
                 "torrent": os.path.basename(torrent_path),
+                "torrent_folder": os.path.dirname(torrent_path),
                 "torrent_name": torrent_name,
                 "file": inner_path,
                 "size": size,
@@ -272,7 +276,7 @@ def run(gql, args, settings):
 
     counts = {s: sum(1 for r in rows if r["status"] == s) for s in ("in_library", "possible", "not_found")}
     return {
-        "folder": folder,
+        "folder": "; ".join(folders),
         "torrents": len(torrent_paths),
         "videos": len(rows),
         "library_files": len(library),

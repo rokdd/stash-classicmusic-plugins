@@ -99,7 +99,14 @@ def log_progress(fraction):
     _log("p", f"{max(0.0, min(1.0, fraction)):.4f}")
 
 
+# What this run ended with — a background run records it in the task
+# history when it's done (see run).
+LAST_OUTCOME = {}
+
+
 def write_plugin_output(output=None, error=None):
+    LAST_OUTCOME.clear()
+    LAST_OUTCOME.update({"error": error} if error else {"output": output})
     print(json.dumps({"error": str(error)} if error else {"output": output or "ok"}))
 
 
@@ -447,6 +454,27 @@ def run(plugin_input):
 
     stash = Stash(plugin_input.get("server_connection") or {})
     mode = args.get("mode")
+    if BACKGROUND:
+        # Tell the task history how this background run ended — Stash only
+        # saw the quick task that started it.
+        import task_history
+        started = task_history.utc_now()
+        error = None
+        try:
+            _run_mode(stash, mode, args)
+        except Exception as exc:  # noqa: BLE001
+            error = exc
+            raise
+        finally:
+            task_history.record_background(
+                args.get("task_description") or mode, started,
+                error or LAST_OUTCOME.get("error"), stash.plugin_settings(),
+            )
+        return
+    _run_mode(stash, mode, args)
+
+
+def _run_mode(stash, mode, args):
     if mode == "ytdlp_download":
         run_download(stash, args)
     elif mode == "ytdlp_finalize":

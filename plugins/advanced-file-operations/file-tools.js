@@ -84,7 +84,9 @@
     const [running, setRunning] = useState(false);
     const [filter, setFilter] = useState("all");
 
-    const run = async () => {
+    // `automatic`: the check that runs on opening the tab — it stays quiet
+    // when no folder is set up yet, instead of showing an error.
+    const run = async (automatic = false) => {
       setRunning(true);
       setError(null);
       remember({ torrentFolder: folder });
@@ -95,11 +97,18 @@
         );
         setResult(data.runPluginOperation);
       } catch (err) {
-        setError(err.message || String(err));
+        const message = err.message || String(err);
+        if (!(automatic && /No torrent folder given/.test(message))) setError(message);
       } finally {
         setRunning(false);
       }
     };
+
+    // Opening the tab checks right away, so the table is always current —
+    // with the folder(s) last used here, or else the plugin setting's.
+    useEffect(() => {
+      run(true);
+    }, []);
 
     const rows = useMemo(() => {
       if (!result) return [];
@@ -126,7 +135,7 @@
             h("div", { style: muted }, st.label)),
           h("td", { style: { ...cell, wordBreak: "break-word" } },
             h("div", null, r.file),
-            h("div", { style: muted }, r.torrent)),
+            h("div", { style: muted }, r.torrent, r.torrent_folder ? ` — ${r.torrent_folder}` : "")),
           h("td", { style: cell }, formatSize(r.size)),
           h("td", { style: cell }, [r.resolution_guess, r.codec_guess].filter(Boolean).join(" · ") || "–"),
           h("td", { style: { ...cell, wordBreak: "break-word" } },
@@ -149,11 +158,11 @@
       h("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" } },
         h("input", {
           className: "form-control", style: { maxWidth: "460px" }, value: folder,
-          placeholder: "Folder with .torrent files (empty: the plugin setting)",
+          placeholder: "Folder(s) with .torrent files, separated by ; (empty: the plugin setting)",
           onChange: (e) => setFolder(e.target.value),
           onKeyDown: (e) => { if (e.key === "Enter" && !running) run(); },
         }),
-        h("button", { type: "button", className: "btn btn-primary", disabled: running, onClick: run },
+        h("button", { type: "button", className: "btn btn-primary", disabled: running, onClick: () => run() },
           running ? "Checking…" : "Run check"),
         result && h("select", {
           className: "form-control", style: { maxWidth: "220px" }, value: filter,
@@ -216,6 +225,7 @@
             args_map: {
               mode: "ytdlp_download", urls: list.join("\n"), dest, subfolder: subfolder.trim(), quality,
               background: background ? "true" : "false",
+              task_description: `Download ${list.length} URL${list.length === 1 ? "" : "s"} to ${where}`,
             },
           }
         );
@@ -252,7 +262,12 @@
   // -- the page -------------------------------------------------------------------
 
   function FileToolsPage() {
-    const [tab, setTab] = useState(remembered().tab || "torrents");
+    // ?tab=… (from the entries on Settings → Tools) wins over the last tab used.
+    const fromUrl = new URLSearchParams(window.location.search).get("tab");
+    const [tab, setTab] = useState(fromUrl || remembered().tab || "torrents");
+    useEffect(() => {
+      if (fromUrl && fromUrl !== tab) setTab(fromUrl);
+    }, [fromUrl]);
     const choose = (t) => {
       remember({ tab: t });
       setTab(t);
@@ -275,6 +290,78 @@
   }
 
   api.register.route(ROUTE, FileToolsPage);
+
+  // -- entries on Settings → Tools --------------------------------------------------
+  //
+  // Stash's Tools page isn't something plugins can extend, so a "File Tools"
+  // section is added after its own sections, built the same way (same kind
+  // of section, heading and rows), with one entry per tab. If a Stash
+  // version builds that page differently, it just doesn't appear — the
+  // page itself is still at /plugin/file-tools.
+
+  const TOOLS_SECTION_ID = "afo-file-tools-section";
+  const TOOL_ENTRIES = [
+    { tab: "torrents", title: "Torrent check", text: "Which videos in your .torrent files are already in the library." },
+    { tab: "download", title: "Download (yt-dlp)", text: "Download videos or playlists into a library folder." },
+    { tab: "history", title: "Task history", text: "Every finished task, with status, duration and errors." },
+  ];
+
+  // Navigates inside Stash without reloading the page: Stash's router
+  // follows the browser history, so a push plus a popstate does it.
+  function goTo(url) {
+    window.history.pushState({}, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
+  function placeOnToolsPage() {
+    if (!/\/settings/.test(window.location.pathname) || !/tab=tools/.test(window.location.search)) return;
+    if (document.getElementById(TOOLS_SECTION_ID)) return;
+    const sections = Array.from(document.querySelectorAll(".setting-section"));
+    const last = sections[sections.length - 1];
+    if (!last) return;
+    const heading = last.querySelector("h1, h2, h3, h4, h5, h6");
+    const card = last.querySelector(".card");
+    const row = last.querySelector(".setting");
+
+    const section = document.createElement(last.tagName.toLowerCase());
+    section.id = TOOLS_SECTION_ID;
+    section.className = last.className;
+    const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
+    if (heading) title.className = heading.className;
+    title.textContent = "File Tools";
+    const box = document.createElement("div");
+    box.className = card ? card.className : "card";
+    TOOL_ENTRIES.forEach((t) => {
+      const entry = document.createElement("div");
+      entry.className = row ? row.className : "setting";
+      const left = document.createElement("div");
+      const name = document.createElement("h3");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-secondary";
+      button.textContent = t.title;
+      button.addEventListener("click", () => goTo(`${ROUTE}?tab=${t.tab}`));
+      name.appendChild(button);
+      const sub = document.createElement("div");
+      sub.className = "sub-heading";
+      sub.textContent = t.text;
+      left.append(name, sub);
+      entry.appendChild(left);
+      box.appendChild(entry);
+    });
+    section.append(title, box);
+    last.after(section);
+  }
+
+  let toolsPending = false;
+  new MutationObserver(() => {
+    if (toolsPending) return;
+    toolsPending = true;
+    setTimeout(() => {
+      toolsPending = false;
+      placeOnToolsPage();
+    }, 300);
+  }).observe(document.body, { childList: true, subtree: true });
 
   // -- the top bar button (setting, on by default) -----------------------------
   //

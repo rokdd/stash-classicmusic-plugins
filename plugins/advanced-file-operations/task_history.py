@@ -103,6 +103,30 @@ def add(entries, rules=()):
     return {"added": added, "total": len(data["entries"])}
 
 
+def utc_now():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def record_background(description, started, error=None, settings=None):
+    """A background run (see start_in_background) records its own end here:
+    Stash's task list only ever saw its quick start, not the work itself.
+    Kept like any finished task, so the ignore list applies too."""
+    entry = {
+        "id": f"bg-{os.getpid()}",
+        "description": f"{description} (background)",
+        "status": "FAILED" if error else "FINISHED",
+        "addTime": started,
+        "startTime": started,
+        "endTime": utc_now(),
+        "error": str(error)[:2000] if error else None,
+    }
+    try:
+        add([entry], ignore_rules(settings))
+    except Exception:  # noqa: BLE001
+        pass  # a history that can't be written mustn't fail the run itself
+
+
 def run(args, settings=None):
     mode = args.get("mode")
     rules = ignore_rules(settings)

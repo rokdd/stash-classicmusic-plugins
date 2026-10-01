@@ -1841,7 +1841,14 @@ def read_plugin_input():
     return json.loads(raw)
 
 
+# What this run ended with (see write_plugin_output) — a background run
+# records it in the task history when it's done (see main).
+LAST_OUTCOME = {}
+
+
 def write_plugin_output(output=None, error=None):
+    LAST_OUTCOME.clear()
+    LAST_OUTCOME.update({"error": error} if error else {"output": output})
     result = {}
     if error:
         result["error"] = str(error)
@@ -1925,8 +1932,29 @@ def start_in_background(plugin_input):
 
 
 def main():
-    global BACKGROUND
     plugin_input = read_plugin_input()
+    import task_history
+    started = task_history.utc_now()
+    error = None
+    try:
+        _main(plugin_input)
+    except Exception as exc:  # noqa: BLE001
+        error = exc
+        raise
+    finally:
+        # A background run tells the task history how it ended — Stash only
+        # saw the quick task that started it.
+        if BACKGROUND:
+            args = plugin_input.get("args") or {}
+            settings = StashClient(plugin_input.get("server_connection", {})).plugin_settings()
+            task_history.record_background(
+                args.get("task_description") or args.get("mode") or "Task",
+                started, error or LAST_OUTCOME.get("error"), settings,
+            )
+
+
+def _main(plugin_input):
+    global BACKGROUND
     server_connection = plugin_input.get("server_connection", {})
     args = plugin_input.get("args", {}) or {}
     mode = args.get("mode", "convert_library")
