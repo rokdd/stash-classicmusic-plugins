@@ -219,6 +219,10 @@
   // Whether clicking a marker's range or icon opens Stash's marker editor
   // (the "Click on a marker opens the edit marker dialog" setting).
   let editOnClick = true;
+  // The "Marker tags: only under" / "Marker tags: not under" settings, as
+  // lists of tag names (see restrictMarkerTagSearch).
+  let markerTagsOnlyUnder = [];
+  let markerTagsNotUnder = [];
   // The "Also show Stash's own marker list" setting.
   let showStashMarkerList = false;
   // With the "Custom styles also match parent tags" setting on: tag id →
@@ -980,6 +984,9 @@
     tagStyles = parseTagStyles(settings.tagStyles || "");
     bubbleStyles = parseTagStyles(settings.bubbleStyles || "");
     editOnClick = settings.editMarkerOnClick !== false;
+    const names = (text) => (text || "").split(",").map((n) => n.trim()).filter(Boolean);
+    markerTagsOnlyUnder = names(settings.markerTagsOnlyUnder);
+    markerTagsNotUnder = names(settings.markerTagsNotUnder);
     showStashMarkerList = settings.showStashMarkerList === true;
     tagAncestorNames = new Map();
     if (settings.styleParentTags && (tagStyles.size || bubbleStyles.size)) {
@@ -1925,9 +1932,77 @@
   const MARKER_MUTATION = /\bsceneMarkers?\w*(Create|Update|Destroy)\b/i;
   const scheduleMarkerReload = debounce(refreshForCurrentPage, 800);
 
+  // -- which tags the marker form offers ----------------------------------------
+  //
+  // Stash's tag pickers ask the server for matching tags as you type
+  // (FindTagsForSelect). When one in the marker form asks — the form in the
+  // Markers tab, or the edit accordion in the list — the request gets an
+  // extra filter: only tags under the "only under" tags (at any depth), and
+  // none under the "not under" tags. Stash then returns just those, sorted
+  // and complete. Tag pickers anywhere else are left alone.
+
+  function markerFormHasFocus() {
+    const active = document.activeElement;
+    if (!active || !active.closest) return false;
+    const form = active.closest("form");
+    const panel = findMarkersPanel();
+    return !!(form && ((panel && panel.contains(form)) || (movedForm && movedForm.form === form)));
+  }
+
+  async function idsOf(names) {
+    const tags = await Promise.all(names.map((n) => lookupTagByName(n)));
+    return tags.filter(Boolean).map((t) => String(t.id));
+  }
+
+  // The request body with the extra filter, and the "not under" tags' own
+  // ids (they aren't their own sub-tags, so they're dropped from the answer).
+  async function restrictMarkerTagSearch(body) {
+    const request = JSON.parse(body);
+    // The same query also loads the tags already picked, by their ids, to
+    // show them — those must never be filtered away.
+    if (request.variables && Array.isArray(request.variables.ids) && request.variables.ids.length) return null;
+    const only = await idsOf(markerTagsOnlyUnder);
+    const not = await idsOf(markerTagsNotUnder);
+    if (!only.length && !not.length) return null;
+    const under = (ids) => ({ value: ids, modifier: "INCLUDES", depth: -1 });
+    const extra = {};
+    if (only.length) extra.parents = under(only);
+    if (not.length) extra.NOT = { parents: under(not) };
+    const vars = request.variables || (request.variables = {});
+    vars.tag_filter = vars.tag_filter ? { ...extra, AND: vars.tag_filter } : extra;
+    return { body: JSON.stringify(request), dropIds: new Set(not) };
+  }
+
+  async function dropTags(response, dropIds) {
+    if (!dropIds.size) return response;
+    const json = await response.clone().json();
+    const found = json && json.data && json.data.findTags;
+    if (!found || !Array.isArray(found.tags)) return response;
+    const kept = found.tags.filter((t) => !dropIds.has(String(t.id)));
+    if (kept.length === found.tags.length) return response;
+    found.count = Math.max(0, (found.count || 0) - (found.tags.length - kept.length));
+    found.tags = kept;
+    return new Response(JSON.stringify(json), { status: response.status, statusText: response.statusText, headers: response.headers });
+  }
+
   if (typeof window.fetch === "function" && !window.fetch.__markerSymbolsWrapped) {
     const originalFetch = window.fetch;
     const wrappedFetch = function (input, init) {
+      const tagSearch = init && typeof init.body === "string" && init.body.includes("FindTagsForSelect");
+      if (tagSearch && (markerTagsOnlyUnder.length || markerTagsNotUnder.length) && markerFormHasFocus()) {
+        const self = this;
+        // Anything going wrong here falls back to Stash's own request.
+        return restrictMarkerTagSearch(init.body)
+          .then((rewritten) => {
+            if (!rewritten) return originalFetch.call(self, input, init);
+            return originalFetch.call(self, input, { ...init, body: rewritten.body })
+              .then((response) => dropTags(response, rewritten.dropIds).catch(() => response));
+          })
+          .catch((err) => {
+            console.warn("[Marker Symbols] Couldn't limit the marker tag search; showing all tags:", err);
+            return originalFetch.call(self, input, init);
+          });
+      }
       const result = originalFetch.apply(this, arguments);
       const body = init && init.body;
       if (typeof body === "string" && body.includes("mutation") && MARKER_MUTATION.test(body)) {

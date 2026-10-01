@@ -1,6 +1,6 @@
 name: Marker Improvements
 description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video scrubber, so it shows and hides right along with that indicator. Click an icon to jump to that marker."
-version: 0.0.27
+version: 0.0.28
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 ui:
   javascript:
@@ -22,6 +22,14 @@ settings:
     displayName: Also show Stash's own marker list
     description: "Off: in a scene's Markers tab, only this plugin's marker list (screenshots, details, edit in place) is shown, and Stash's own list below it is hidden. On: both are shown."
     type: BOOLEAN
+  markerTagsOnlyUnder:
+    displayName: "Marker tags: only under"
+    description: "When editing a marker, its tag fields only offer tags below these tags (at any depth). Tag names separated by commas, e.g. Instruments, Works. Empty: all tags. Tag fields elsewhere in Stash aren't affected."
+    type: STRING
+  markerTagsNotUnder:
+    displayName: "Marker tags: not under"
+    description: "When editing a marker, its tag fields leave out these tags and everything below them. Tag names separated by commas, e.g. Genres, Technical. Works together with \"only under\"."
+    type: STRING
   editMarkerOnClick:
     displayName: Click on a marker opens the edit marker dialog
     description: "Clicking a marker's icon, or its colored range on the scrubber, jumps to it and opens Stash's edit marker dialog. Switch off to only jump to the marker."

@@ -184,6 +184,24 @@ The edit form is Stash's own, moved into place: the plugin leaves a
 placeholder where Stash put it and moves it back the moment you save,
 cancel or delete, before Stash handles that click.
 
+## Which tags the marker form offers
+
+Two settings (Settings → Plugins → Marker Improvements) limit the tags the
+marker form's **Primary Tag** and **Tags** fields offer — handy when only
+part of your tag tree is meant for markers:
+
+- **Marker tags: only under** — only tags below these tags, at any depth.
+  E.g. `Instruments, Works`.
+- **Marker tags: not under** — leaves out these tags and everything below
+  them. E.g. `Genres, Technical`.
+
+Use either or both; tag names separated by commas. Tags already on a
+marker stay as they are; this only limits what's offered when you pick.
+Tag fields elsewhere in Stash — a scene's Edit tab and so on — aren't
+affected. Stash itself does the filtering (the plugin adds a filter to the
+tag search the marker form sends), so the list stays complete and sorted;
+if anything goes wrong, all tags are offered as usual.
+
 ## Staying up to date
 
 Whenever a marker is created, edited or deleted — from the edit form,
