@@ -345,17 +345,22 @@
     const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
     if (heading) title.className = heading.className;
     title.textContent = "Scene Improvements";
-    // Its own colours, set explicitly — dark panel, light text — so the
-    // tables are readable whatever Stash's card styles do.
+    // Exactly the card of the tool sections above — same classes, so the
+    // same width, background and text colour — with some inner spacing like
+    // Stash's own tool rows. The tools are drawn inside that.
+    const card = last.querySelector(".card");
     const box = document.createElement("div");
-    box.style.cssText = "background:#262d33;color:#f2f2f2;border-radius:6px;padding:16px;";
+    box.className = card ? card.className : "card";
+    const inner = document.createElement("div");
+    inner.style.padding = "12px 16px";
+    box.appendChild(inner);
     section.append(title, box);
     last.after(section);
 
     const view = h(FileToolsPage, { embedded: true });
     const ReactDOM = api.ReactDOM;
-    if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(box).render(view);
-    else if (ReactDOM && ReactDOM.render) ReactDOM.render(view, box);
+    if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(inner).render(view);
+    else if (ReactDOM && ReactDOM.render) ReactDOM.render(view, inner);
   }
 
   let toolsPending = false;
