@@ -95,11 +95,12 @@ and already scanned into Stash by that point, it just needs one manual
 "Set as primary" click in the scene's Files tab instead of happening on
 its own.
 
-## File Tools page
+## Tools on Settings → Tools
 
-A **toolbox** button in Stash's top navigation bar opens the File Tools
-page (turn it off with **Show a File Tools button in the top bar**; the
-page stays at `/plugin/file-tools`). It has three tabs.
+Stash's own **Settings → Tools** page gets a **Scene Improvements**
+section with three tabs: **Torrent check**, **Download (yt-dlp)** and
+**Task history**. (The older address `/plugin/file-tools` still shows the
+same tools as a page of their own.)
 
 ### Torrent check
 
@@ -213,7 +214,7 @@ queued or running. This plugin records every task as it finishes and
 shows the history as **Task History right underneath the Job Queue on
 Settings → Tasks** — drawn just like the queue, one entry per task with
 its status icon, description, when it ended and how long it took, and
-the error for failed ones — and as the **Task history** tab here. Filter
+the error for failed ones — and as the **Task history** tab on Settings → Tools. Filter
 by status, remove single entries with their **×**, or clear it.
 
 - Tasks are recorded while any Stash page is open. Stash still remembers

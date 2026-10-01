@@ -1,4 +1,4 @@
-// Scene Improvements — File Tools page
+// Scene Improvements — tools on Settings → Tools
 //
 // A page at /plugin/file-tools with three tabs:
 //   - Torrent check: which videos in a folder of .torrent files are
@@ -9,8 +9,8 @@
 //   - Download: downloads with yt-dlp into a library folder (see
 //     ytdlp_downloader.py), as a Stash task.
 //   - Task history: finished tasks (see task-history.js).
-// A button in the top navigation bar opens the page — on by default,
-// switchable with the "Show a File Tools button in the top bar" setting.
+// They're shown on Stash's Settings → Tools page (see placeOnToolsPage);
+// /plugin/file-tools still shows them as a page of their own.
 
 (function () {
   "use strict";
@@ -20,8 +20,7 @@
   const React = api.React;
   const h = React.createElement;
   const { useState, useEffect, useMemo } = React;
-  const { Link, NavLink } = api.libraries.ReactRouterDOM;
-  const FA = api.libraries.FontAwesomeSolid || {};
+  const { Link } = api.libraries.ReactRouterDOM;
 
   // Must match the filename of this plugin's yml manifest (minus .yml).
   const PLUGIN_ID = "advancedFileOperations";
@@ -283,8 +282,10 @@
 
   // -- the page -------------------------------------------------------------------
 
-  function FileToolsPage() {
-    // ?tab=… (from the entries on Settings → Tools) wins over the last tab used.
+  // The tools with their tabs. `embedded`: inside the Settings → Tools page
+  // (see placeOnToolsPage), so without a page title and padding of its own.
+  function FileToolsPage({ embedded } = {}) {
+    // ?tab=… (older links to /plugin/file-tools) wins over the last tab used.
     const fromUrl = new URLSearchParams(window.location.search).get("tab");
     const [tab, setTab] = useState(fromUrl || remembered().tab || "torrents");
     useEffect(() => {
@@ -299,8 +300,8 @@
         href: "#", className: `nav-link${tab === value ? " active" : ""}`,
         onClick: (e) => { e.preventDefault(); choose(value); },
       }, text));
-    return h("div", { className: "container-fluid", style: { padding: "16px 24px" } },
-      h("h2", null, "File Tools"),
+    return h("div", embedded ? null : { className: "container-fluid", style: { padding: "16px 24px" } },
+      !embedded && h("h2", null, "File Tools"),
       h("ul", { className: "nav nav-tabs", style: { marginBottom: "16px" } },
         tabButton("torrents", "Torrent check"),
         tabButton("download", "Download (yt-dlp)"),
@@ -313,27 +314,16 @@
 
   api.register.route(ROUTE, FileToolsPage);
 
-  // -- entries on Settings → Tools --------------------------------------------------
+  // -- on Settings → Tools ------------------------------------------------------------
   //
-  // Stash's Tools page isn't something plugins can extend, so a "File Tools"
-  // section is added after its own sections, built the same way (same kind
-  // of section, heading and rows), with one entry per tab. If a Stash
-  // version builds that page differently, it just doesn't appear — the
-  // page itself is still at /plugin/file-tools.
+  // Everything lives on Stash's own Tools page: a "Scene Improvements"
+  // section after Stash's own tool sections, built the same way (same kind
+  // of section, heading and card), holding the tools with their tabs. The
+  // Tools page isn't something plugins can extend, so the section is added
+  // to the page; if a Stash version builds that page differently, it just
+  // doesn't appear — the tools are still at /plugin/file-tools.
 
   const TOOLS_SECTION_ID = "afo-file-tools-section";
-  const TOOL_ENTRIES = [
-    { tab: "torrents", title: "Torrent check", text: "Which videos in your .torrent files are already in the library." },
-    { tab: "download", title: "Download (yt-dlp)", text: "Download videos or playlists into a library folder." },
-    { tab: "history", title: "Task history", text: "Every finished task, with status, duration and errors." },
-  ];
-
-  // Navigates inside Stash without reloading the page: Stash's router
-  // follows the browser history, so a push plus a popstate does it.
-  function goTo(url) {
-    window.history.pushState({}, "", url);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
 
   function placeOnToolsPage() {
     if (!/\/settings/.test(window.location.pathname) || !/tab=tools/.test(window.location.search)) return;
@@ -343,36 +333,29 @@
     if (!last) return;
     const heading = last.querySelector("h1, h2, h3, h4, h5, h6");
     const card = last.querySelector(".card");
-    const row = last.querySelector(".setting");
 
     const section = document.createElement(last.tagName.toLowerCase());
     section.id = TOOLS_SECTION_ID;
     section.className = last.className;
     const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
     if (heading) title.className = heading.className;
-    title.textContent = "File Tools";
+    title.textContent = "Scene Improvements";
     const box = document.createElement("div");
     box.className = card ? card.className : "card";
-    TOOL_ENTRIES.forEach((t) => {
-      const entry = document.createElement("div");
-      entry.className = row ? row.className : "setting";
-      const left = document.createElement("div");
-      const name = document.createElement("h3");
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "btn btn-secondary";
-      button.textContent = t.title;
-      button.addEventListener("click", () => goTo(`${ROUTE}?tab=${t.tab}`));
-      name.appendChild(button);
-      const sub = document.createElement("div");
-      sub.className = "sub-heading";
-      sub.textContent = t.text;
-      left.append(name, sub);
-      entry.appendChild(left);
-      box.appendChild(entry);
-    });
+    // The card's own colours, so text stays readable in any theme.
+    if (card) {
+      const look = getComputedStyle(card);
+      box.style.color = look.color;
+      box.style.backgroundColor = look.backgroundColor;
+    }
+    box.style.padding = box.style.padding || "16px";
     section.append(title, box);
     last.after(section);
+
+    const view = h(FileToolsPage, { embedded: true });
+    const ReactDOM = api.ReactDOM;
+    if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(box).render(view);
+    else if (ReactDOM && ReactDOM.render) ReactDOM.render(view, box);
   }
 
   let toolsPending = false;
@@ -384,46 +367,4 @@
       placeOnToolsPage();
     }, 300);
   }).observe(document.body, { childList: true, subtree: true });
-
-  // -- the top bar button (setting, on by default) -----------------------------
-  //
-  // Stash settings can't declare a default, so the first time the setting
-  // is missing it's saved as on — the switch then shows what happens.
-  let buttonWanted = false;
-  const listeners = new Set();
-  gql("query { configuration { plugins } }")
-    .then(async (data) => {
-      const settings = (data.configuration.plugins || {})[PLUGIN_ID] || {};
-      if (typeof settings.showToolsButton !== "boolean") {
-        settings.showToolsButton = true;
-        await gql(
-          "mutation($plugin_id: ID!, $input: Map!) { configurePlugin(plugin_id: $plugin_id, input: $input) }",
-          { plugin_id: PLUGIN_ID, input: settings }
-        ).catch(() => {});
-      }
-      buttonWanted = settings.showToolsButton === true;
-      listeners.forEach((redraw) => redraw());
-    })
-    .catch((err) => console.warn("[Scene Improvements] Couldn't read plugin settings:", err));
-
-  function ToolsButton() {
-    const [, redraw] = useState(0);
-    useEffect(() => {
-      const listener = () => redraw((n) => n + 1);
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }, []);
-    if (!buttonWanted) return null;
-    const Icon = api.components && api.components.Icon;
-    const Button = api.libraries.Bootstrap && api.libraries.Bootstrap.Button;
-    const content = Icon && FA.faToolbox ? h(Icon, { icon: FA.faToolbox }) : "Tools";
-    return h(NavLink, { className: "nav-utility", to: ROUTE, title: "File Tools" },
-      Button ? h(Button, { className: "minimal d-flex align-items-center h-100", title: "File Tools" }, content) : content);
-  }
-
-  if (api.patch && api.patch.before) {
-    api.patch.before("MainNavBar.UtilityItems", function (props) {
-      return [{ ...props, children: h(React.Fragment, null, props.children, h(ToolsButton)) }];
-    });
-  }
 })();

@@ -85,7 +85,7 @@ under Settings → Tasks.
 - **Run in the background** (optional, per task): the work runs outside
   Stash's one-at-a-time task queue, so other tasks don't wait behind a
   long conversion; progress goes to a log file on the server.
-- **File Tools page** (a toolbox button in the top bar, optional):
+- **Tools on Settings → Tools** (a Scene Improvements section):
   - **Torrent check**: which videos in a folder of `.torrent` files are
     already in your library — fuzzy matched by file name, with the
     certainty in %, sizes, resolution and codec side by side.

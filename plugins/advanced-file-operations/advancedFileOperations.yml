@@ -1,6 +1,6 @@
 name: Scene Improvements
 description: "Video tools for Stash — per scene: H.265 conversion, split at markers, and repair (corrupt files and files that stream badly). On a File Tools page: a torrent check (which videos in your .torrent files are already in the library, with match certainty) and downloads with yt-dlp into your library."
-version: 0.0.9
+version: 0.0.10
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/advanced-file-operations
 exec:
   - python
@@ -33,13 +33,9 @@ tasks:
       mode: repair_scene
       keep_original: "true"
 settings:
-  showToolsButton:
-    displayName: Show a File Tools button in the top bar
-    description: "Adds a button to Stash's top navigation bar that opens the File Tools page (torrent check, yt-dlp downloads). Off: the page is still at /plugin/file-tools."
-    type: BOOLEAN
   torrentFolder:
     displayName: Torrent folder
-    description: "Folder(s) on the server with the .torrent files the torrent check reads — several separated by ; (e.g. /data/torrents; /data/watch). The check runs for them as soon as you open the Torrent check tab; you can enter others there for a single check."
+    description: "Folder(s) on the server with the .torrent files the torrent check reads — several separated by ; (e.g. /data/torrents; /data/watch). The check runs for them as soon as you open the Torrent check tab (Settings → Tools); you can enter others there for a single check."
     type: STRING
   historyIgnore:
     displayName: "Task history: ignore"

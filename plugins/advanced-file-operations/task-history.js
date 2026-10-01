@@ -3,7 +3,8 @@
 // Stash keeps no history of finished tasks: its task list only shows what's
 // queued or running. This records every task as it finishes and shows the
 // history — under the running tasks on Settings → Tasks, and as a tab on
-// the File Tools page (file-tools.js uses window.AFOTaskHistory.View).
+// the Scene Improvements tools on Settings → Tools (file-tools.js uses
+// window.AFOTaskHistory.View).
 //
 // Recording, while any Stash page is open: every few seconds the task list
 // is read; a task that's gone from it has finished, and Stash still reports
@@ -242,7 +243,7 @@
   // goes right after the queue's section on the page, built the same way:
   // the same kind of section and heading as the queue's, titled "Task
   // History". If a Stash version builds that page differently, it just
-  // doesn't appear there — the File Tools page's Task history tab has it.
+  // doesn't appear there — the Task history tab on Settings → Tools has it.
 
   const CONTAINER_ID = "afo-task-history";
 
