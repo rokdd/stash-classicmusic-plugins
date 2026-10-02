@@ -142,6 +142,16 @@
     return new Response(JSON.stringify(json), { status: 200, headers: { "Content-Type": "application/json" } });
   }
 
+  // Stash (v0.31) always sends a tag_filter, usually an empty one ({}).
+  // Only one with an actual criterion in it (e.g. the StashDB ID search) is
+  // a search of its own, for the server.
+  function hasCriteria(value) {
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.some(hasCriteria);
+    if (typeof value === "object") return Object.values(value).some(hasCriteria);
+    return value !== "";
+  }
+
   const wrapped = function (input, init) {
     const body = init && typeof init.body === "string" ? init.body : "";
     if (TAG_CHANGE.test(body)) cache = null; // tags changed: fetch the list again next time
@@ -155,7 +165,7 @@
       const vars = (request && request.variables) || {};
       // Loading picked tags by id, or a search with Stash's own filter (e.g.
       // by StashDB ID): the server's job, as usual.
-      const ours = request && request.query && !(vars.ids && vars.ids.length) && !vars.tag_filter;
+      const ours = request && request.query && !(vars.ids && vars.ids.length) && !hasCriteria(vars.tag_filter);
       if (ours) {
         const self = this;
         const args = arguments;
