@@ -297,7 +297,8 @@ def main():
         result["urls"] = urls
     if image or s.get("image_url"):
         result["image"] = image or s["image_url"]
-    sys.stderr.write(f"Sidecar: read {', '.join(sources + (['cover image'] if image else []))}\n")
+    # "\x01i\x02": Stash's log level marker — information, not an error
+    sys.stderr.write(f"\x01i\x02Sidecar: read {', '.join(sources + (['cover image'] if image else []))}\n")
     print(json.dumps(result))
 
 

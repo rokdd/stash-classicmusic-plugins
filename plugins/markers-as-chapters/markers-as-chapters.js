@@ -841,9 +841,13 @@
     if (!full) throw new Error(`The scraper returned nothing for ${picked.name}.`);
     const marker = await composerTagName();
     const markerId = await tagIdFor(marker, true);
-    const existing = (await gql(
-      "query($n: String!) { findPerformers(performer_filter: { name: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { performers { id name alias_list tags { id } } } }",
-      { n: full.name })).findPerformers.performers[0];
+    // Already there? Stash compares names regardless of case and accents —
+    // look the same way, so it isn't created twice.
+    const plainName = (t) => (t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    const candidates = (await gql(
+      "query($n: String!) { findPerformers(performer_filter: { name: { value: $n, modifier: INCLUDES } }, filter: { per_page: 50 }) { performers { id name alias_list tags { id } } } }",
+      { n: full.name.split(/\s+/).pop() })).findPerformers.performers;
+    const existing = candidates.find((p) => plainName(p.name) === plainName(full.name)) || null;
     if (existing) {
       const ids = [...new Set([...existing.tags.map((t) => String(t.id)), markerId])];
       const aliases = extraAlias && extraAlias !== existing.name && !(existing.alias_list || []).includes(extraAlias)
@@ -1000,7 +1004,8 @@
 
   function review(dialog, result, defaultPrimary, checkAudio) {
     const existing = result.existing || [];
-    const exists = (t) => existing.some((e) => Math.abs(e.seconds - t) < 1);
+    const existingAt = (t) => existing.find((e) => Math.abs(e.seconds - t) < 1) || null;
+    const exists = (t) => !!existingAt(t);
     const pieces = result.pieces || null; // titles placed at the pauses: every title, in order
     let stripTitles = true;
     const skips = []; // parts marked as not music, while placing titles at the pauses
@@ -1015,6 +1020,7 @@
       tags: [...(m.tags || [])],
       pick: !exists(m.seconds),
       exists: exists(m.seconds),
+      existing: existingAt(m.seconds), // ticked: this marker is updated instead
       piece: piece == null ? null : piece,
       notMusic: false,
       edited: false,
@@ -1283,12 +1289,13 @@
         oninput: (ev) => { t.primary_tag = ev.target.value; } });
       const tags = el("input", { type: "text", value: t.tags.join(", "), placeholder: "Tag, Tag …", className: "form-control form-control-sm",
         oninput: (ev) => { t.tags = ev.target.value.split(",").map((x) => x.trim()).filter(Boolean); } });
-      return el("tr", { style: { height: `${height}px`, ...(r.exists ? { opacity: 0.6 } : {}) } },
+      return el("tr", { style: { height: `${height}px`, ...(r.exists && !r.pick ? { opacity: 0.6 } : {}) } },
         first,
         el("td", {}, check),
         el("td", { style: { whiteSpace: "nowrap" } }, timeText,
           el("div", { className: "small text-muted", textContent: formatTime(e - s) }),
-          r.exists ? el("div", { className: "small text-warning", textContent: "already a marker here" }) : null),
+          r.exists ? el("div", { className: "small text-warning",
+            textContent: r.pick ? "updates the marker that's here" : "already a marker here — tick to update it" }) : null),
         el("td", {}, title),
         el("td", {}, primary),
         el("td", {}, tags),
@@ -1367,6 +1374,7 @@
             seconds: shifted(r.seconds),
             end_seconds: shifted(r.end_seconds),
             primary_tag: (t.primary_tag || "").trim() || primaryAll.value.trim() || DEFAULT_PRIMARY,
+            existing: r.exists ? r.existing : null,
           };
         });
         if (!picked.length) return;
@@ -1514,11 +1522,27 @@
   async function createMarkers(markers) {
     const index = await tagIndex();
     const created = [];
+    const updated = [];
     const failed = [];
     const skippedTags = new Set();
     const newTags = [];
     for (const m of markers) {
       try {
+        if (m.existing && m.existing.id) {
+          // A marker already here: new title, its tags plus the new ones;
+          // primary tag and times stay as they are.
+          const ids = new Set((m.existing.tags || []).map((t) => String(t.id)));
+          m.tags.forEach((t) => {
+            const id = index.get(t.toLowerCase());
+            if (id) ids.add(id);
+            else skippedTags.add(t);
+          });
+          const input = { id: m.existing.id, tag_ids: [...ids] };
+          if (m.title) input.title = m.title;
+          await gql("mutation($input: SceneMarkerUpdateInput!) { sceneMarkerUpdate(input: $input) { id } }", { input });
+          updated.push(m);
+          continue;
+        }
         const key = m.primary_tag.toLowerCase();
         if (!index.has(key)) {
           const data = await gql("mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }", { input: { name: m.primary_tag } });
@@ -1546,6 +1570,7 @@
       }
     }
     const lines = [`${created.length} marker${created.length === 1 ? "" : "s"} created.`];
+    if (updated.length) lines.push(`${updated.length} marker${updated.length === 1 ? "" : "s"} updated.`);
     if (newTags.length) lines.push(`New tag${newTags.length === 1 ? "" : "s"}: ${newTags.join(", ")}`);
     if (skippedTags.size) lines.push(`Left out (no such tag): ${Array.from(skippedTags).join(", ")}`);
     if (failed.length) lines.push("", "Failed:", ...failed);
@@ -1652,15 +1677,15 @@
     setTimeout(checkForChapters, 2500); // after Stash has saved
   }, true);
 
-  // On every scene page, and again when its URLs change (checked every few
-  // seconds — a quick query).
+  // When a scene page opens (and after a save, above) — nothing in between,
+  // so Stash isn't asked again and again while it's busy (generating
+  // previews for new markers, say).
   let lastScene = null;
   setInterval(() => {
     const id = sceneId();
-    if (id !== lastScene) {
-      lastScene = id;
-      removeOffer();
-    }
-    if (id && !document.hidden) checkForChapters();
-  }, 5000);
+    if (id === lastScene) return;
+    lastScene = id;
+    removeOffer();
+    if (id) setTimeout(checkForChapters, 1500);
+  }, 2000);
 })();

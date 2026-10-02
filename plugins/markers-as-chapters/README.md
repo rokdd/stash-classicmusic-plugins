@@ -33,8 +33,11 @@ button next to **Create Marker** in the Markers tab lists
 The markers found open in a dialog: tick the ones to create, change
 titles, primary tag and tags, and **shift all times** (when the online
 video has a longer or shorter intro than your file). Markers already in
-the scene at that time are flagged and not ticked. **Create markers**
-adds them, and the page updates. Also in the dialog:
+the scene at that time are flagged and not ticked — tick one to **update**
+that marker instead (e.g. to add the composers after an earlier import
+without them): it gets the new title and the new tags on top of its own;
+primary tag and times stay. **Create markers** adds and updates them, and
+the page updates. Also in the dialog:
 
 - **The table is a timeline**: one row per marker in time order, each as
   tall as it lasts (with a minimum height for the fields; **Height** 1×–8×

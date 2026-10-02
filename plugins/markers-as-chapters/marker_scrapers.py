@@ -226,7 +226,7 @@ def list_scrapers(settings):
 def scene_for_scraper(gql, scene_id):
     data = gql(
         "query($id: ID!) { findScene(id: $id) { id title code details date urls "
-        "files { path duration } scene_markers { seconds end_seconds title } } }",
+        "files { path duration } scene_markers { id seconds end_seconds title primary_tag { id name } tags { id name } } } }",
         {"id": scene_id},
     )
     return data["findScene"]
