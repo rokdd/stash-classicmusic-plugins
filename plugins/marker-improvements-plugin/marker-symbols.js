@@ -682,7 +682,39 @@
   // Stash doesn't mark rows or buttons with ids, so this goes by what's
   // visible: if a Stash update changes that layout, it still switches to
   // the Markers tab and warns in the console instead of doing nothing.
-  function openMarkerEditor(marker) {
+  // Closes the marker form that's open — Stash's own, or the one moved
+  // under a row — with its Cancel button, as if clicked. True if there was
+  // one.
+  function cancelOpenForm() {
+    const panel = findMarkersPanel();
+    const form = (movedForm && movedForm.form) || (panel && findStashMarkerForm(panel));
+    if (!form) return false;
+    const cancel = Array.from(form.querySelectorAll("button")).find(
+      (b) => b.type !== "submit" && !b.classList.contains("btn-danger") && CLOSING_WORDS.test(b.textContent.trim())
+    ) || form.querySelector("button.btn-secondary");
+    if (!cancel) return false;
+    cancel.click(); // restoreBeforeStash puts a moved form back first
+    return true;
+  }
+
+  function openMarkerEditor(marker, afterCancel) {
+    // While a marker form is open, Stash's Markers tab shows only that form —
+    // not its list with the Edit buttons this presses. So an open form is
+    // cancelled first (unsaved changes in it are dropped, as with Cancel),
+    // and the marker opened once Stash's list is back.
+    if (!afterCancel && cancelOpenForm()) {
+      let waited = 0;
+      const wait = () => {
+        const panel = findMarkersPanel();
+        if (panel && findStashMarkerForm(panel) && (waited += 100) < 2000) {
+          setTimeout(wait, 100);
+          return;
+        }
+        openMarkerEditor(marker, true);
+      };
+      setTimeout(wait, 100);
+      return;
+    }
     // Opens as an accordion under the marker's row in the timeline view, if
     // it's there (and puts back any form that's open elsewhere first).
     requestAccordion(marker);
