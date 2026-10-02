@@ -123,8 +123,10 @@ Details: [Scene Improvements README](plugins/advanced-file-operations/README.md)
 - **Marker scrapers**: **Scrape markers…** next to Create Marker imports
   markers like Stash scrapes scenes — built in: chapters in the video file,
   chapters online (YouTube, Vimeo … via yt-dlp), arte.tv's chapters
-  (ARTE Concert: one per work), and plain text — paste
-  a tracklist or pick a text/CUE file. Review them in a
+  (ARTE Concert: one per work), plain text — paste
+  a tracklist or pick a text/CUE file; chapter files next to the video,
+  and the pauses between movements in the audio (named from a pasted list
+  of movements). Review them in a
   dialog (pick, rename, tag, shift all times), then create. Add your own
   scrapers as .yaml files in Stash's scraper format.
 

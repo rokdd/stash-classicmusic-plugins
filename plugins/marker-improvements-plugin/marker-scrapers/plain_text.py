@@ -79,21 +79,27 @@ def parse_cue(text):
     return [m for m in markers if "seconds" in m]
 
 
+def fill_ends(markers, duration):
+    """Sorted by start; a marker without an end ends where the next starts
+    (the last at the end of the video); untitled ones get "Chapter n"."""
+    markers.sort(key=lambda m: m["seconds"])
+    for i, m in enumerate(markers):
+        if m.get("end_seconds") is None:
+            nxt = markers[i + 1]["seconds"] if i + 1 < len(markers) else (duration or None)
+            m["end_seconds"] = nxt if nxt and nxt > m["seconds"] else None
+        if not m.get("title"):
+            m["title"] = f"Chapter {i + 1}"
+    return markers
+
+
 def main():
     payload = json.load(sys.stdin)
     text = payload.get("text") or ""
     scene = payload.get("scene") or {}
     is_cue = re.search(r"^\s*INDEX\s+01\s", text, re.M | re.I)
     markers = parse_cue(text) if is_cue else parse_lines(text)
-    markers.sort(key=lambda m: m["seconds"])
     duration = max([f.get("duration") or 0 for f in scene.get("files") or []] or [0])
-    for i, m in enumerate(markers):
-        if m.get("end_seconds") is None:
-            nxt = markers[i + 1]["seconds"] if i + 1 < len(markers) else (duration or None)
-            m["end_seconds"] = nxt if nxt and nxt > m["seconds"] else None
-        if not m["title"]:
-            m["title"] = f"Chapter {i + 1}"
-    print(json.dumps(markers))
+    print(json.dumps(fill_ends(markers, duration)))
 
 
 if __name__ == "__main__":

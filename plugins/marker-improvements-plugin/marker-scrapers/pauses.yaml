@@ -1,0 +1,17 @@
+# Markers where the music starts again after a pause (between movements or
+# works), found in the scene's own audio with ffmpeg. With a list of titles
+# (one per line), it finds as many pieces as there are titles and names them.
+name: Pauses between movements
+description: "Paste the titles of the movements or works in the order they're played, one per line (e.g. from the broadcaster's programme) — or pick a text file. The longest pauses in the audio split the video into that many pieces, named in that order. Lines that are empty or only a time are skipped. (Without titles, choose “Pauses between movements” without “paste text”: every pause becomes a marker.)"
+markerByFragment:
+  action: script
+  timeout: 1200
+  script:
+    - python
+    - pauses.py
+markerByText:
+  action: script
+  timeout: 1200
+  script:
+    - python
+    - pauses.py

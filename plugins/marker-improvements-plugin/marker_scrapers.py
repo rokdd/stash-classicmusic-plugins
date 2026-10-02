@@ -33,8 +33,10 @@ A script gets JSON on stdin — {"scene": {...}} for a fragment, plus
     [{"seconds": 0, "end_seconds": 512.4, "title": "I. Allegro con brio",
       "primary_tag": "Movement", "tags": ["Beethoven"]}, ...]
 
-(only "seconds" is required). Scripts run in their scraper's folder, with
-the environment variables STASH_FFPROBE (Stash's own ffprobe) and
+(only "seconds" is required). An action may set "timeout: <seconds>"
+(default 180), and a scraper "description:" — shown in the text dialog.
+Scripts run in their scraper's folder, with the environment variables
+STASH_FFMPEG, STASH_FFPROBE (Stash's own ffmpeg / ffprobe) and
 STASH_YTDLP (the "Path to yt-dlp" setting; else Scene Improvements' one;
 else yt-dlp on the PATH) pointing at the tools to use.
 
@@ -177,6 +179,7 @@ def load_scrapers(settings):
                 scrapers[scraper_id] = {
                     "id": scraper_id,
                     "name": config.get("name") or scraper_id,
+                    "description": config.get("description") or "",
                     "dir": root,
                     "fragment": config.get("markerByFragment"),
                     "by_url": by_url,
@@ -196,7 +199,7 @@ def url_patterns(scraper):
 def list_scrapers(settings):
     return [
         {"id": s["id"], "name": s["name"], "fragment": bool(s["fragment"]), "urls": url_patterns(s),
-         "text": bool(s["by_text"])}
+         "text": bool(s["by_text"]), "description": s["description"]}
         for s in sorted(load_scrapers(settings).values(), key=lambda s: s["name"].lower())
     ]
 
@@ -227,7 +230,7 @@ def run_action(scraper, action, payload, env_extra):
     env = {**os.environ, **env_extra}
     proc = subprocess.run(
         cmd, input=json.dumps(payload), capture_output=True, text=True,
-        cwd=scraper["dir"], env=env, timeout=SCRIPT_TIMEOUT,
+        cwd=scraper["dir"], env=env, timeout=int(action.get("timeout") or SCRIPT_TIMEOUT),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"Scraper {scraper['name']} failed: {(proc.stderr or proc.stdout)[-800:]}")
@@ -329,10 +332,14 @@ def tool_paths(gql):
         or ((plugins.get("advancedFileOperations") or {}).get("ytdlpPath") or "").strip() \
         or "yt-dlp"
     try:
-        ffprobe = gql("query { configuration { general { ffprobePath } } }")["configuration"]["general"]["ffprobePath"] or ""
+        general = gql("query { configuration { general { ffmpegPath ffprobePath } } }")["configuration"]["general"]
     except Exception:  # noqa: BLE001
-        ffprobe = ""
-    return settings, {"STASH_FFPROBE": ffprobe or "ffprobe", "STASH_YTDLP": ytdlp}
+        general = {}
+    return settings, {
+        "STASH_FFMPEG": general.get("ffmpegPath") or "ffmpeg",
+        "STASH_FFPROBE": general.get("ffprobePath") or "ffprobe",
+        "STASH_YTDLP": ytdlp,
+    }
 
 
 def main():

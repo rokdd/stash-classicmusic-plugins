@@ -205,7 +205,9 @@
       className: "form-control",
       rows: 16,
       spellcheck: false,
-      placeholder: "0:00 I. Allegro con brio\n7:41 II. Andante con moto\n17:30 - 23:02 III. Scherzo\n…",
+      placeholder: scraper.description
+        ? "I. Allegro con brio\nII. Andante con moto\nIII. Scherzo\n…"
+        : "0:00 I. Allegro con brio\n7:41 II. Andante con moto\n17:30 - 23:02 III. Scherzo\n…",
       style: { fontFamily: "monospace", fontSize: "0.9em" },
     });
     const file = el("input", {
@@ -221,7 +223,7 @@
       },
     });
     dialog.body.append(
-      el("p", { className: "small text-muted", textContent:
+      el("p", { className: "small text-muted", textContent: scraper.description ||
         "One marker per line with a time in it (e.g. a tracklist or a video description); the rest of the line is its title. " +
         "Times like 1:23, 1:02:03, [12:34], 3m20s; a range like 1:23 - 4:56 gives the end too. A CUE sheet works as well. " +
         "Pick a file or paste the text, check it, then scrape." }),

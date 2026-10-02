@@ -1,0 +1,9 @@
+# Chapters from a file next to the video with the same name: a CUE sheet,
+# a text tracklist, OGM / Matroska chapter files, ffmetadata or yt-dlp's
+# .info.json.
+name: Chapter file next to the video
+markerByFragment:
+  action: script
+  script:
+    - python
+    - chapter_files.py

@@ -163,6 +163,10 @@ fills each one in:
 | Details | its description |
 | Cover | its thumbnail |
 
+The video's chapters (YouTube, ZDF …), if it has any, are saved in the
+file, so Marker Improvements' **Video file chapters** scraper can turn
+them into markers.
+
 Until it has run, the new scenes show up with just their file name. The
 video information and thumbnails are kept in a temporary folder, not in
 your library (so Stash doesn't import the thumbnails as images), and

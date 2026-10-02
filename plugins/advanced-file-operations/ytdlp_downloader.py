@@ -236,6 +236,9 @@ def run_download(stash, args):
     cmd = ytdlp_command(settings) + [
         "--format", FORMATS.get(quality, FORMATS["best"]),
         "--merge-output-format", "mp4",
+        # The video's chapters (YouTube, ZDF …) go into the file, where
+        # Marker Improvements' "Video file chapters" scraper finds them.
+        "--embed-chapters",
         "--paths", dest,
         "--output", OUTPUT_TEMPLATE,
         "--output", f"infojson:{sidecar_dir}/%(id)s.%(ext)s",

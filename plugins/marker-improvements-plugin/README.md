@@ -235,7 +235,8 @@ Built in:
   orchestra named in a title ("Orchestra : Composer - Work", "Composer,
   Work") are suggested as tags — used when you have a tag of that name or
   alias. Some videos have no chapters at arte; then nothing is found (the
-  plain text scraper with the program from the description helps). Each chapter ends where the next starts, the last at the end of
+  **Pauses between movements** with the program from the description
+  helps). Each chapter ends where the next starts, the last at the end of
   the video. Needs nothing extra (reads arte's player API).
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every
@@ -245,6 +246,28 @@ Built in:
   too, otherwise a marker ends where the next starts (the last at the end
   of the video). A **CUE sheet** works too: one marker per track, its
   PERFORMER as a tag.
+- **Chapter file next to the video** — a file with the video's name next
+  to it on the server: `Concert.cue`, `Concert.chapters.txt` (OGM
+  chapters or a tracklist), `Concert.chapters.xml` (Matroska chapters, as
+  from mkvextract), `Concert.ffmetadata`, `Concert.info.json` (yt-dlp) or
+  `Concert.txt` (a tracklist) — also with the video's extension in the
+  name (`Concert.mp4.cue`).
+- **Pauses between movements** — finds the pauses in the scene's own
+  audio (ffmpeg, a few seconds to a minute for a concert) and puts a
+  marker where the music starts again, ending where the next pause
+  begins. How quiet counts as a pause follows the recording, so the
+  audience's quiet between movements counts. Two ways:
+  - **Pauses between movements**: every pause gives a marker ("Part 1",
+    "Part 2" …).
+  - **Pauses between movements — paste text or pick a file…**: paste the
+    titles of the movements or works in order, one per line — e.g. the
+    programme from ARD, BBC or the concert hall's site, which list the
+    pieces but no times. It looks for exactly that many pieces (the
+    longest pauses split them; if there are too few pauses, shorter ones
+    count too) and names them. Times at the start of a line are ignored.
+
+  Applause between works can hide a pause; check the result in the
+  dialog and shift or untick markers there.
 
 **Primary tag**: every marker needs one. A scraper can name it per marker;
 otherwise the **Primary tag for scraped markers** setting is used (empty:
