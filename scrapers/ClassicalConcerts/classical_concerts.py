@@ -403,4 +403,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Stash reads the result from stdout: always give it JSON — "null" (no
+    # result) when there's none — and the reason in its log (stderr).
+    try:
+        main()
+    except SystemExit as exc:
+        if exc.code not in (None, 0):
+            sys.stderr.write(f"Classical Concerts: {exc.code}\n")
+            print("null")
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"Classical Concerts: {type(exc).__name__}: {exc}\n")
+        print("null")
