@@ -1,0 +1,26 @@
+name: Classical Concerts (ARTE, ORF, ARD, ZDF, 3sat, BBC)
+# Scenes from broadcasters' concert pages: title, programme text, concert
+# date, cover, broadcaster as studio, and orchestra, conductor, soloists and
+# composers as performers.
+sceneByURL:
+  - action: script
+    url:
+      - arte.tv
+      - on.orf.at
+      - tvthek.orf.at
+      - ardmediathek.de
+      - zdf.de
+      - 3sat.de
+      - bbc.co.uk/programmes
+      - bbc.co.uk/iplayer
+      - bbc.co.uk/sounds
+    script:
+      - python
+      - classical_concerts.py
+      - url
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - classical_concerts.py
+    - fragment

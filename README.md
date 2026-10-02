@@ -12,11 +12,12 @@ and classical music recordings — but useful for any library.
 
 They're independent of each other — install any of them.
 
-And a performer scraper:
+And scrapers:
 
 | Scraper | What it's for |
 |---|---|
-| [Classical Music](scrapers/ClassicalMusic/) | Composers, conductors, soloists, orchestras from Wikidata — Wikipedia text, portrait, dates, country, roles and (Open Opus) the composer's epoch as tags |
+| [Classical Music](scrapers/ClassicalMusic/) | Performers: composers, conductors, soloists, orchestras from Wikidata — Wikipedia text, portrait, dates, country, roles and (Open Opus) the composer's epoch as tags |
+| [Classical Concerts](scrapers/ClassicalConcerts/) | Scenes from ARTE (ARTE Concert), ORF ON, ARD Mediathek, ZDF, 3sat and BBC — title, programme, concert date, cover, broadcaster, and orchestra, conductor, soloists and composers as performers |
 
 ## Install
 
@@ -38,19 +39,24 @@ if a change doesn't show up, so the browser doesn't keep the old script.
 into your Stash plugins directory (Settings → Plugins shows where), then
 Settings → Plugins → **Reload plugins**.
 
-### The scraper
+### The scrapers
 
 1. **Settings → Metadata Providers → Available Scrapers → Add Source**,
    any name (e.g. `Classic music scrapers`) and this URL:
    ```
    https://rokdd.github.io/stash-classicmusic-plugins/main/scrapers/index.yml
    ```
-2. Tick **Classical Music (Wikidata, Open Opus)** and click **Install**.
+2. Tick **Classical Music (Wikidata, Open Opus)** and **Classical Concerts
+   (ARTE, ORF, ARD, ZDF, 3sat, BBC)** and click **Install**.
 3. On a performer: **Edit → Scrape with… → Classical Music**, search by
    name (also just a surname: "Mutter", "Karajan") and pick the right
    one — or paste a Wikidata, Wikipedia or MusicBrainz link into the URL
-   field and scrape that. Needs Python 3 on the server (no extra
-   modules).
+   field and scrape that.
+4. On a scene: paste the broadcaster's page into the scene's URL field and
+   scrape it, or **Scrape with… → Classical Concerts** for a scene that
+   already has such a URL.
+
+Both need Python 3 on the server (no extra modules).
 
 ### Extra setup for Scene Improvements
 

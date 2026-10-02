@@ -100,12 +100,15 @@ buildScraper()
   path: $scraper_id.zip
   sha256: $(sha256sum "$zipfile" | cut -d' ' -f1)" >> "$outdir"/scrapers/index.yml
     # the URLs it scrapes, as CommunityScrapers lists them
-    urls=$(awk '/^performerByURL:/{p=1;next} /^[^ -]/{p=0;u=0} p && /^ *url:/{u=1;next} p && /^ *-? *[a-zA-Z_]+:/{u=0} p && u && /^ *- /' "$f" | sed -e 's/^ *- //' -e 's/\r//')
-    if [ -n "$urls" ]; then
-        echo "  metadata:
-    performer_urls:" >> "$outdir"/scrapers/index.yml
-        echo "$urls" | while read u; do echo "      - $u" >> "$outdir"/scrapers/index.yml; done
-    fi
+    first=1
+    for kind in performer scene gallery group movie image; do
+        urls=$(awk -v key="${kind}ByURL:" '$0 == key {p=1;next} /^[^ -]/{p=0;u=0} p && /^ *url:/{u=1;next} p && /^ *-? *[a-zA-Z_]+:/{u=0} p && u && /^ *- /' "$f" | sed -e 's/^ *- //' -e 's/\r//')
+        if [ -n "$urls" ]; then
+            if [ $first = 1 ]; then echo "  metadata:" >> "$outdir"/scrapers/index.yml; first=0; fi
+            echo "    ${kind}_urls:" >> "$outdir"/scrapers/index.yml
+            echo "$urls" | while read u; do echo "      - $u" >> "$outdir"/scrapers/index.yml; done
+        fi
+    done
 }
 
 mkdir -p "$outdir/scrapers"
