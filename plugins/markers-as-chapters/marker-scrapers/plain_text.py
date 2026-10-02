@@ -68,14 +68,24 @@ def parse_lines(text):
 
 
 def parse_cue(text):
-    markers, current, performer = [], None, None
+    """Tracks of a CUE sheet. Each also gets "file" — which FILE entry it's
+    in, counted from 1 (0: before any) — and that entry's "file_name": a
+    sheet with several files starts every file's tracks at 0:00 again (see
+    chapter_files.py, which adds up the files' lengths)."""
+    markers, current = [], None
+    file_no, file_name = 0, ""
     for raw in text.splitlines():
         line = raw.strip()
         word, _, rest = line.partition(" ")
         value = rest.strip().strip('"')
         word = word.upper()
+        if word == "FILE":
+            m = re.match(r'\s*(?:"([^"]*)"|(\S+))', rest)
+            file_no += 1
+            file_name = (m.group(1) if m.group(1) is not None else m.group(2)) if m else ""
+            continue
         if word == "TRACK":
-            current = {"title": "", "tags": []}
+            current = {"title": "", "tags": [], "file": file_no, "file_name": file_name}
             markers.append(current)
         elif current is None:
             continue

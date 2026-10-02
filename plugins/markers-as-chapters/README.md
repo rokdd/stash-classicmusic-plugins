@@ -89,7 +89,10 @@ Built in:
   `[12:34]`, `(5:10)`, `3m20s`; a range like `1:23 - 4:56` gives the end
   too, otherwise a marker ends where the next starts (the last at the end
   of the video). A **CUE sheet** works too: one marker per track, its
-  PERFORMER as a tag.
+  PERFORMER as a tag. A pasted sheet with several FILE entries can't be
+  used as it is — every file's tracks start at 0:00 again, and there are
+  no files to measure; use it as **Chapter file next to the video**
+  instead, with its audio files beside it.
 
   **Tables** — a programme or tracklist in columns, split by tabs, `;`,
   `|`, several spaces or commas (also CSV with quotes), e.g. copied from a
@@ -118,7 +121,13 @@ Built in:
   chapters or a tracklist), `Concert.chapters.xml` (Matroska chapters, as
   from mkvextract), `Concert.ffmetadata`, `Concert.info.json` (yt-dlp) or
   `Concert.txt` (a tracklist) — also with the video's extension in the
-  name (`Concert.mp4.cue`).
+  name (`Concert.mp4.cue`). A CUE sheet with several FILE entries (one per
+  CD or side) starts every file's tracks at 0:00 again: the lengths of the
+  audio files it names are added up (read with ffprobe), so each track
+  gets its time in the whole recording. The files must be beside the
+  sheet — by the name in the sheet, or just its file name (so
+  `C:\Rips\side 2.flac` is found as `side 2.flac`). If one is missing or
+  can't be read, the dialog says so.
 
 ### Checked against the audio
 

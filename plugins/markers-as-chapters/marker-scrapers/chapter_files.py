@@ -12,11 +12,16 @@ first it finds:
   .ffmetadata, .ffmeta        ffmpeg metadata ([CHAPTER] START / END / title)
   .info.json                  yt-dlp's info file ("chapters")
   .txt                        a tracklist (see plain_text.py)
-e.g. "Concert.mp4" + "Concert.cue" or "Concert.mp4.chapters.txt"."""
+e.g. "Concert.mp4" + "Concert.cue" or "Concert.mp4.chapters.txt".
+
+A CUE sheet with several FILE entries (one per CD side, say) starts each
+file's tracks at 0:00 again: the files' lengths are added up — they must
+be beside the sheet (see cue_offsets)."""
 
 import json
 import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -102,6 +107,63 @@ def parse(path, text):
     return parse_lines(text)
 
 
+def _audio_length(path):
+    ffprobe = os.environ.get("STASH_FFPROBE") or "ffprobe"
+    out = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        capture_output=True, text=True, timeout=120,
+    )
+    return float(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+
+
+def _find_beside(cue_path, name):
+    folder = os.path.dirname(cue_path)
+    for candidate in (name, os.path.basename(name.replace("\\", "/"))):
+        path = os.path.join(folder, candidate)
+        if candidate and os.path.isfile(path):
+            return path
+    return None
+
+
+def cue_offsets(cue_path, markers):
+    """A CUE sheet with several FILE entries starts each file's tracks at
+    0:00 again. The files' lengths (found beside the sheet, read with
+    ffprobe) are added up, so every track gets its time in the whole
+    recording. Returns a note when that can't be done."""
+    numbers = {m.get("file") for m in markers if m.get("file") is not None}
+    if len(numbers) <= 1:
+        return ""
+    # every FILE entry, in order — also ones without tracks of their own
+    with open(cue_path, "rb") as f:
+        text = decode_bytes(f.read())
+    names = []
+    for line in text.splitlines():
+        word, _, rest = line.strip().partition(" ")
+        if word.upper() == "FILE":
+            m = re.match(r'\s*(?:"([^"]*)"|(\S+))', rest)
+            names.append((m.group(1) if m.group(1) is not None else m.group(2)) if m else "")
+    lengths, missing = [], []
+    for name in names:
+        path = _find_beside(cue_path, name)
+        length = None
+        if path:
+            try:
+                length = _audio_length(path)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                length = None
+        if length is None:
+            missing.append(name or "?")
+        lengths.append(length or 0)
+    if missing:
+        return (f"The CUE sheet has {len(names)} FILE entries, so its track starts begin again in every file and "
+                f"aren't usable as they are. Put the audio files beside the sheet so their lengths can be added up "
+                f"(not found or not readable: {', '.join(missing)}).")
+    for m in markers:
+        before = sum(lengths[:max(0, m.get("file", 1) - 1)])
+        m["seconds"] = m["seconds"] + before
+    return ""
+
+
 def candidates(video):
     base, _ext = os.path.splitext(video)
     for stem in (base, video):
@@ -125,8 +187,9 @@ def main():
                 continue
             markers = parse(path, read(path))
             if markers:
+                notes = cue_offsets(path, markers) if any("file" in m for m in markers) else ""
                 duration = max([x.get("duration") or 0 for x in files] or [0])
-                print(json.dumps(fill_ends(markers, duration)))
+                print(json.dumps({"markers": fill_ends(markers, duration), "notes": notes}))
                 return
     base = os.path.splitext(os.path.basename(files[0]["path"]))[0]
     raise SystemExit(
