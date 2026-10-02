@@ -783,7 +783,7 @@
     // colour and the pauses found in the audio; hovering it shows that
     // moment of the video.
     const MIN_ROW = 38; // px: room for the fields
-    const MIN_GAP = 6; // px
+    const MIN_GAP = 24; // px: a gap row is a row of its own, with its label
     let zoom = 1;
     const zoomSelect = el("select", { className: "form-control form-control-sm d-inline-block", style: { width: "5em" },
       onchange: (e) => { zoom = parseFloat(e.target.value) || 1; render(); } },
@@ -855,13 +855,26 @@
     };
 
     const columns = 7 + (checkAudio ? 1 : 0);
+    // A gap between markers: a pause (light blue) or a stretch with music
+    // but without a marker (amber) — a row of its own, always labelled.
+    // How much of a stretch is quiet in the audio (0–1), or null before the
+    // audio check is done.
+    const quietShare = (from, to) => {
+      if (!audio || !audio.pauses || to <= from) return null;
+      const quiet = audio.pauses.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(b, to) - Math.max(a, from)), 0);
+      return quiet / (to - from);
+    };
     const gapRow = (from, to, k) => {
       const height = Math.max(MIN_GAP, (to - from) * k);
-      const long = to - from > 20;
-      const label = height >= 16
-        ? `${formatTime(to - from)} ${long ? "without a marker" : "pause"} (${formatTime(from)} – ${formatTime(to)})` : "";
-      return el("tr", { className: `mac-gap${long ? " mac-gap-long" : ""}`, style: { height: `${height}px` } },
-        el("td", { className: "mac-strip-cell" }, strip("gap", from, to, height)),
+      // a pause: mostly quiet in the audio, however long (applause can
+      // last); without the audio check: up to 20 s
+      const share = quietShare(from, to);
+      const long = share == null ? to - from > 20 : share < 0.6 && to - from > 20;
+      const label = long
+        ? `${formatTime(to - from)} without a marker · ${formatTime(from)} – ${formatTime(to)}`
+        : `⏸ pause ${formatTime(to - from)} · ${formatTime(from)} – ${formatTime(to)}`;
+      return el("tr", { className: `mac-gap ${long ? "mac-gap-long" : "mac-gap-pause"}`, style: { height: `${height}px` } },
+        el("td", { className: "mac-strip-cell" }, strip(long ? "gap-long" : "gap-pause", from, to, height)),
         el("td", { colSpan: columns - 1, className: "mac-gap-label", textContent: label }));
     };
 
@@ -936,11 +949,14 @@
         ".mac-bar { position: relative; width: 18px; cursor: crosshair; border-radius: 2px; }",
         ".mac-picked { background: #3b82f6; } .mac-unpicked { background: #6b7280; } .mac-exists { background: #f59e0b; }",
         ".mac-not-music { background: repeating-linear-gradient(45deg, #6b7280 0 4px, transparent 4px 8px); }",
-        ".mac-gap { background: rgba(0,0,0,.18); } .mac-gap td { padding-top: 0 !important; padding-bottom: 0 !important; border-top: 0 !important; }",
-        ".mac-bar.mac-gap { background: rgba(128,128,128,.25); }",
-        ".mac-gap-long .mac-bar { background: repeating-linear-gradient(0deg, rgba(245,158,11,.5) 0 2px, transparent 2px 6px); }",
-        ".mac-gap-label { font-size: .72em; opacity: .7; vertical-align: middle !important; white-space: nowrap; }",
-        ".mac-gap-long .mac-gap-label { color: #f59e0b; opacity: 1; }",
+        ".mac-gap td { padding-top: 0 !important; padding-bottom: 0 !important; }",
+        ".mac-gap-pause { background: rgba(56,189,248,.14); }",
+        ".mac-gap-long { background: rgba(245,158,11,.12); }",
+        ".mac-bar.mac-gap-pause { background: #38bdf8; }",
+        ".mac-bar.mac-gap-long { background: repeating-linear-gradient(0deg, #f59e0b 0 3px, transparent 3px 7px); }",
+        ".mac-gap-label { font-size: .78em; vertical-align: middle !important; white-space: nowrap; }",
+        ".mac-gap-pause .mac-gap-label { color: #7dd3fc; }",
+        ".mac-gap-long .mac-gap-label { color: #f59e0b; }",
         ".mac-pause { position: absolute; left: 0; right: 0; background: rgba(0,0,0,.6); }",
         ".mac-hover-line { display: none; position: absolute; left: -2px; right: -2px; height: 0; border-top: 2px solid #f43f5e; pointer-events: none; }",
         ".mac-preview { display: none; position: fixed; z-index: 3000; padding: 4px; background: #111; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; }",

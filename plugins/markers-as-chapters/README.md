@@ -38,9 +38,11 @@ adds them, and the page updates. Also in the dialog:
 
 - **The table is a timeline**: one row per marker in time order, each as
   tall as it lasts (with a minimum height for the fields; **Height** 1×–8×
-  stretches it), and an empty row for every gap between markers — a
-  pause, or, when it's longer than 20 seconds, "… without a marker" in
-  orange. A strip on the left of each row shows its colour (blue: to
+  stretches it), and a row of its own for every gap between markers: a
+  **pause** in light blue ("⏸ pause 0:20 · 30:10 – 30:30") when the audio
+  is mostly quiet there — however long, applause included — or, when
+  there's music in it, "… without a marker" in amber (before the audio
+  check is done: gaps over 20 seconds). A strip on the left of each row shows its colour (blue: to
   create, grey: not ticked, orange: already a marker there, hatched: not
   music) and the pauses found in the audio as dark lines; **hovering** the
   strip shows that moment of the video (Stash's seek bar thumbnails, or
