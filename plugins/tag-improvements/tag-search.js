@@ -216,20 +216,31 @@
     const root = document.documentElement;
     root.classList.toggle(LARGE_CLASS, large);
 
+    const LIST = '[class*="react-select__menu-list"]';
+    const large_ = `.${LARGE_CLASS} .${MENU_CLASS}`;
     const style = document.createElement("style");
     style.textContent = [
-      `.${LARGE_CLASS} .${MENU_CLASS} .react-select__menu-list { max-height: 75vh !important; }`,
-      `.${SWITCH_CLASS} { display: flex; justify-content: flex-end; padding: 2px 8px; font-size: 0.8em;` +
+      // Large: a panel the whole height of the window, in front of the page
+      // (wherever Stash put the dropdown — above the field, it would grow
+      // off the top of the screen). What's typed shows in its top bar.
+      `${large_} { position: fixed !important; top: 8px !important; bottom: 8px !important; left: 50% !important;` +
+        " right: auto !important; transform: translateX(-50%); width: min(760px, 96vw) !important; margin: 0 !important;" +
+        " z-index: 2000 !important; display: flex !important; flex-direction: column;" +
+        " box-shadow: 0 0 0 100vmax rgba(0,0,0,.45) !important; }",
+      `${large_} ${LIST} { max-height: none !important; flex: 1 1 auto; min-height: 0; position: static !important; }`,
+      `.${SWITCH_CLASS} { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 0.8em;` +
         " border-bottom: 1px solid rgba(128,128,128,.3); }",
-      `.${SWITCH_CLASS} button { background: none; border: 0; padding: 0; color: inherit; opacity: .75; cursor: pointer; }`,
+      `.${SWITCH_CLASS} .tag-search-query { flex: 1; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`,
+      `.${SWITCH_CLASS} button { margin-left: auto; background: none; border: 0; padding: 0; color: inherit; opacity: .75; cursor: pointer; }`,
       `.${SWITCH_CLASS} button:hover { opacity: 1; text-decoration: underline; }`,
-      // Image on the left, spanning the name and description rows — only
-      // in the large dropdown.
-      `.${LARGE_CLASS} .tag-search-extra { display: grid !important; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; }`,
+      // Parent tags after the name, greyed out — always.
+      ".tag-search-parents { margin-left: 6px; opacity: .6; font-size: .85em; }",
+      // Large: the image floats on the left, name and description beside it.
       ".tag-search-extra > .tag-search-image, .tag-search-extra > .tag-search-description { display: none; }",
-      `.${LARGE_CLASS} .tag-search-extra > .tag-search-image { display: block; grid-row: span 2; height: 48px; width: auto;` +
+      `${large_} .tag-search-extra { display: flow-root !important; min-height: 56px; padding-top: 4px !important; padding-bottom: 4px !important; }`,
+      `${large_} .tag-search-extra > .tag-search-image { display: block; float: left; margin-right: 10px; height: 48px; width: auto;` +
         " max-width: 96px; object-fit: contain; background: #fff; }",
-      `.${LARGE_CLASS} .tag-search-extra > .tag-search-description { display: -webkit-box; font-size: 0.8em; opacity: 0.75;` +
+      `${large_} .tag-search-extra > .tag-search-description { display: -webkit-box; font-size: 0.8em; opacity: 0.75;` +
         " white-space: normal; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }",
     ].join("\n");
     document.head.appendChild(style);
@@ -239,10 +250,21 @@
       writeLarge(on);
       root.classList.toggle(LARGE_CLASS, on);
       document.querySelectorAll(`.${SWITCH_CLASS} button`).forEach(labelSwitch);
+      showQuery();
     };
     const labelSwitch = (button) => {
       button.textContent = large ? "⤡ Smaller" : "⤢ Larger, with images";
     };
+    // What's typed in the field, shown in the bar (the large panel covers
+    // the field itself).
+    const showQuery = () => {
+      const active = document.activeElement;
+      const text = active && active.tagName === "INPUT" ? active.value : "";
+      document.querySelectorAll(`.${SWITCH_CLASS} .tag-search-query`).forEach((q) => {
+        q.textContent = large && text ? `Search: ${text}` : "";
+      });
+    };
+    document.addEventListener("input", showQuery, true);
 
     // Each option gets its tag's image and description, from the tag list
     // (shown only while large). Only added around the option's own
@@ -280,17 +302,31 @@
           });
           const bar = document.createElement("div");
           bar.className = SWITCH_CLASS;
+          const query = document.createElement("span");
+          query.className = "tag-search-query";
+          bar.appendChild(query);
           bar.appendChild(button);
           menu.insertBefore(bar, list);
+          showQuery();
         }
         options.forEach((option) => {
           const name = ownName(option);
           if (option.dataset.tagSearchFor === name) return;
           option.dataset.tagSearchFor = name;
-          option.querySelectorAll(":scope > .tag-search-image, :scope > .tag-search-description").forEach((n) => n.remove());
+          option.querySelectorAll(":scope > .tag-search-image, :scope > .tag-search-description, :scope > .tag-search-parents")
+            .forEach((n) => n.remove());
           option.classList.remove("tag-search-extra");
           const tag = byName.get(name);
           if (!tag) return;
+          // Parent tags after the name (Marker Improvements may have added
+          // them already in the marker form).
+          const parents = (tag.parents || []).map((p) => p.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
+          if (parents.length && !option.querySelector(".marker-symbols-parents")) {
+            const hint = document.createElement("span");
+            hint.className = "tag-search-parents";
+            hint.textContent = `(${parents.join(", ")})`;
+            option.appendChild(hint);
+          }
           const hasImage = tag.image_path && !/[?&]default=true\b/.test(tag.image_path);
           if (!hasImage && !tag.description) return;
           option.classList.add("tag-search-extra");

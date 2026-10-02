@@ -1757,12 +1757,16 @@
 
 
 
+  // What this plugin and Tag Improvements add to dropdown options (parent
+  // tags, image, description) — left out when reading an option's name.
+  const ADDED = ".marker-symbols-parents, .tag-search-parents, .tag-search-image, .tag-search-description, .tag-search-query";
+
   // An element's text without the parent-tag hint this plugin adds to
   // dropdown options (see annotateTagOptions), so names still match.
   function ownText(el) {
     let text = "";
     el.childNodes.forEach((node) => {
-      if (node.nodeType === 1 && node.classList.contains("marker-symbols-parents")) return;
+      if (node.nodeType === 1 && node.matches(ADDED)) return;
       text += node.textContent;
     });
     return text.trim();
@@ -1789,7 +1793,7 @@
     add(withoutBrackets(full));
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (node.parentElement && node.parentElement.closest(".marker-symbols-parents")) continue;
+      if (node.parentElement && node.parentElement.closest(ADDED)) continue;
       add(node.textContent);
       add(withoutBrackets(node.textContent));
     }
@@ -1890,6 +1894,8 @@
     option.dataset.markerSymbolsParentsFor = name;
     const old = option.querySelector(".marker-symbols-parents");
     if (old) old.remove();
+    // Tag Improvements shows parent tags in every tag dropdown already.
+    if (option.querySelector(".tag-search-parents")) return;
 
     const tag = await findTagIn(option);
     // The option may show another tag by now (React reuses option
