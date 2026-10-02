@@ -13,7 +13,9 @@ around the title (- – — | : . brackets, track numbers like "1." stay) are
 trimmed.
 
 A CUE sheet (TRACK / TITLE / PERFORMER / INDEX 01 mm:ss:ff) is read
-track by track; PERFORMER becomes a tag.
+track by track; PERFORMER becomes a tag. With one FILE per track the times
+all start at 0:00 — chapter_files.py adds the files' lengths up (ffprobe);
+pasted text can't, and then a note says the starts are all equal.
 
 Titles only — no line has a time: the lines are the pieces in order, and
 they're placed at the pauses in the scene's audio (see pauses.py): the
@@ -63,14 +65,19 @@ def parse_lines(text):
 
 
 def parse_cue(text):
-    markers, current, performer = [], None, None
+    markers, current, file_name, file_no = [], None, None, 0
     for raw in text.splitlines():
         line = raw.strip()
         word, _, rest = line.partition(" ")
         value = rest.strip().strip('"')
         word = word.upper()
-        if word == "TRACK":
-            current = {"title": "", "tags": []}
+        if word == "FILE":
+            # INDEX times count from the start of the FILE they follow; a
+            # sheet with one FILE per track has every track at 0:00.
+            m = re.match(r'\s*(?:"([^"]*)"|(\S+))', rest)
+            file_name, file_no = (m.group(1) or m.group(2)) if m else "", file_no + 1
+        elif word == "TRACK":
+            current = {"title": "", "tags": [], "file": file_no, "file_name": file_name}
             markers.append(current)
         elif current is None:
             continue

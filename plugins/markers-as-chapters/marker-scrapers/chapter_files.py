@@ -17,6 +17,7 @@ e.g. "Concert.mp4" + "Concert.cue" or "Concert.mp4.chapters.txt"."""
 import json
 import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -101,6 +102,47 @@ def parse(path, text):
     return parse_lines(text)
 
 
+def file_length(path, ffprobe):
+    try:
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=120)
+        return float(out.stdout.strip())
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def join_cue_files(markers, cue_path):
+    """A CUE sheet with several FILE lines: the INDEX times restart at 0:00
+    in each file. Adds up the files' lengths (found next to the sheet, read
+    with ffprobe) so every track gets its start in the joined recording.
+    Returns a note — "" when nothing was wrong or everything was fixed."""
+    numbers = sorted({m.get("file") or 0 for m in markers})
+    if len(numbers) < 2:
+        return ""
+    folder = os.path.dirname(cue_path)
+    ffprobe = os.environ.get("STASH_FFPROBE") or "ffprobe"
+    offsets, total, missing = {}, 0.0, []
+    for n in numbers:
+        offsets[n] = total
+        name = next(m["file_name"] for m in markers if (m.get("file") or 0) == n)
+        found = next((p for p in (os.path.join(folder, name), os.path.join(folder, os.path.basename(name.replace("\\", "/"))))
+                      if os.path.isfile(p)), None)
+        length = file_length(found, ffprobe) if found else None
+        if length is None:
+            missing.append(name)
+            total = None
+            break
+        total += length
+    if missing:
+        return (f"The CUE sheet has {len(numbers)} FILE entries (times restart at 0:00 in each) but "
+                f"'{missing[0]}' couldn't be read next to it, so the starts are not usable — "
+                "put the audio files beside the sheet, or use a sheet with one FILE.")
+    for m in markers:
+        m["seconds"] += offsets[m.get("file") or 0]
+    return f"CUE sheet with {len(numbers)} FILE entries: the files' lengths were added up to place the tracks."
+
+
 def candidates(video):
     base, _ext = os.path.splitext(video)
     for stem in (base, video):
@@ -131,7 +173,8 @@ def main():
             markers = parse(path, read(path))
             if markers:
                 duration = max([x.get("duration") or 0 for x in files] or [0])
-                print(json.dumps(fill_ends(markers, duration)))
+                note = join_cue_files(markers, path)
+                print(json.dumps({"markers": fill_ends(markers, duration), "notes": note}))
                 return
     base = os.path.splitext(os.path.basename(files[0]["path"]))[0]
     raise SystemExit(

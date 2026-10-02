@@ -60,7 +60,11 @@ Built in:
   `[12:34]`, `(5:10)`, `3m20s`; a range like `1:23 - 4:56` gives the end
   too, otherwise a marker ends where the next starts (the last at the end
   of the video). A **CUE sheet** works too: one marker per track, its
-  PERFORMER as a tag.
+  PERFORMER as a tag. A sheet with one `FILE` per track (all tracks at
+  `00:00:00`) is joined by adding up the lengths of the audio files (read
+  with ffprobe) when it's a chapter file next to the video with the audio
+  files beside it; pasted, it can't be. Whenever all markers of an import
+  start at the same time the dialog warns, since that is never right.
 
   **Titles only** — no line has a time: the lines are taken as the pieces
   in order, e.g. the programme from ARD, BBC or the concert hall's site,

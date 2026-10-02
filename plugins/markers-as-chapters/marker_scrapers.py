@@ -298,6 +298,11 @@ def scrape(gql, args, settings, env_extra):
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
     markers, notes = run_action(scraper, action, payload, env_extra)
     markers = normalise(markers)
+    if len(markers) > 1 and len({m["seconds"] for m in markers}) == 1:
+        notes = (notes + " " if notes else "") + (
+            f"Warning: all {len(markers)} markers start at {markers[0]['seconds']:g}s — the source "
+            "probably has times relative to each track or file (e.g. a CUE sheet with one FILE per track). "
+            "Don't import these as they are.")
     try:
         matched = suggest_tags(gql, markers, settings)
     except Exception as exc:  # noqa: BLE001
