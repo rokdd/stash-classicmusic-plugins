@@ -6,7 +6,7 @@ and classical music recordings — but useful for any library.
 | Plugin | What it's for |
 |---|---|
 | [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
-| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video scrubber, click-to-edit markers |
+| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, and scraping that adds tags instead of replacing them |
 
 They're independent of each other — install any of them.
@@ -99,7 +99,7 @@ Details: [Scene Improvements README](plugins/advanced-file-operations/README.md)
 
 ### Marker Improvements
 
-- **Tag images on the scrubber**: a small bubble above each marker shows
+- **Tag images on the seek bar**: a small bubble above each marker shows
   the images of its tags, appearing with Stash's own marker indicator.
 - The same image is only shown once per marker, and images are never
   cropped.

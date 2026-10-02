@@ -1,9 +1,9 @@
 # Marker Improvements (Stash plugin)
 
 Puts each scene marker's tag images in a small bubble floating above
-Stash's own colored marker indicator on the video scrubber — a real child
+Stash's own colored marker indicator on the video's seek bar — a real child
 of that indicator, so it shows and hides right along with it, however
-Stash itself reveals markers on the scrubber. Click an icon to jump
+Stash itself reveals markers on the seek bar. Click an icon to jump
 straight to that marker. Pure frontend — no Python, no ffmpeg, nothing to
 configure server-side: the icons come straight from whatever images
 you've already got on each tag in Stash. One optional setting lets you
@@ -18,7 +18,7 @@ Source: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/ma
    the exact path).
 2. Settings → Plugins → **Reload plugins**.
 3. Open any scene with markers and look at the colored marker indicators
-   on the scrubber.
+   on the seek bar.
 
 ## Icons
 
@@ -35,7 +35,7 @@ are unaffected.
 ## When bubbles show, and where
 
 - **Only once the video has started**: before you first press play, the
-  scrubber shows no bubbles. They appear when playback starts, and hide
+  seek bar shows no bubbles. They appear when playback starts, and hide
   again when a new video loads.
 - **At the start of the marker's range**: each bubble sits with its left
   edge at where its marker begins, its tail pointing at that spot.
@@ -105,7 +105,7 @@ Changes apply the next time a scene page loads.
 
 ## Editing a marker by clicking it
 
-Clicking a marker's colored range on the scrubber, or one of its icons,
+Clicking a marker's colored range on the seek bar, or one of its icons,
 jumps to that marker and opens Stash's own edit form for it. That form
 lives in the scene's **Markers** tab, so the plugin switches to that tab,
 finds the marker's row by its start time (and title), and presses its
@@ -125,7 +125,7 @@ and the browser console says it couldn't find the marker's row.
 
 In the scene's Markers tab, hovering a tag shows the bubble it gives a
 marker, right next to it — with the same look and custom styles as on
-the scrubber:
+the seek bar:
 
 - options in the tag dropdown while you create or edit a marker,
 - tags you've already picked in that form,
@@ -160,12 +160,12 @@ Stash's:
   scene. Markers with the same primary tag share a color stripe.
 - **Click a row** to jump to that marker.
 - **Editing opens in place**: a row's **Edit** (or clicking a marker on the
-  scrubber) opens Stash's edit form right below that marker's row, like an
+  seek bar) opens Stash's edit form right below that marker's row, like an
   accordion, and the sidebar scrolls there — the marker's row at the top,
   the form below it. Save, Cancel or **Close** folds it away again.
 - **The marker playing right now is highlighted** in amber: a frame and a
   **▶ Playing** badge on its row, and an outline on its bubble on the
-  scrubber (also while the Markers tab isn't open). **The list follows
+  seek bar (also while the Markers tab isn't open). **The list follows
   playback**: when a new marker starts, its row scrolls to the middle of
   the sidebar. It holds still while you edit, while the list is
   collapsed, for a few seconds after you scroll yourself, and on phones
@@ -209,12 +209,12 @@ the Markers tab, anywhere in Stash — the plugin reloads the scene's
 markers and its own settings and redraws every bubble, so a new tag
 image, a changed time or a removed marker shows up without reloading the
 page. It notices this by watching Stash's own save requests, with a
-backup check on the scrubber's marker ranges themselves (one appearing,
+backup check on the seek bar's marker ranges themselves (one appearing,
 disappearing or moving) in case a Stash version saves some other way.
 Only a change to a marker's time or count is caught by that backup, not
 a change to its tags.
 
-It also puts the bubbles back whenever the scrubber and the bubbles no
+It also puts the bubbles back whenever the seek bar and the bubbles no
 longer match — when Stash redraws its marker ranges after an edit, or
 when the ranges only appear late. The latter is common on phones: mobile
 browsers usually don't load the video until you tap play, and Stash only
@@ -225,9 +225,10 @@ then.
 
 Directly inside Stash's own colored marker indicator for that marker —
 the small tinted bar (class `.vjs-marker-range`) Stash itself draws on
-the scrubber at each marker's timestamp. The bubble is an actual child of
-that element (not a separate overlay layered on top), floats centered
-above it with a small tail pointing back down at it.
+the seek bar at each marker's timestamp. The bubble is an actual child of
+that element (not a separate overlay layered on top) and sits above it,
+starting where the marker starts, with a small tail pointing down at that
+spot.
 
 A `.vjs-marker-range` element is usually only a few px tall, and can clip
 its own content (`overflow: hidden`) for a rounded-track look — which
@@ -268,7 +269,7 @@ up immediately. If Stash ever renames the class, update
 
 Clicking an icon seeks the video to that marker's timestamp. Since
 `.vjs-marker-range` is a React-managed element that knows nothing about
-the icon manually injected into it, Stash re-rendering its marker overlay
+the icon manually injected into it, Stash re-rendering its marker ranges
 in response to that seek (e.g. to update which marker is "active") can
 wipe the icon out as a side effect — not because this plugin removed it.
 A `seeked` listener on the video watches for exactly that and re-mounts
@@ -291,7 +292,7 @@ none of its tags have a real custom image.
 - This only reads markers/tags — it never creates, edits, or deletes
   anything in Stash.
 - If a scene has a lot of markers close together, their icons can overlap
-  a bit on the scrubber; that's a display-only trade-off, nothing is lost
+  a bit on the seek bar; that's a display-only trade-off, nothing is lost
   or hidden from the underlying data.
 - Icon size is controlled by `ICON_SIZE_PX` near the top of the script if
   you want them bigger or smaller.

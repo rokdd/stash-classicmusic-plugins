@@ -8,7 +8,7 @@ One folder per plugin; each is independent of the others.
   ffmpeg on the server, so it needs ffmpeg with libx265 and Python 3 with
   `requests` there.
 - **[`marker-improvements-plugin/`](marker-improvements-plugin/)** — tag
-  images on the video scrubber, click-to-edit markers, per-tag styles.
+  images on the video's seek bar, click-to-edit markers, per-tag styles.
   Browser only, nothing to install.
 - **[`tag-improvements/`](tag-improvements/)** — a tag tree on the Tags
   page, tag descriptions from StashDB, and scraping that adds tags instead

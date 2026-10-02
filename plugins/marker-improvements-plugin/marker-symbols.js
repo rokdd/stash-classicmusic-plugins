@@ -3,11 +3,11 @@
 // For each scene marker, shows a small "bubble" — one image per tag on it
 // that has a real custom image uploaded (Settings on a tag page lets you
 // upload one) — floating centered above Stash's own colored marker
-// indicator on the video scrubber (class `.vjs-marker-range`, one per
+// indicator on the video's seek bar (class `.vjs-marker-range`, one per
 // marker), with a little tail pointing back down at it. It's a real,
 // permanent child of that indicator, so it
 // shows and hides right along with it — whatever Stash itself does to
-// reveal that indicator (e.g. hovering the scrubber) is what reveals the
+// reveal that indicator (e.g. hovering the seek bar) is what reveals the
 // bubble too, no separate interaction of its own needed. Click an icon to
 // jump straight to that marker.
 //
@@ -19,7 +19,7 @@
 //
 // How markers are matched to their indicator:
 //   Stash draws one `.vjs-marker-range` element per scene marker on the
-//   scrubber, but doesn't expose which is which by id or attribute — so
+//   seek bar, but doesn't expose which is which by id or attribute — so
 //   this pairs them up by left-to-right order: every `.vjs-marker-range`
 //   found, sorted by its own position along the bar, against every marker
 //   from GraphQL, sorted by timestamp. Both lists should always be in the
@@ -49,7 +49,7 @@
 (function () {
   "use strict";
 
-  // Height of a tag icon in the bubbles (scrubber and hover), and in the
+  // Height of a tag icon in the bubbles (seek bar and hover), and in the
   // Markers tab's timeline list. Wide icons get up to twice this in width.
   const ICON_SIZE_PX = 88;
   // The bubble starts this far left of its marker range's start, so its
@@ -199,7 +199,7 @@
   let mountedIcons = [];
   // The marker ranges on screen when bubbles were last mounted (see
   // rangeSignature), and a counter of mounts — so the page watcher near the
-  // end can tell when the scrubber no longer matches the bubbles.
+  // end can tell when the seek bar no longer matches the bubbles.
   let lastMountSignature = null;
   let mountGeneration = 0;
   let placementTimer = null;
@@ -731,7 +731,7 @@
     return null;
   }
 
-  // Clicking a marker's own colored range on the scrubber opens its
+  // Clicking a marker's own colored range on the seek bar opens its
   // editor too. The range is often pointer-events:none (so it doesn't get
   // in the way of dragging the seek handle), which means it never gets a
   // click itself — so this listens on the whole player instead and checks
@@ -755,7 +755,7 @@
 
   // -- bubbles only once the video has started ----------------------------------
   //
-  // Before the video has played at all, the scrubber shows no bubbles. A
+  // Before the video has played at all, the seek bar shows no bubbles. A
   // class on the player marks that state and a style rule hides the bubbles
   // inside it (the hover bubbles in the Markers tab aren't inside the player,
   // so they're unaffected). It's set again when a new video loads.
@@ -772,7 +772,7 @@
     style.textContent = [
       `.${NOT_STARTED_CLASS} .marker-symbols-bubble { display: none !important; }`,
       // The marker playing right now (see updateTimelineProgress): an
-      // amber outline on its scrubber bubble, and an amber frame, tint and
+      // amber outline on its seek bar bubble, and an amber frame, tint and
       // "Playing" badge on its row in the marker list.
       `.marker-symbols-bubble.${CURRENT_CLASS} { outline: 3px solid ${CURRENT_COLOR}; outline-offset: 1px; }`,
       `.marker-symbols-row.${CURRENT_CLASS} { background: rgba(245, 166, 35, 0.16) !important; box-shadow: inset 0 0 0 2px ${CURRENT_COLOR}; }`,
@@ -1199,7 +1199,7 @@
       details.appendChild(tags);
     }
 
-    // The same icons the marker's bubble shows on the scrubber.
+    // The same icons the marker's bubble shows on the seek bar.
     const images = tagsWithImages(m);
     if (images.length) {
       const icons = document.createElement("div");
@@ -1408,7 +1408,7 @@
     const t = video.currentTime;
     const playingMarkers = timelineMarkers.filter((m) => t >= m.start && t < m.end);
     const playingIds = new Set(playingMarkers.map((m) => String(m.id)));
-    // The scrubber bubbles — whether or not the Markers tab is open.
+    // The seek bar bubbles — whether or not the Markers tab is open.
     document.querySelectorAll(".marker-symbols-bubble[data-marker-id]").forEach((bubble) => {
       bubble.classList.toggle(CURRENT_CLASS, playingIds.has(bubble.dataset.markerId));
     });
@@ -1523,7 +1523,7 @@
   // -- edit form as an accordion under the marker's row --------------------------
   //
   // When a marker is edited from this plugin — its Edit button in the
-  // timeline list, or a click on the marker on the scrubber — Stash's own
+  // timeline list, or a click on the marker on the seek bar — Stash's own
   // edit form is moved from the top of the Markers tab to right below that
   // marker's row, like an accordion.
   //
@@ -2041,11 +2041,11 @@
   }
 
   // Backup in case a Stash version sends those requests some other way:
-  // when the scrubber's marker ranges change (one added, removed or moved
+  // when the seek bar's marker ranges change (one added, removed or moved
   // to a new time), reload too. Compared by count and position, so our own
   // bubbles being mounted into those ranges doesn't count as a change.
   //
-  // It also catches everything else that leaves the scrubber without
+  // It also catches everything else that leaves the seek bar without
   // bubbles, by comparing what's on screen with the last time they were
   // mounted (see mountIconsOnMarkerRanges):
   //   - the ranges differ from then: added, removed, moved, or appearing
