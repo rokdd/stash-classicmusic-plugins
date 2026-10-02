@@ -1488,7 +1488,8 @@
   // marker_scrapers.py: a chapter file — also a medici.tv JSON — next to the
   // video, the video's own chapters, ARTE / ORF ON through its URLs) when its
   // page opens and when its URLs change (e.g. after scraping it). If some are
-  // found, a note at the bottom right offers to import them: the usual review
+  // found, a note at the bottom right offers to import them — also right
+  // after the scene was saved (e.g. filled in by a scraper): the usual review
   // dialog (nothing is saved until "Create markers" there). "Not now"
   // doesn't ask again for that scene (in this browser).
 
@@ -1553,6 +1554,18 @@
       // nothing offered
     }
   }
+
+  // After the scene is saved (e.g. filled in by a scraper — Sidecar reads the
+  // same files next to the video), check again.
+  document.addEventListener("click", (e) => {
+    const button = e.target.closest ? e.target.closest("button") : null;
+    if (!button || !/^(save|speichern|enregistrer)$/i.test(button.textContent.trim())) return;
+    if (button.closest(".scene-markers-panel") || button.closest(`#${DIALOG_ID}`)) return; // marker forms, our dialog
+    const id = sceneId();
+    if (!id) return;
+    [...checked].filter((k) => k.startsWith(`${id}|`)).forEach((k) => checked.delete(k));
+    setTimeout(checkForChapters, 2500); // after Stash has saved
+  }, true);
 
   // On every scene page, and again when its URLs change (checked every few
   // seconds — a quick query).

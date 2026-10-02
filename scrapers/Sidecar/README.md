@@ -31,6 +31,8 @@ When there are several: medici.tv first, then the NFO, then yt-dlp's file —
 field by field; performers, tags and URLs come from all of them, and the
 scene's own URLs stay.
 
-The same medici.tv JSON gives the chapters in
-[Markers as Chapters](../../plugins/markers-as-chapters/) (as a chapter file
-next to the video — it offers them by itself when the scene has no markers).
+Chapters in those files (medici.tv's, yt-dlp's) are offered by
+[Markers as Chapters](../../plugins/markers-as-chapters/): when the scene has
+no markers yet, saving it after the scrape brings up a note at the bottom
+right asking whether to import them as markers (shown first in a dialog;
+nothing is saved until you create them).

@@ -200,8 +200,9 @@ ones that don't exist are left out (and listed).
 
 ## Chapters offered by themselves
 
-Open a scene that has no markers yet — or give it a URL, e.g. by scraping
-it — and the quick sources are checked by themselves: a chapter file next
+Open a scene that has no markers yet — or save it, e.g. after scraping it
+(also with the Sidecar scraper) — and the quick sources are checked by
+themselves: a chapter file next
 to the video (also a medici.tv JSON, whatever its name, if it's the only
 one in the folder or its name matches the video's), the video's own
 chapters, and ARTE / ORF ON through the scene's URLs. If chapters turn up,
