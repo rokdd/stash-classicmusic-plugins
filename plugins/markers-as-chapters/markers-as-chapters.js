@@ -180,6 +180,7 @@
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
     scrapers.filter((s) => s.fragment && !(s.urls || []).length).forEach((s) => items.push(item(s.name, () => scrape(s, null))));
     scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
+    items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     if (byUrl.length) {
       // A URL a scraper for that very site handles isn't offered to the
       // catch-all ones (a pattern like "http") too.
@@ -413,11 +414,168 @@
     return { rows: out, missing: count - piece };
   }
 
+  // -- copying markers as text ----------------------------------------------------------------
+  //
+  // Markers as text to paste or save elsewhere: a tracklist (YouTube
+  // chapters; the Plain text scraper reads it back), with end times, a
+  // table for a spreadsheet, a CUE sheet, or ffmpeg chapters (ffmpeg can
+  // write those into a video file). items: [{ seconds, end_seconds, title,
+  // tags }], in time order.
+
+  function clock(t, hours) {
+    const s = Math.max(0, Math.round(t));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = String(s % 60).padStart(2, "0");
+    return hours ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+  }
+
+  const EXPORTS = {
+    tracklist: { label: "Tracklist (0:00 Title)", ext: "txt" },
+    ranges: { label: "With end times (0:00 – 5:12 Title)", ext: "txt" },
+    table: { label: "Table, tab-separated (for a spreadsheet)", ext: "tsv" },
+    cue: { label: "CUE sheet", ext: "cue" },
+    ffmeta: { label: "ffmpeg chapters (ffmetadata)", ext: "ffmetadata" },
+  };
+
+  function exportText(format, items, withTags, info) {
+    const hours = items.some((m) => (m.end_seconds || m.seconds) >= 3600);
+    const label = (m) => (withTags && m.tags && m.tags.length ? `${m.tags.join(", ")} – ${m.title}` : m.title) || "";
+    const endOf = (m, i) => (m.end_seconds != null ? m.end_seconds : (items[i + 1] ? items[i + 1].seconds : info.duration || null));
+    if (format === "ranges") {
+      return items.map((m, i) => {
+        const e = endOf(m, i);
+        return `${clock(m.seconds, hours)}${e != null ? ` – ${clock(e, hours)}` : ""} ${label(m)}`;
+      }).join("\n");
+    }
+    if (format === "table") {
+      return ["Start\tEnd\tTitle\tTags", ...items.map((m, i) => {
+        const e = endOf(m, i);
+        return [clock(m.seconds, true), e != null ? clock(e, true) : "", m.title || "", (m.tags || []).join(", ")]
+          .map((c) => String(c).replace(/[\t\n]/g, " ")).join("\t");
+      })].join("\n");
+    }
+    if (format === "cue") {
+      const q = (t) => String(t || "").replace(/"/g, "'");
+      const frames = (t) => {
+        const f = Math.round(Math.max(0, t) * 75);
+        return `${String(Math.floor(f / 4500)).padStart(2, "0")}:${String(Math.floor(f / 75) % 60).padStart(2, "0")}:${String(f % 75).padStart(2, "0")}`;
+      };
+      const lines = [];
+      if (info.title) lines.push(`TITLE "${q(info.title)}"`);
+      lines.push(`FILE "${q(info.file || "video")}" WAVE`);
+      items.forEach((m, i) => {
+        lines.push(`  TRACK ${String(i + 1).padStart(2, "0")} AUDIO`);
+        lines.push(`    TITLE "${q(withTags ? label(m) : m.title)}"`);
+        if (m.tags && m.tags.length) lines.push(`    PERFORMER "${q(m.tags[0])}"`);
+        lines.push(`    INDEX 01 ${frames(m.seconds)}`);
+      });
+      return lines.join("\n");
+    }
+    if (format === "ffmeta") {
+      const esc = (t) => String(t || "").replace(/([=;#\\\n])/g, "\\$1");
+      const lines = [";FFMETADATA1"];
+      if (info.title) lines.push(`title=${esc(info.title)}`);
+      items.forEach((m, i) => {
+        const e = endOf(m, i);
+        lines.push("", "[CHAPTER]", "TIMEBASE=1/1000", `START=${Math.round(m.seconds * 1000)}`,
+          `END=${Math.round((e != null ? e : m.seconds) * 1000)}`, `title=${esc(label(m))}`);
+      });
+      return lines.join("\n");
+    }
+    return items.map((m) => `${clock(m.seconds, hours)} ${label(m)}`).join("\n");
+  }
+
+  // Copy: the clipboard API needs https (Stash usually runs on plain http
+  // in the home network), so the old way is the fallback.
+  async function copyText(text, area) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      // the old way, then
+    }
+    area.focus();
+    area.select();
+    try {
+      return document.execCommand("copy");
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // The panel: format, tags before the title, the text, Copy and Download.
+  function exportPanel(getItems, getInfo) {
+    const format = el("select", { className: "form-control form-control-sm d-inline-block", style: { width: "auto" } },
+      ...Object.entries(EXPORTS).map(([k, v]) => el("option", { value: k, textContent: v.label })));
+    const withTags = el("input", { type: "checkbox", checked: true });
+    const area = el("textarea", { className: "form-control", rows: 10, readOnly: true, spellcheck: false,
+      style: { fontFamily: "monospace", fontSize: "0.85em", whiteSpace: "pre" } });
+    const status = el("span", { className: "small ml-2" });
+    const update = () => { area.value = exportText(format.value, getItems(), withTags.checked, getInfo()); status.textContent = ""; };
+    format.addEventListener("change", update);
+    withTags.addEventListener("change", update);
+    const copy = el("button", { type: "button", className: "btn btn-sm btn-secondary", textContent: "Copy",
+      onclick: async () => {
+        update();
+        const ok = await copyText(area.value, area);
+        status.textContent = ok ? "Copied." : "Couldn't copy — the text is selected: press Ctrl+C / ⌘C.";
+        status.className = `small ml-2 ${ok ? "text-success" : "text-warning"}`;
+      } });
+    const download = el("button", { type: "button", className: "btn btn-sm btn-secondary ml-2", textContent: "Download",
+      onclick: () => {
+        update();
+        const info = getInfo();
+        const base = (info.file || info.title || "markers").replace(/\.[^.]+$/, "") || "markers";
+        const a = el("a", { href: URL.createObjectURL(new Blob([area.value], { type: "text/plain;charset=utf-8" })),
+          download: `${base}.${EXPORTS[format.value].ext}` });
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      } });
+    const panel = el("div", { className: "mac-export mt-3 p-2", style: { border: "1px solid rgba(128,128,128,.4)", borderRadius: "4px" } },
+      el("div", { className: "mb-2 d-flex flex-wrap align-items-center", style: { gap: "1em" } },
+        el("strong", { textContent: "As text" }), format,
+        el("label", { className: "mb-0" }, withTags, " Tags before the title")),
+      area,
+      el("div", { className: "mt-2" }, copy, download, status));
+    panel.refresh = update;
+    update();
+    return panel;
+  }
+
+  // The scene's own markers, as text (from the Scrape markers menu).
+  async function copySceneMarkers() {
+    const dialog = openDialog("Copy markers as text");
+    dialog.body.append(el("p", { textContent: "Loading …" }));
+    try {
+      const [data, media] = await Promise.all([
+        gql("query($id: ID!) { findScene(id: $id) { scene_markers { seconds end_seconds title primary_tag { name } tags { name } } } }",
+          { id: sceneId() }).catch(() =>
+          gql("query($id: ID!) { findScene(id: $id) { scene_markers { seconds title primary_tag { name } tags { name } } } }", { id: sceneId() })),
+        sceneMedia().catch(() => ({})),
+      ]);
+      const items = ((data.findScene || {}).scene_markers || [])
+        .map((m) => ({ seconds: m.seconds, end_seconds: m.end_seconds == null ? null : m.end_seconds,
+          title: m.title || (m.primary_tag || {}).name || "", tags: (m.tags || []).map((t) => t.name) }))
+        .sort((a, b) => a.seconds - b.seconds);
+      if (!items.length) {
+        dialog.body.replaceChildren(el("p", { textContent: "This scene has no markers yet." }));
+        return;
+      }
+      dialog.body.replaceChildren(exportPanel(() => items, () => media));
+    } catch (err) {
+      dialog.body.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+    }
+  }
+
   // -- the scene: length and pictures for the preview -------------------------------------
 
   async function sceneMedia() {
     const data = await gql(
-      "query($id: ID!) { findScene(id: $id) { files { duration } paths { vtt sprite stream } } }",
+      "query($id: ID!) { findScene(id: $id) { title files { duration path } paths { vtt sprite stream } } }",
       { id: sceneId() }
     );
     const scene = data.findScene || {};
@@ -425,6 +583,8 @@
       duration: Math.max(0, ...(scene.files || []).map((f) => f.duration || 0)),
       stream: (scene.paths || {}).stream || null,
       cues: [],
+      title: scene.title || "",
+      file: (((scene.files || [])[0] || {}).path || "").split(/[\\/]/).pop(),
     };
     // Stash's seek bar thumbnails: a VTT file naming, per stretch of time,
     // a part of one big sprite image.
@@ -548,16 +708,20 @@
       if (d == null) return "";
       if (Math.abs(d) <= AT_PAUSE) return el("span", { className: "text-success", title: "Starts where the music starts again", textContent: "✓ at a pause" });
       if (Math.abs(d) <= NEAR_PAUSE) {
+        const amount = `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} s`;
         return el("span", { className: "text-warning", style: { whiteSpace: "nowrap" } },
-          `pause ${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} s `,
-          el("button", { type: "button", className: "btn btn-link btn-sm p-0", textContent: "snap",
-            title: "Move this marker onto the pause", onclick: () => { snap(r, d); render(); } }));
+          `pause ${amount} `,
+          el("button", { type: "button", className: "btn btn-link btn-sm p-0", textContent: `move ${amount}`,
+            title: `Move this marker by ${amount} — start and end — so it starts at the pause`,
+            onclick: () => { snap(r, d); render(); } }));
       }
       return el("span", { className: "text-muted", textContent: "no pause near" });
     };
+    // Move a marker by the amount suggested: start and end, so it keeps
+    // its length.
     const snap = (r, d) => {
       r.seconds += d;
-      if (r.end_seconds != null && r.end_seconds <= r.seconds) r.end_seconds = null;
+      if (r.end_seconds != null) r.end_seconds += d;
     };
     const renderAudioBar = () => {
       if (!checkAudio || !audio) return audioBar.replaceChildren();
@@ -578,7 +742,7 @@
       }
       if (near.length) {
         parts.push(el("button", { type: "button", className: "btn btn-link btn-sm p-0 align-baseline",
-          textContent: `snap ${near.length} marker${near.length === 1 ? "" : "s"} onto the nearest pause`,
+          textContent: `move ${near.length} marker${near.length === 1 ? "" : "s"} by ${near.length === 1 ? "its" : "their"} suggested amount, onto the nearest pause`,
           onclick: () => { near.forEach((r) => snap(r, nearest(points, shifted(r.seconds)))); render(); } }));
       }
       audioBar.replaceChildren(...parts);
@@ -815,6 +979,25 @@
         }
       } });
     dialog.footer.prepend(create);
+    // The markers as they'd be created, as text.
+    let panel = null;
+    const picked = () => rows.filter((r) => r.pick && !r.notMusic)
+      .map((r, i) => {
+        const t = textOf(r);
+        return { seconds: shifted(r.seconds), end_seconds: shifted(endOf(r, rows.indexOf(r))), title: t.title, tags: t.tags };
+      })
+      .sort((a, b) => a.seconds - b.seconds);
+    const asText = el("button", { type: "button", className: "btn btn-secondary mr-auto", textContent: "Copy as text…",
+      onclick: () => {
+        if (!panel) {
+          panel = exportPanel(picked, () => media || {});
+          dialog.body.append(panel);
+        } else {
+          panel.refresh();
+        }
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } });
+    dialog.footer.prepend(asText);
     // The preview lives on the page: gone with the dialog.
     const watch = new MutationObserver(() => {
       if (!tbody.isConnected) { preview.remove(); watch.disconnect(); }

@@ -147,11 +147,13 @@ scraping the same scene again is instant). How quiet counts as a pause
 follows the recording, so the audience's quiet between movements counts.
 
 - The **Audio** column shows per marker: **✓ at a pause**, **pause
-  +4.0 s** (with **snap** to move it there), or **no pause near**.
+  +4.0 s** (with **move +4.0 s**: the whole marker, start and end, moves
+  by that amount, so it starts at the pause and keeps its length), or **no
+  pause near**.
 - Above the table: how many markers start at a pause — and when more
   would with all times shifted (the online video has a longer intro, say),
-  that shift, with **shift** to apply it. **snap … onto the nearest
-  pause** moves every marker that's a little off.
+  that shift, with **shift** to apply it. **move … onto the nearest
+  pause** moves every marker that's a little off, each by its own amount.
 - Applause between works can hide a pause, and quiet passages can look
   like one — it's a hint, nothing changes unless you click.
 
@@ -190,6 +192,27 @@ Upper/lower case and accents (Dvořák / Dvorak) don't matter. A name the
 scraper suggests (ARTE Concert's composers) is replaced by the matching
 tag. The review dialog says how many markers got tags this way; change
 them there as needed.
+
+## Copying markers as text
+
+**Copy as text…** in the review dialog gives the ticked markers as they'd
+be created (with the shift, edited titles and tags; "not music" left out);
+**Copy the scene's markers as text…** in the Scrape markers menu gives the
+markers the scene already has. Formats:
+
+- **Tracklist** — `0:00:02 Symphonie Nr. 5`: YouTube chapters, and the
+  Plain text scraper reads it back;
+- **With end times** — `0:00:02 – 0:30:10 Symphonie Nr. 5`;
+- **Table**, tab-separated (start, end, title, tags) — pastes into a
+  spreadsheet; Plain text reads it back too;
+- **CUE sheet**, named after the video file;
+- **ffmpeg chapters** (ffmetadata) — ffmpeg can write them into a video:
+  `ffmpeg -i in.mp4 -i chapters.ffmetadata -map_metadata 1 -codec copy out.mp4`.
+
+**Tags before the title** puts the tags (the composer) in front again,
+for titles they were taken out of. **Copy** copies it (if the browser
+won't — Stash on plain http — the text is selected for Ctrl+C / ⌘C);
+**Download** saves it as a file.
 
 ## Your own marker scrapers
 
