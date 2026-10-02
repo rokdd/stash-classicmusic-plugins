@@ -6,7 +6,7 @@ and classical music recordings — but useful for any library.
 | Plugin | What it's for |
 |---|---|
 | [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
-| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
+| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers, marker scrapers |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, and scraping that adds tags instead of replacing them |
 
 They're independent of each other — install any of them.
@@ -53,7 +53,8 @@ endpoint and API key you've set up under Settings → Metadata Providers.
 For the **yt-dlp download** tool it also needs **yt-dlp** on the server:
 `sudo apt install yt-dlp`, or `pip install yt-dlp` for the newest version.
 
-Marker Improvements runs only in the browser and needs nothing extra.
+Marker Improvements needs only Python 3 for its marker scrapers — no
+extra modules; the online chapters scraper also uses **yt-dlp** (see above).
 
 ## Features
 
@@ -119,6 +120,11 @@ Details: [Scene Improvements README](plugins/advanced-file-operations/README.md)
   and editing opens right below the marker.
 - **Stays up to date**: bubbles redraw by themselves after a marker is
   saved, added or deleted.
+- **Marker scrapers**: **Scrape markers…** next to Create Marker imports
+  markers like Stash scrapes scenes — built in: chapters in the video file,
+  and chapters online (YouTube, Vimeo … via yt-dlp). Review them in a
+  dialog (pick, rename, tag, shift all times), then create. Add your own
+  scrapers as .yaml files in Stash's scraper format.
 
 Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.md)
 

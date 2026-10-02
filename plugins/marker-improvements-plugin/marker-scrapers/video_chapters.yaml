@@ -1,0 +1,7 @@
+# Chapters stored in the scene's video file (MKV/MP4 chapters), read with ffprobe.
+name: Video file chapters
+markerByFragment:
+  action: script
+  script:
+    - python
+    - video_chapters.py

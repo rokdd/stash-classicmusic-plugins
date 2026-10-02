@@ -202,6 +202,74 @@ affected. Stash itself does the filtering (the plugin adds a filter to the
 tag search the marker form sends), so the list stays complete and sorted;
 if anything goes wrong, all tags are offered as usual.
 
+## Marker scrapers
+
+Stash scrapes scenes, galleries and performers, but not markers. This
+plugin adds marker scrapers that work the same way: a **Scrape markers…**
+button next to **Create Marker** in the Markers tab lists
+
+- every scraper that scrapes the scene itself,
+- one entry per scene URL a URL scraper handles, and **other URL…** to
+  enter one.
+
+The markers found open in a dialog: tick the ones to create, change
+titles, primary tag and tags, and **shift all times** (when the online
+video has a longer or shorter intro than your file). Markers already in
+the scene at that time are flagged and not ticked. **Create markers**
+adds them, and the page updates.
+
+Built in:
+
+- **Video file chapters** — chapters stored in the file (MKV, MP4 …), read
+  with Stash's ffprobe.
+- **Online chapters (yt-dlp)** — the chapters of the video online (YouTube
+  chapters, e.g. a concert's movements), from the scene's URLs or one you
+  enter. Needs yt-dlp on the server (the **Path to yt-dlp** setting, else
+  Scene Improvements' one, else the PATH).
+
+**Primary tag**: every marker needs one. A scraper can name it per marker;
+otherwise the **Primary tag for scraped markers** setting is used (empty:
+`Chapter`), and you can change it in the dialog. A primary tag that
+doesn't exist yet is created. Other tags are matched by name or alias;
+ones that don't exist are left out (and listed).
+
+### Your own marker scrapers
+
+Put them in a folder on the server and enter it as **Marker scrapers
+folder**. A scraper is a `.yaml` file in Stash's scraper format, with
+`markerByFragment` (scrape the scene) and/or `markerByURL` (scrape a URL):
+
+```yaml
+name: My concert site
+markerByFragment:
+  action: script
+  script:
+    - python
+    - my_scraper.py
+markerByURL:
+  - action: script
+    url:
+      - concerts.example.com
+    script:
+      - python
+      - my_scraper.py
+```
+
+The script runs in the scraper's folder. It gets JSON on stdin —
+`{"scene": {id, title, code, details, date, urls, files: [{path,
+duration}], scene_markers: [...]}}`, plus `"url"` when scraping a URL — and
+prints a JSON list of markers:
+
+```json
+[{"seconds": 0, "end_seconds": 512.4, "title": "I. Allegro con brio",
+  "primary_tag": "Movement", "tags": ["Beethoven"]}]
+```
+
+Only `seconds` is required. The environment variables `STASH_FFPROBE` and
+`STASH_YTDLP` name the ffprobe and yt-dlp to use. Only `action: script`
+is supported. Use `.yaml` (not `.yml`) for scrapers inside Stash's plugins
+folder — Stash takes every `.yml` there for a plugin.
+
 ## Staying up to date
 
 Whenever a marker is created, edited or deleted — from the edit form,
@@ -289,8 +357,8 @@ none of its tags have a real custom image.
 
 ## Notes
 
-- This only reads markers/tags — it never creates, edits, or deletes
-  anything in Stash.
+- The bubbles and the marker list only read markers and tags; markers are
+  only created by the marker scrapers, when you click **Create markers**.
 - If a scene has a lot of markers close together, their icons can overlap
   a bit on the seek bar; that's a display-only trade-off, nothing is lost
   or hidden from the underlying data.

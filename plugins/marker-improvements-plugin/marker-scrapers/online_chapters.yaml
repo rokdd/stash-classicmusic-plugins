@@ -1,0 +1,21 @@
+# Chapters of the video online (YouTube, Vimeo, … — whatever yt-dlp knows), read with yt-dlp.
+# From one of the scene's URLs, or a URL you enter.
+name: Online chapters (yt-dlp)
+markerByFragment:
+  action: script
+  script:
+    - python
+    - online_chapters.py
+markerByURL:
+  - action: script
+    url:
+      - youtube.com
+      - youtu.be
+      - vimeo.com
+      - dailymotion.com
+      - arte.tv
+      - medici.tv
+      - "http"
+    script:
+      - python
+      - online_chapters.py
