@@ -174,13 +174,21 @@
     const item = (label, run) =>
       el("button", { type: "button", className: "dropdown-item", textContent: label, onclick: () => { closeMenu(); run(); } });
     const items = [];
-    scrapers.filter((s) => s.fragment).forEach((s) => items.push(item(s.name, () => scrape(s, null))));
-    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
+    // On top: what works on the scene itself (its file) and on text. A
+    // scraper for websites goes below the line only — scraping "the scene"
+    // with it just means scraping the scene's URL, listed there.
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
+    scrapers.filter((s) => s.fragment && !(s.urls || []).length).forEach((s) => items.push(item(s.name, () => scrape(s, null))));
+    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
     if (byUrl.length) {
-      items.push(el("div", { className: "dropdown-divider" }));
+      // A URL a scraper for that very site handles isn't offered to the
+      // catch-all ones (a pattern like "http") too.
+      const generic = (p) => /^https?:?\/*$/i.test(p);
+      const specific = (s, u) => (s.urls || []).some((p) => p && !generic(p) && u.includes(p));
+      const handledSpecifically = (u) => byUrl.some((s) => specific(s, u));
+      if (items.length) items.push(el("div", { className: "dropdown-divider" }));
       byUrl.forEach((s) => {
-        urls.filter((u) => urlMatches(s, u)).forEach((u) => {
+        urls.filter((u) => specific(s, u) || (urlMatches(s, u) && !handledSpecifically(u))).forEach((u) => {
           let host = u;
           try { host = new URL(u).host.replace(/^www\./, ""); } catch (e) { /* keep it whole */ }
           items.push(item(`${s.name} — ${host}`, () => scrape(s, u)));

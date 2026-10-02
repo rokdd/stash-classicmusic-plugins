@@ -23,10 +23,12 @@ Stash scrapes scenes, galleries and performers, but not markers. This
 plugin adds marker scrapers that work the same way: a **Scrape markers…**
 button next to **Create Marker** in the Markers tab lists
 
-- every scraper that scrapes the scene itself,
-- one entry per scene URL a URL scraper handles, and **other URL…** to
-  enter one,
-- every scraper that reads text (**… paste text or pick a file**).
+- on top, the scrapers that work on the scene itself (its file) and the
+  ones that read text (**… paste text or pick a file**);
+- below the line, the scrapers for websites (arte.tv, ORF ON, online
+  chapters): one entry per scene URL each handles, and **other URL…** to
+  enter one. A URL a scraper for that very site handles isn't offered to
+  the catch-all online chapters scraper too.
 
 The markers found open in a dialog: tick the ones to create, change
 titles, primary tag and tags, and **shift all times** (when the online
