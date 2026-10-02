@@ -1,0 +1,15 @@
+# Chapters of an arte.tv video (ARTE Concert: one per work), from arte's player API.
+# From the scene's arte.tv URL, or one you enter.
+name: arte.tv
+markerByFragment:
+  action: script
+  script:
+    - python
+    - arte.py
+markerByURL:
+  - action: script
+    url:
+      - arte.tv
+    script:
+      - python
+      - arte.py

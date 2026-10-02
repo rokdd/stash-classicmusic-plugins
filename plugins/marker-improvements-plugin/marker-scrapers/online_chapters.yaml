@@ -13,7 +13,6 @@ markerByURL:
       - youtu.be
       - vimeo.com
       - dailymotion.com
-      - arte.tv
       - medici.tv
       - "http"
     script:
