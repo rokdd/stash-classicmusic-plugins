@@ -587,8 +587,22 @@
   // layout (when Stash doesn't set it as a percentage) can shift slightly
   // just because something else on the page resized — e.g. a dropdown
   // opening — which would look like the markers moved.
+  // Where every range starts and how wide it is: a marker given a new end
+  // only changes its width.
   function rangeSignature() {
-    return findMarkerRangeElements(document).map((t) => tickLeftPct(t).toFixed(1)).sort().join(",");
+    return findMarkerRangeElements(document)
+      .map((t) => `${tickLeftPct(t).toFixed(1)}+${tickWidthPct(t).toFixed(1)}`).sort().join(",");
+  }
+
+  function tickWidthPct(tick) {
+    const inline = tick.style.width;
+    if (inline && inline.endsWith("%")) {
+      const v = parseFloat(inline);
+      if (!Number.isNaN(v)) return v;
+    }
+    const parent = tick.offsetParent;
+    const parentWidth = parent ? parent.getBoundingClientRect().width : 0;
+    return parentWidth ? (tick.getBoundingClientRect().width / parentWidth) * 100 : 0;
   }
 
   function findMarkerRangeElements(root) {
@@ -1630,6 +1644,25 @@
   // the way down). Other buttons in the form — like setting the current
   // time — leave it where it is.
   const CLOSING_WORDS = /^(cancel|delete|close|abbrechen|löschen|schließen)$/i;
+
+  // Saving or deleting in Stash's marker form — wherever it is — reloads the
+  // list and bubbles a moment later. Usually the request itself is seen
+  // (see the fetch wrapper below), but Stash's data layer may keep its own
+  // reference to fetch from before this plugin loaded; this doesn't rely on
+  // that. Twice, for slow servers.
+  function reloadAfterSave(e) {
+    const panel = findMarkersPanel();
+    const form = e.target.closest ? e.target.closest("form") : null;
+    if (!form || !((panel && panel.contains(form)) || (movedForm && movedForm.form === form) || form.closest(".marker-symbols-accordion"))) return;
+    if (e.type === "click") {
+      const button = e.target.closest("button");
+      if (!button || !(button.type === "submit" || button.classList.contains("btn-primary") || button.classList.contains("btn-danger"))) return;
+    }
+    setTimeout(() => scheduleMarkerReload(), 900);
+    setTimeout(() => scheduleMarkerReload(), 2500);
+  }
+  document.addEventListener("click", reloadAfterSave, true);
+  document.addEventListener("submit", reloadAfterSave, true);
   function restoreBeforeStash(e) {
     if (!movedForm || !movedForm.form.contains(e.target)) return;
     if (e.type === "submit") {
