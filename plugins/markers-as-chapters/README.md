@@ -48,7 +48,12 @@ adds them, and the page updates. Also in the dialog:
 - **Take the tags' names out of the titles** (on by default): a marker
   that got a tag — a composer — loses that name in its title: "Johann
   Strauss Sohn – Im Krapfenwaldl" → "Im Krapfenwaldl". First names,
-  initials, van / von, Sohn / Vater / II and other spellings count.
+  initials, van / von, Sohn / Vater / II and other spellings count. What
+  the name leaves behind goes too — the separators around it, brackets it
+  was in ("Im Krapfenwaldl (Johann Strauss)"), a "by" / "von" before it.
+  Every title is tidied anyway: separators side by side become one, ones
+  at the start or end go, unusual and double spaces become one space, and
+  there's no space before a comma.
 - **not music** per row — applause, a speech, an interview: no marker for
   it. When the titles were placed at the pauses (titles without times),
   all titles after it **move on** to the next pieces and the times are

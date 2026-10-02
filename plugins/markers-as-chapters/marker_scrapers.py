@@ -261,7 +261,7 @@ def normalise(markers):
         out.append({
             "seconds": round(float(m["seconds"]), 3),
             "end_seconds": round(float(m["end_seconds"]), 3) if m.get("end_seconds") is not None else None,
-            "title": fix_text(str(m.get("title") or "")),
+            "title": tidy(fix_text(str(m.get("title") or ""))),
             "primary_tag": fix_text(str(m.get("primary_tag") or "")),
             "tags": [fix_text(str(t)) for t in (tags if isinstance(tags, list) else [tags]) if t],
         })
@@ -422,9 +422,34 @@ class TagMatcher:
 # taken out, then the separators left at the ends. A title that would be
 # empty is kept as it was. The review dialog has a switch for it.
 
+# -- tidy titles ----------------------------------------------------------------
+#
+# Every title — and every title with names taken out — is tidied: unusual
+# spaces become normal ones, brackets left empty go, separators side by side
+# become one, separators at the ends go, and no space stays before , ; or .
+
+SEPARATORS = "-–—‒―−:;,/|·•~_»«"
+_SPACES = re.compile("[\u00a0\u2007\u2009\u202f\u2002\u2003\t]")
+_EMPTY_BRACKETS = re.compile(r"[(\[{]\s*[-–—:;,/|·•~_]*\s*[)\]}]")
+_SEP_RUN = re.compile(r"\s*([%s])(?:\s*[%s])+\s*" % (re.escape(SEPARATORS), re.escape(SEPARATORS)))
+
+
+def tidy(title):
+    if not title:
+        return title
+    out = _SPACES.sub(" ", title)
+    out = _EMPTY_BRACKETS.sub(" ", out)
+    out = re.sub(r"\s+\.(?=\s|$)", " ", out)  # a full stop on its own
+    out = _SEP_RUN.sub(lambda m: f" {m.group(1)} " if m.group(1) not in ",;:" else f"{m.group(1)} ", out)
+    out = re.sub(r"\s+([,;.])", r"\1", out)
+    out = re.sub(r"\s+", " ", out)
+    out = out.strip(" " + SEPARATORS).strip()
+    return out or title.strip()
+
+
 PARTICLES = {"van", "von", "de", "der", "den", "di", "da", "du", "le", "la", "y", "del", "dos", "das", "zu"}
 SUFFIXES = {"sohn", "vater", "ii", "iii", "iv", "jr", "sr", "jun", "sen", "junior", "senior", "the", "younger", "elder", "d", "j", "a", "ä"}
-EDGE_SEPARATORS = " \t-–—:;,/|·•"
+EDGE_SEPARATORS = " \t" + SEPARATORS
 TRAILING_LINKS = re.compile(r"\s+(by|von|de|di|of|from|nach)\s*$", re.I)
 
 
@@ -444,7 +469,8 @@ def strip_names(title, tag_names):
         strong = {w for w in words if len(w) >= 4 and w not in PARTICLES and w not in SUFFIXES}
 
         def belongs(w):
-            return w in words or any(_similar(w, x) for x in words if len(x) >= 6) or w in PARTICLES or w in SUFFIXES or len(w) == 1
+            return (w in words or any(_similar(w, x) for x in words if len(x) >= 6) or w in PARTICLES
+                    or w in SUFFIXES or (len(w) == 1 and w.isalpha()))
 
         def is_strong(w):
             return w in strong or any(_similar(w, x) for x in strong if len(x) >= 6)
@@ -461,7 +487,7 @@ def strip_names(title, tag_names):
                 j += 1
             # Initials and particles only before a name: a run doesn't end
             # with one ("Beethoven I. Allegro" keeps its "I.").
-            while j > i and (len(tokens[j][2]) == 1 or tokens[j][2] in PARTICLES):
+            while j > i and ((len(tokens[j][2]) == 1 and tokens[j][2].isalpha()) or tokens[j][2] in PARTICLES):
                 j -= 1
             if any(is_strong(t[2]) for t in tokens[i:j + 1]):
                 end = tokens[j][1]
@@ -470,14 +496,13 @@ def strip_names(title, tag_names):
                 spans.append((tokens[i][0], end))
             i = j + 1
     if not spans:
-        return title
+        return tidy(title)
     out = title
     for a, b in sorted(spans, reverse=True):
         out = out[:a] + " " + out[b:]
-    out = re.sub(r"\s+", " ", out)
-    out = re.sub(r"\s*([-–—:;,/|])\s*(?=[-–—:;,/|])", " ", out)  # separators left side by side
-    out = TRAILING_LINKS.sub("", out.strip(EDGE_SEPARATORS)).strip(EDGE_SEPARATORS).strip()
-    return out or title
+    out = TRAILING_LINKS.sub("", tidy(out))
+    out = tidy(out)
+    return out or tidy(title)
 
 
 def suggest_tags(gql, markers, settings):
