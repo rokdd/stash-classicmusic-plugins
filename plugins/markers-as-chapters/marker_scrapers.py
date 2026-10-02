@@ -50,6 +50,8 @@ scrapers folder" setting. Runs through Stash's runPluginOperation:
   - marker_scrapers_list: every scraper with what it can do
   - marker_scrape:        args "scraper" (its id), "scene_id", optional
                           "url" or "text" — the markers it found
+  - marker_pauses:        args "scene_id" — the pauses in the scene's
+                          audio, for the review dialog's check
 Standard library only.
 """
 
@@ -478,6 +480,14 @@ def main():
             output = list_scrapers(settings)
         elif mode == "marker_scrape":
             output = scrape(gql, args, settings, env_extra)
+        elif mode == "marker_pauses":
+            os.environ.update(env_extra)
+            sys.path.insert(0, BUILT_IN_DIR)
+            import pauses
+            try:
+                output = pauses.check(scene_for_scraper(gql, args.get("scene_id")) or {})
+            except SystemExit as exc:  # pauses' "can't" messages
+                raise RuntimeError(str(exc)) from None
         else:
             raise ValueError(f"Unknown mode: {mode}")
         print(json.dumps({"output": output}))

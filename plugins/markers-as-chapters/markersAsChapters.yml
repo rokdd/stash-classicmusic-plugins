@@ -1,6 +1,6 @@
 name: Markers as Chapters
-description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert), a pasted tracklist or text file, or the pauses between movements in the audio — named from a pasted programme. Review them in a dialog, then create. Add your own marker scrapers as .yaml files."
-version: 0.0.2
+description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
+version: 0.0.3
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -16,7 +16,7 @@ settings:
     type: STRING
   markerScrapersPath:
     displayName: Marker scrapers folder
-    description: "Optional: a folder on the server with marker scrapers of your own — .yaml files like Stash's scrapers, with markerByFragment, markerByURL and/or markerByText (action: script). See the plugin's README. The built-in ones (video file chapters, chapter files, online chapters, arte.tv, plain text, pauses) are always there."
+    description: "Optional: a folder on the server with marker scrapers of your own — .yaml files like Stash's scrapers, with markerByFragment, markerByURL and/or markerByText (action: script). See the plugin's README. The built-in ones (video file chapters, chapter files, online chapters, arte.tv, plain text) are always there."
     type: STRING
   ytdlpPath:
     displayName: Path to yt-dlp
@@ -26,3 +26,7 @@ settings:
     displayName: Fill in tags under
     description: "Tags below these parent tags (comma-separated) are filled in when a marker's title names them — the whole name, an alias, or just the surname (Beethoven: Symphony No. 5 → Ludwig van Beethoven). Made for the composer tags Tag Improvements keeps. Empty: Composers. A single - switches it off."
     type: STRING
+  skipPauseCheck:
+    displayName: Skip the check against the audio
+    description: "Off (the default): the review dialog checks the markers against the pauses in the scene's audio — shows which start at a pause, suggests a shift, and can snap them onto the pauses. On: no check (e.g. on a slow server)."
+    type: BOOLEAN

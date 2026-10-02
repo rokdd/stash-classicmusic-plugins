@@ -263,7 +263,7 @@
       dialog.body.replaceChildren(el("p", { textContent: result.notes || "No markers found." }));
       return;
     }
-    review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY);
+    review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY, settings.skipPauseCheck !== true);
   }
 
   function openDialog(title) {
@@ -285,7 +285,52 @@
     return { body, footer, close };
   }
 
-  function review(dialog, result, defaultPrimary) {
+  // -- the check against the audio ------------------------------------------------------
+  //
+  // The pauses in the scene's audio (see pauses.py) are where pieces and
+  // movements usually start. Every marker is compared with them: does it
+  // start where the music starts again? If most would with all times
+  // shifted, that shift is suggested; markers a little off can be snapped
+  // onto their pause.
+
+  const AT_PAUSE = 3; // seconds: counts as starting at the pause
+  const NEAR_PAUSE = 20; // seconds: close enough to snap
+  const MAX_SHIFT = 900; // seconds: largest shift suggested
+
+  // Where the music starts: at its very beginning, and after every pause.
+  function resumePoints(audio) {
+    return [audio.music_start, ...audio.pauses.map((p) => p[1])];
+  }
+
+  function nearest(points, t) {
+    let best = null;
+    points.forEach((p) => { if (best == null || Math.abs(p - t) < Math.abs(best - t)) best = p; });
+    return best == null ? null : best - t; // + = the pause is later
+  }
+
+  // The shift that lets the most markers start at a pause (ties: the one
+  // that fits them most closely), and how many fit then.
+  function bestShift(points, starts) {
+    const fit = (shift) => {
+      let count = 0;
+      let spread = 0;
+      starts.forEach((s) => {
+        const d = Math.abs(nearest(points, s + shift));
+        if (d <= AT_PAUSE) { count++; spread += d; }
+      });
+      return { shift, count, spread };
+    };
+    let best = fit(0);
+    starts.forEach((s) => points.forEach((p) => {
+      const shift = Math.round((p - s) * 10) / 10;
+      if (Math.abs(shift) > MAX_SHIFT) return;
+      const f = fit(shift);
+      if (f.count > best.count || (f.count === best.count && f.spread < best.spread - 0.5)) best = f;
+    }));
+    return best;
+  }
+
+  function review(dialog, result, defaultPrimary, checkAudio) {
     const existing = result.existing || [];
     const exists = (m) => existing.some((e) => Math.abs(e.seconds - m.seconds) < 1);
     const rows = result.markers.map((m) => ({ ...m, pick: !exists(m), exists: exists(m) }));
@@ -295,7 +340,55 @@
     const tbody = el("tbody");
     const shifted = (s) => (s == null ? null : Math.max(0, s + (parseFloat(offset.value) || 0)));
 
+    // null: not checked (yet); { error }; or the pauses (see pauses.check)
+    let audio = checkAudio ? { loading: true } : null;
+    const audioBar = el("div", { className: "small mb-2" });
+
+    const audioCell = (r) => {
+      if (!audio || audio.loading || audio.error) return audio && audio.loading ? "…" : "";
+      const d = nearest(resumePoints(audio), shifted(r.seconds));
+      if (d == null) return "";
+      if (Math.abs(d) <= AT_PAUSE) return el("span", { className: "text-success", title: "Starts where the music starts again", textContent: "✓ at a pause" });
+      if (Math.abs(d) <= NEAR_PAUSE) {
+        return el("span", { className: "text-warning", style: { whiteSpace: "nowrap" } },
+          `pause ${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} s `,
+          el("button", { type: "button", className: "btn btn-link btn-sm p-0", textContent: "snap",
+            title: "Move this marker onto the pause", onclick: () => { snap(r, d); render(); } }));
+      }
+      return el("span", { className: "text-muted", textContent: "no pause near" });
+    };
+
+    const snap = (r, d) => {
+      r.seconds += d;
+      if (r.end_seconds != null && r.end_seconds <= r.seconds) r.end_seconds = null;
+    };
+
+    const renderAudioBar = () => {
+      if (!audio) return audioBar.replaceChildren();
+      if (audio.loading) return audioBar.replaceChildren(el("span", { className: "text-muted", textContent: "Checking the pauses in the audio…" }));
+      if (audio.error) return audioBar.replaceChildren(el("span", { className: "text-muted", textContent: `Couldn't check the audio: ${audio.error}` }));
+      const points = resumePoints(audio);
+      const at = rows.filter((r) => Math.abs(nearest(points, shifted(r.seconds))) <= AT_PAUSE).length;
+      const near = rows.filter((r) => { const d = Math.abs(nearest(points, shifted(r.seconds))); return d > AT_PAUSE && d <= NEAR_PAUSE; });
+      const parts = [el("span", { textContent:
+        `${at} of ${rows.length} marker${rows.length === 1 ? "" : "s"} start at a pause in the audio (${audio.pauses.length} pause${audio.pauses.length === 1 ? "" : "s"} found). ` })];
+      const current = parseFloat(offset.value) || 0;
+      const best = bestShift(points, rows.map((r) => r.seconds));
+      if (best.count > at && Math.abs(best.shift - current) >= 0.5) {
+        parts.push(el("span", { textContent: `${best.count} fit with all times shifted by ${best.shift > 0 ? "+" : ""}${best.shift.toFixed(1)} s — ` }),
+          el("button", { type: "button", className: "btn btn-link btn-sm p-0 align-baseline", textContent: "shift",
+            onclick: () => { offset.value = best.shift.toFixed(1); render(); } }), " ");
+      }
+      if (near.length) {
+        parts.push(el("button", { type: "button", className: "btn btn-link btn-sm p-0 align-baseline",
+          textContent: `snap ${near.length} marker${near.length === 1 ? "" : "s"} onto the nearest pause`,
+          onclick: () => { near.forEach((r) => snap(r, nearest(points, shifted(r.seconds)))); render(); } }));
+      }
+      audioBar.replaceChildren(...parts);
+    };
+
     const render = () => {
+      renderAudioBar();
       tbody.replaceChildren(...rows.map((r) => {
         const check = el("input", { type: "checkbox", checked: r.pick, onchange: (e) => { r.pick = e.target.checked; } });
         const title = el("input", { type: "text", value: r.title, className: "form-control form-control-sm", oninput: (e) => { r.title = e.target.value; } });
@@ -309,7 +402,8 @@
             r.exists ? el("div", { className: "small text-warning", textContent: "already a marker here" }) : null),
           el("td", {}, title),
           el("td", {}, primary),
-          el("td", {}, tags));
+          el("td", {}, tags),
+          checkAudio ? el("td", { className: "small" }, audioCell(r)) : null);
       }));
     };
     offset.addEventListener("input", render);
@@ -323,13 +417,21 @@
       el("div", { className: "mb-2 d-flex flex-wrap align-items-center", style: { gap: "1em" } },
         el("label", { className: "mb-0" }, "Shift all times by ", offset, " s"),
         el("label", { className: "mb-0" }, "Primary tag (where none is given) ", primaryAll)),
+      audioBar,
       el("table", { className: "table table-sm" },
         el("thead", {}, el("tr", {},
-          el("th", {}, toggleAll), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Primary tag"), el("th", {}, "Tags"))),
+          el("th", {}, toggleAll), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Primary tag"), el("th", {}, "Tags"),
+          checkAudio ? el("th", {}, "Audio") : null)),
         tbody),
       el("p", { className: "small text-muted", textContent:
         "Tags are matched by name or alias. A primary tag that doesn't exist yet is created; other tags that don't exist are left out." }));
     render();
+    if (checkAudio) {
+      runOperation({ mode: "marker_pauses", scene_id: sceneId() })
+        .then((data) => { audio = data; })
+        .catch((err) => { audio = { error: String(err.message || err) }; })
+        .then(render);
+    }
 
     const create = el("button", { type: "button", className: "btn btn-primary", textContent: "Create markers",
       onclick: async () => {

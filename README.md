@@ -7,7 +7,7 @@ and classical music recordings — but useful for any library.
 |---|---|
 | [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
-| [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers: from the video file or a file next to it, YouTube, ARTE Concert, a pasted tracklist, or the pauses between movements |
+| [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers: from the video file or a file next to it, YouTube, ARTE Concert, a pasted tracklist or programme — checked against the pauses in the audio |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, scraping that adds tags instead of replacing them, and composer tags kept in step with performers |
 
 They're independent of each other — install any of them.
@@ -134,9 +134,11 @@ Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.
   it (CUE, OGM, Matroska XML, ffmetadata, yt-dlp info, tracklist); chapters
   online (YouTube, ZDF … via yt-dlp); arte.tv / ARTE Concert (one marker
   per work); plain text — paste a tracklist or pick a text/CUE file.
-- **Pauses between movements**: finds the pauses in the audio and puts a
-  marker where the music starts again — named from a pasted programme
-  (titles only, in order: ARD, BBC … list the pieces but no times).
+- **Checked against the audio**: the review dialog shows which markers
+  start at a pause in the audio, suggests a shift when most would fit
+  better, and snaps markers onto the pauses.
+- **A programme without times** (ARD, BBC … list the pieces but no times):
+  paste the titles, and they're placed at the pauses between movements.
 - **Composers filled in**: tags under **Composers** are found in the
   titles — by name, alias or just the surname.
 - **Review dialog**: pick, rename, tag, shift all times, then create.

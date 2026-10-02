@@ -12,7 +12,8 @@ One folder per plugin; each is independent of the others.
   Browser only, nothing to install.
 - **[`markers-as-chapters/`](markers-as-chapters/)** — imports chapters as
   markers: from the video file or a file next to it, online (yt-dlp, ARTE
-  Concert), a pasted tracklist, or the pauses between movements. Python 3
+  Concert), a pasted tracklist or programme, checked against the pauses in
+  the audio. Python 3
   (no extra modules); yt-dlp for online chapters.
 - **[`tag-improvements/`](tag-improvements/)** — a tag tree on the Tags
   page, tag descriptions from StashDB, and scraping that adds tags instead

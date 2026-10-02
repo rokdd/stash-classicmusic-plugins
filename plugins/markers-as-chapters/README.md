@@ -2,7 +2,8 @@
 
 Imports a scene's chapters as markers — from the video file, a file next
 to it, YouTube, ARTE Concert, a pasted tracklist or programme, or the
-pauses between movements in the audio. Made for concert recordings: one
+pauses between movements in the audio, and checks every import against
+those pauses. Made for concert recordings: one
 marker per work or movement.
 
 ## Install
@@ -48,9 +49,9 @@ Built in:
   Titles come in the URL's language (/de/, /fr/ …). Composer and
   orchestra named in a title ("Orchestra : Composer - Work", "Composer,
   Work") are suggested as tags — used when you have a tag of that name or
-  alias. Some videos have no chapters at arte; then nothing is found (the
-  **Pauses between movements** with the program from the description
-  helps). Each chapter ends where the next starts, the last at the end of
+  alias. Some videos have no chapters at arte; then nothing is found
+  (paste the programme from the description into **Plain text** — titles
+  only are placed at the pauses). Each chapter ends where the next starts, the last at the end of
   the video. Needs nothing extra (reads arte's player API).
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every
@@ -59,9 +60,13 @@ Built in:
   `[12:34]`, `(5:10)`, `3m20s`; a range like `1:23 - 4:56` gives the end
   too, otherwise a marker ends where the next starts (the last at the end
   of the video). A **CUE sheet** works too: one marker per track, its
-  PERFORMER as a tag. **Titles only** — no line has a time: the lines are
-  taken as the pieces in order and placed at the pauses in the audio, as
-  **Pauses between movements** does; the dialog then says how many pauses
+  PERFORMER as a tag.
+
+  **Titles only** — no line has a time: the lines are taken as the pieces
+  in order, e.g. the programme from ARD, BBC or the concert hall's site,
+  which list the pieces but no times. The video is split at the longest
+  pauses in its audio into exactly that many pieces, named in order (with
+  too few pauses, shorter ones count too); the dialog says how many pauses
   were found, and which titles got no marker if there were too few.
 - **Chapter file next to the video** — a file with the video's name next
   to it on the server: `Concert.cue`, `Concert.chapters.txt` (OGM
@@ -69,22 +74,27 @@ Built in:
   from mkvextract), `Concert.ffmetadata`, `Concert.info.json` (yt-dlp) or
   `Concert.txt` (a tracklist) — also with the video's extension in the
   name (`Concert.mp4.cue`).
-- **Pauses between movements** — finds the pauses in the scene's own
-  audio (ffmpeg, a few seconds to a minute for a concert) and puts a
-  marker where the music starts again, ending where the next pause
-  begins. How quiet counts as a pause follows the recording, so the
-  audience's quiet between movements counts. Two ways:
-  - **Pauses between movements**: every pause gives a marker ("Part 1",
-    "Part 2" …).
-  - **Pauses between movements — paste text or pick a file…**: paste the
-    titles of the movements or works in order, one per line — e.g. the
-    programme from ARD, BBC or the concert hall's site, which list the
-    pieces but no times. It looks for exactly that many pieces (the
-    longest pauses split them; if there are too few pauses, shorter ones
-    count too) and names them. Times at the start of a line are ignored.
 
-  Applause between works can hide a pause; check the result in the
-  dialog and shift or untick markers there.
+### Checked against the audio
+
+Whatever the scraper, the review dialog also checks the markers against
+the **pauses in the scene's own audio** — where pieces and movements
+usually start. The pauses are found with ffmpeg (a few seconds to a
+minute for a concert, the first time; it's remembered per file, so
+scraping the same scene again is instant). How quiet counts as a pause
+follows the recording, so the audience's quiet between movements counts.
+
+- The **Audio** column shows per marker: **✓ at a pause**, **pause
+  +4.0 s** (with **snap** to move it there), or **no pause near**.
+- Above the table: how many markers start at a pause — and when more
+  would with all times shifted (the online video has a longer intro, say),
+  that shift, with **shift** to apply it. **snap … onto the nearest
+  pause** moves every marker that's a little off.
+- Applause between works can hide a pause, and quiet passages can look
+  like one — it's a hint, nothing changes unless you click.
+
+The **Skip the check against the audio** setting switches it off (e.g. on
+a slow server).
 
 **Primary tag**: every marker needs one. A scraper can name it per marker;
 otherwise the **Primary tag for scraped markers** setting is used (empty:
@@ -162,6 +172,8 @@ folder — Stash takes every `.yml` there for a plugin.
 - **Marker scrapers folder** — a folder with your own scrapers (above).
 - **Path to yt-dlp** — for the online chapters; empty: Scene
   Improvements' setting, else yt-dlp on the PATH.
+- **Skip the check against the audio** — no pause check in the review
+  dialog.
 - **Fill in tags under** — parent tags whose tags are filled in from the
   titles (above); empty: `Composers`, `-` switches it off.
 
