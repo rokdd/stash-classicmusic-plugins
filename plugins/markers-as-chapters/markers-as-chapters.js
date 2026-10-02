@@ -1489,8 +1489,8 @@
   // video, the video's own chapters, ARTE / ORF ON through its URLs) when its
   // page opens and when its URLs change (e.g. after scraping it). If some are
   // found, a note at the bottom right offers to import them: the usual review
-  // dialog. "Not now" doesn't ask again for that scene (in this browser);
-  // the "Don't offer chapters found" setting switches it off.
+  // dialog (nothing is saved until "Create markers" there). "Not now"
+  // doesn't ask again for that scene (in this browser).
 
   const OFFER_ID = "mac-chapter-offer";
   const DISMISSED_KEY = "markersAsChapters.offerDismissed";
@@ -1520,7 +1520,8 @@
       style: { position: "fixed", right: "16px", bottom: "16px", zIndex: 1500, maxWidth: "380px",
         boxShadow: "0 6px 24px rgba(0,0,0,.5)" } },
       el("strong", { textContent: "Chapters found for this scene" }),
-      el("div", { className: "small text-muted mb-2", textContent: "It has no markers yet. Import them as markers?" }),
+      el("div", { className: "small text-muted mb-2", textContent:
+        "It has no markers yet. Import them as markers? You'll see them first — nothing is saved until you create them." }),
       ...found.map((f) => el("div", { className: "d-flex align-items-center mb-1", style: { gap: "8px" } },
         el("span", { className: "small", style: { flex: "1 1 auto" }, textContent: `${f.name} — ${f.count} chapters` }),
         el("button", { type: "button", className: "btn btn-primary btn-sm", textContent: "Import…",
@@ -1531,16 +1532,10 @@
     document.body.appendChild(box);
   }
 
-  let offerSettings = null;
   async function checkForChapters() {
     const id = sceneId();
     if (!id) { removeOffer(); return; }
     if (dismissed().has(String(id))) return;
-    if (!offerSettings) {
-      offerSettings = gql("query { configuration { plugins } }")
-        .then((c) => (c.configuration.plugins || {})[PLUGIN_ID] || {}).catch(() => ({}));
-    }
-    if ((await offerSettings).noChapterOffer === true) return;
     let scene;
     try {
       scene = (await gql("query($id: ID!) { findScene(id: $id) { urls scene_markers { id } } }", { id })).findScene;

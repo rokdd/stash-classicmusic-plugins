@@ -205,9 +205,10 @@ it — and the quick sources are checked by themselves: a chapter file next
 to the video (also a medici.tv JSON, whatever its name, if it's the only
 one in the folder or its name matches the video's), the video's own
 chapters, and ARTE / ORF ON through the scene's URLs. If chapters turn up,
-a note at the bottom right says where and how many — **Import…** opens the
-review dialog for them; **Not now** doesn't ask again for that scene (in
-this browser). The setting **Don't offer chapters found** switches it off.
+a note at the bottom right says where and how many and asks whether to
+import them — **Import…** opens the review dialog (nothing is saved until
+**Create markers**; **Close** drops it all); **Not now** doesn't ask again
+for that scene (in this browser).
 
 ## What you can paste
 
