@@ -1,0 +1,24 @@
+name: Markers as Chapters
+description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert), a pasted tracklist or text file, or the pauses between movements in the audio — named from a pasted programme. Review them in a dialog, then create. Add your own marker scrapers as .yaml files."
+version: 0.0.1
+url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
+exec:
+  - python
+  - "{pluginDir}/marker_scrapers.py"
+interface: raw
+ui:
+  javascript:
+    - markers-as-chapters.js
+settings:
+  scrapedMarkerTag:
+    displayName: Primary tag for scraped markers
+    description: "Every marker needs a primary tag. Imported markers get this one when the scraper doesn't name one (you can change it in the scrape dialog). Created if it doesn't exist yet. Empty: Chapter."
+    type: STRING
+  markerScrapersPath:
+    displayName: Marker scrapers folder
+    description: "Optional: a folder on the server with marker scrapers of your own — .yaml files like Stash's scrapers, with markerByFragment, markerByURL and/or markerByText (action: script). See the plugin's README. The built-in ones (video file chapters, chapter files, online chapters, arte.tv, plain text, pauses) are always there."
+    type: STRING
+  ytdlpPath:
+    displayName: Path to yt-dlp
+    description: "For the online chapters scraper. Leave empty to use Scene Improvements' setting if it has one, else yt-dlp on the server's PATH."
+    type: STRING

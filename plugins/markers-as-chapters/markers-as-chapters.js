@@ -1,4 +1,4 @@
-// Marker Improvements — marker scrapers
+// Markers as Chapters — marker scrapers
 //
 // Stash scrapes scenes, galleries, performers … but not markers. This
 // adds marker scrapers that work like Stash's own (see marker_scrapers.py):
@@ -20,7 +20,9 @@
 (function () {
   "use strict";
 
-  const PLUGIN_ID = "markerImprovements";
+  const PLUGIN_ID = "markersAsChapters";
+  // Its settings used to be Marker Improvements' — still read from there.
+  const OLD_PLUGIN_ID = "markerImprovements";
   const BUTTON_ID = "marker-scrapers-button";
   const MENU_ID = "marker-scrapers-menu";
   const DIALOG_ID = "marker-scrapers-dialog";
@@ -251,7 +253,8 @@
         gql("query { configuration { plugins } }").catch(() => null),
       ]);
       result = res;
-      settings = (conf && (conf.configuration.plugins || {})[PLUGIN_ID]) || {};
+      const plugins = (conf && conf.configuration.plugins) || {};
+      settings = { ...(plugins[OLD_PLUGIN_ID] || {}), ...(plugins[PLUGIN_ID] || {}) };
     } catch (err) {
       dialog.body.replaceChildren(el("div", { className: "alert alert-danger", style: { whiteSpace: "pre-wrap" }, textContent: String(err.message || err) }));
       return;
@@ -419,7 +422,7 @@
         return;
       }
     } catch (err) {
-      console.warn("[Marker Improvements] Couldn't refresh Stash's data; reloading the page:", err);
+      console.warn("[Markers as Chapters] Couldn't refresh Stash's data; reloading the page:", err);
     }
     window.location.reload();
   }

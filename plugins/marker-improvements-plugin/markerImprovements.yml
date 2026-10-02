@@ -1,15 +1,10 @@
 name: Marker Improvements
-description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video's seek bar, so it shows and hides right along with that indicator. Click an icon to jump to that marker. Also marker scrapers: import markers (chapters in or next to the video file, from YouTube or arte.tv, a pasted tracklist, or the pauses between movements) like Stash scrapes scenes."
-version: 0.0.36
+description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video's seek bar, so it shows and hides right along with that indicator. Click an icon to jump to that marker."
+version: 0.0.37
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
-exec:
-  - python
-  - "{pluginDir}/marker_scrapers.py"
-interface: raw
 ui:
   javascript:
     - marker-symbols.js
-    - marker-scrapers.js
 settings:
   tagStyles:
     displayName: Custom styles per tag
@@ -39,15 +34,3 @@ settings:
     displayName: Click on a marker opens the edit marker dialog
     description: "Clicking a marker's icon, or its colored range on the seek bar, jumps to it and opens Stash's edit marker dialog. Switch off to only jump to the marker."
     type: BOOLEAN
-  scrapedMarkerTag:
-    displayName: Primary tag for scraped markers
-    description: "Every marker needs a primary tag. Markers from a marker scraper get this one when the scraper doesn't name one (you can change it in the scrape dialog). Created if it doesn't exist yet. Empty: Chapter."
-    type: STRING
-  markerScrapersPath:
-    displayName: Marker scrapers folder
-    description: "Optional: a folder on the server with marker scrapers of your own — .yaml files like Stash's scrapers, with markerByFragment, markerByURL and/or markerByText (action: script). See the plugin's README. The built-in ones (video file chapters, chapter files, online chapters, arte.tv, plain text, pauses) are always there."
-    type: STRING
-  ytdlpPath:
-    displayName: Path to yt-dlp
-    description: "For the online chapters scraper. Leave empty to use Scene Improvements' setting if it has one, else yt-dlp on the server's PATH."
-    type: STRING

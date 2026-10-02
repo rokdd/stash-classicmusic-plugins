@@ -8,9 +8,12 @@ One folder per plugin; each is independent of the others.
   ffmpeg on the server, so it needs ffmpeg with libx265 and Python 3 with
   `requests` there.
 - **[`marker-improvements-plugin/`](marker-improvements-plugin/)** — tag
-  images on the video's seek bar, click-to-edit markers, per-tag styles,
-  marker scrapers (chapters from the file or online, or from plain text).
-  Python 3 for the scrapers (no extra modules).
+  images on the video's seek bar, click-to-edit markers, per-tag styles.
+  Browser only, nothing to install.
+- **[`markers-as-chapters/`](markers-as-chapters/)** — imports chapters as
+  markers: from the video file or a file next to it, online (yt-dlp, ARTE
+  Concert), a pasted tracklist, or the pauses between movements. Python 3
+  (no extra modules); yt-dlp for online chapters.
 - **[`tag-improvements/`](tag-improvements/)** — a tag tree on the Tags
   page, tag descriptions from StashDB, and scraping that adds tags instead
   of replacing them. Needs Python 3 on the server (for StashDB), no extra

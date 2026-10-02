@@ -164,7 +164,7 @@ fills each one in:
 | Cover | its thumbnail |
 
 The video's chapters (YouTube, ZDF …), if it has any, are saved in the
-file, so Marker Improvements' **Video file chapters** scraper can turn
+file, so Markers as Chapters' **Video file chapters** scraper can turn
 them into markers.
 
 Until it has run, the new scenes show up with just their file name. The

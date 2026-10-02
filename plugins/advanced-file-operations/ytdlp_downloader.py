@@ -237,7 +237,7 @@ def run_download(stash, args):
         "--format", FORMATS.get(quality, FORMATS["best"]),
         "--merge-output-format", "mp4",
         # The video's chapters (YouTube, ZDF …) go into the file, where
-        # Marker Improvements' "Video file chapters" scraper finds them.
+        # Markers as Chapters' "Video file chapters" scraper finds them.
         "--embed-chapters",
         "--paths", dest,
         "--output", OUTPUT_TEMPLATE,

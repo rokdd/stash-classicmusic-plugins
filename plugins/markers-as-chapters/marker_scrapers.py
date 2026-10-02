@@ -1,6 +1,6 @@
 """
-Marker scrapers — part of the Marker Improvements plugin (its Python side;
-everything it needs is in this plugin).
+Marker scrapers — the Python side of the Markers as Chapters plugin
+(everything it needs is in this plugin).
 
 Stash's scrapers have no "marker" type, and a plugin can't add one to
 Stash itself. So this is a marker scraper system that works like Stash's
@@ -60,7 +60,11 @@ import subprocess
 import sys
 import urllib.request
 
-PLUGIN_ID = "markerImprovements"
+PLUGIN_ID = "markersAsChapters"
+# These settings used to be Marker Improvements' — still read from there
+# when they aren't set here.
+OLD_PLUGIN_ID = "markerImprovements"
+SETTING_KEYS = ("scrapedMarkerTag", "markerScrapersPath", "ytdlpPath")
 
 BUILT_IN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "marker-scrapers")
 SCRIPT_TIMEOUT = 180
@@ -331,7 +335,8 @@ def tool_paths(gql):
         plugins = gql("query { configuration { plugins } }")["configuration"]["plugins"] or {}
     except Exception:  # noqa: BLE001
         plugins = {}
-    settings = plugins.get(PLUGIN_ID) or {}
+    old = plugins.get(OLD_PLUGIN_ID) or {}
+    settings = {**{k: old[k] for k in SETTING_KEYS if old.get(k)}, **(plugins.get(PLUGIN_ID) or {})}
     ytdlp = (settings.get("ytdlpPath") or "").strip() \
         or ((plugins.get("advancedFileOperations") or {}).get("ytdlpPath") or "").strip() \
         or "yt-dlp"

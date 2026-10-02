@@ -6,7 +6,8 @@ and classical music recordings — but useful for any library.
 | Plugin | What it's for |
 |---|---|
 | [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
-| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers, marker scrapers |
+| [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
+| [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers: from the video file or a file next to it, YouTube, ARTE Concert, a pasted tracklist, or the pauses between movements |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, and scraping that adds tags instead of replacing them |
 
 They're independent of each other — install any of them.
@@ -53,8 +54,10 @@ endpoint and API key you've set up under Settings → Metadata Providers.
 For the **yt-dlp download** tool it also needs **yt-dlp** on the server:
 `sudo apt install yt-dlp`, or `pip install yt-dlp` for the newest version.
 
-Marker Improvements needs only Python 3 for its marker scrapers — no
-extra modules; the online chapters scraper also uses **yt-dlp** (see above).
+Marker Improvements runs only in the browser and needs nothing extra.
+
+Markers as Chapters needs only Python 3 — no extra modules; its online
+chapters scraper also uses **yt-dlp** (see above).
 
 ## Features
 
@@ -120,17 +123,24 @@ Details: [Scene Improvements README](plugins/advanced-file-operations/README.md)
   and editing opens right below the marker.
 - **Stays up to date**: bubbles redraw by themselves after a marker is
   saved, added or deleted.
-- **Marker scrapers**: **Scrape markers…** next to Create Marker imports
-  markers like Stash scrapes scenes — built in: chapters in the video file,
-  chapters online (YouTube, Vimeo … via yt-dlp), arte.tv's chapters
-  (ARTE Concert: one per work), plain text — paste
-  a tracklist or pick a text/CUE file; chapter files next to the video,
-  and the pauses between movements in the audio (named from a pasted list
-  of movements). Review them in a
-  dialog (pick, rename, tag, shift all times), then create. Add your own
-  scrapers as .yaml files in Stash's scraper format.
 
 Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.md)
+
+### Markers as Chapters
+
+- **Scrape markers…** next to Create Marker in the Markers tab imports
+  markers the way Stash scrapes scenes.
+- **Built-in scrapers**: chapters in the video file; a chapter file next to
+  it (CUE, OGM, Matroska XML, ffmetadata, yt-dlp info, tracklist); chapters
+  online (YouTube, ZDF … via yt-dlp); arte.tv / ARTE Concert (one marker
+  per work); plain text — paste a tracklist or pick a text/CUE file.
+- **Pauses between movements**: finds the pauses in the audio and puts a
+  marker where the music starts again — named from a pasted programme
+  (titles only, in order: ARD, BBC … list the pieces but no times).
+- **Review dialog**: pick, rename, tag, shift all times, then create.
+- **Your own scrapers** as .yaml files in Stash's scraper format.
+
+Details: [Markers as Chapters README](plugins/markers-as-chapters/README.md)
 
 ### Tag Improvements
 
