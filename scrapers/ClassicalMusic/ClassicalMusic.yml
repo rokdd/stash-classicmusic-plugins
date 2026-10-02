@@ -1,0 +1,26 @@
+name: Classical Music (Wikidata, Open Opus)
+# Performers for a classical music library: composers, conductors, soloists,
+# singers, orchestras and ensembles — from Wikidata, with the Wikipedia
+# introduction and, for composers, the epoch from Open Opus.
+performerByName:
+  action: script
+  script:
+    - python
+    - classical_music.py
+    - search
+performerByFragment:
+  action: script
+  script:
+    - python
+    - classical_music.py
+    - fragment
+performerByURL:
+  - action: script
+    url:
+      - wikidata.org/wiki/Q
+      - wikipedia.org/wiki/
+      - musicbrainz.org/artist/
+    script:
+      - python
+      - classical_music.py
+      - url

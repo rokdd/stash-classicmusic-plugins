@@ -74,3 +74,42 @@ buildPlugin()
 find ./plugins -mindepth 1 -name *.yml | while read file; do
     buildPlugin "$file"
 done
+
+# Scrapers: scrapers/<id>/<id>.yml (+ its scripts), as a scraper source
+# like Stash's CommunityScrapers: <outdir>/scrapers/index.yml and a zip per
+# scraper. Added in Stash under Settings → Metadata Providers → Available
+# Scrapers → Add Source.
+buildScraper()
+{
+    dir=$1
+    scraper_id=$(basename "$dir")
+    f="$dir/$scraper_id.yml"
+    [ -f "$f" ] || return
+    echo "Processing scraper $scraper_id"
+    version=$(git log -n 1 --pretty=format:%h -- "$dir"/*)
+    updated=$(TZ=UTC0 git log -n 1 --date="format-local:%F %T" --pretty=format:%ad -- "$dir"/*)
+    zipfile="$(cd "$outdir/scrapers" && pwd)/$scraper_id.zip"
+    pushd "$dir" > /dev/null
+    zip -r "$zipfile" . -x '__pycache__/*' > /dev/null
+    popd > /dev/null
+    name=$(grep "^name:" "$f" | head -n 1 | cut -d' ' -f2- | sed -e 's/\r//' -e 's/^"\(.*\)"$/\1/')
+    echo "- id: $scraper_id
+  name: $(yamlQuote "$name")
+  version: $version
+  date: \"$updated\"
+  path: $scraper_id.zip
+  sha256: $(sha256sum "$zipfile" | cut -d' ' -f1)" >> "$outdir"/scrapers/index.yml
+    # the URLs it scrapes, as CommunityScrapers lists them
+    urls=$(awk '/^performerByURL:/{p=1;next} /^[^ -]/{p=0;u=0} p && /^ *url:/{u=1;next} p && /^ *-? *[a-zA-Z_]+:/{u=0} p && u && /^ *- /' "$f" | sed -e 's/^ *- //' -e 's/\r//')
+    if [ -n "$urls" ]; then
+        echo "  metadata:
+    performer_urls:" >> "$outdir"/scrapers/index.yml
+        echo "$urls" | while read u; do echo "      - $u" >> "$outdir"/scrapers/index.yml; done
+    fi
+}
+
+mkdir -p "$outdir/scrapers"
+touch "$outdir/scrapers/index.yml"
+for d in ./scrapers/*/; do
+    [ -d "$d" ] && buildScraper "${d%/}"
+done

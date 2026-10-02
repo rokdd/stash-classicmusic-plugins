@@ -12,6 +12,12 @@ and classical music recordings — but useful for any library.
 
 They're independent of each other — install any of them.
 
+And a performer scraper:
+
+| Scraper | What it's for |
+|---|---|
+| [Classical Music](scrapers/ClassicalMusic/) | Composers, conductors, soloists, orchestras from Wikidata — Wikipedia text, portrait, dates, country, roles and (Open Opus) the composer's epoch as tags |
+
 ## Install
 
 1. In Stash, open **Settings → Plugins → Available Plugins** and click
@@ -31,6 +37,20 @@ if a change doesn't show up, so the browser doesn't keep the old script.
 **Without the source:** copy a plugin's folder from [plugins](plugins/)
 into your Stash plugins directory (Settings → Plugins shows where), then
 Settings → Plugins → **Reload plugins**.
+
+### The scraper
+
+1. **Settings → Metadata Providers → Available Scrapers → Add Source**,
+   any name (e.g. `Classic music scrapers`) and this URL:
+   ```
+   https://rokdd.github.io/stash-classicmusic-plugins/main/scrapers/index.yml
+   ```
+2. Tick **Classical Music (Wikidata, Open Opus)** and click **Install**.
+3. On a performer: **Edit → Scrape with… → Classical Music**, search by
+   name (also just a surname: "Mutter", "Karajan") and pick the right
+   one — or paste a Wikidata, Wikipedia or MusicBrainz link into the URL
+   field and scrape that. Needs Python 3 on the server (no extra
+   modules).
 
 ### Extra setup for Scene Improvements
 
@@ -174,10 +194,11 @@ Tag Merge** plugin.
 - Tags can still be removed in the dialog before applying; unmatched
   scraped tags keep their create/link buttons.
 - A setting switches back to Stash's usual replace behaviour.
-- **Composer tags**: every performer with a `composer` custom field gets a
-  tag of their own under **Composers** (name, aliases, image, details),
-  kept in step when the performer is saved — so markers can carry
-  composers.
+- **Composer tags**: every performer with a `composer` custom field — or
+  the performer tag **Composer**, as the Classical Music scraper gives it —
+  gets a tag of their own under **Composers** (name, aliases, image,
+  details), kept in step when the performer is saved — so markers can
+  carry composers.
 
 Details: [Tag Improvements README](plugins/tag-improvements/README.md)
 

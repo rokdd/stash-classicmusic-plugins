@@ -4,6 +4,7 @@ on:
   push:
       paths:
       - 'plugins/**'
+      - 'scrapers/**'
       - 'build_site.sh'
       - '.github/workflows/**'
       branches:

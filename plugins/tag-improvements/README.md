@@ -144,8 +144,11 @@ a composer gets a tag of their own, which markers can carry (and which
 titles):
 
 1. Mark the performer: **Edit → Custom Fields**, field `composer`, value
-   e.g. `yes` (anything but no / false / 0). The field name is the
-   **Composer field** setting.
+   e.g. `yes` (anything but no / false / 0) — the field name is the
+   **Composer field** setting. Or give the performer the tag **Composer**
+   (the **Composer performer tag** setting): the Classical Music scraper
+   does that for composers, so scraping one is enough. A custom field set
+   to no overrides the tag.
 2. On save, the performer's tag is created or updated, under the parent
    tag **Composers** (the **Composer parent tag** setting; created if
    needed):

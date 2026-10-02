@@ -2,8 +2,10 @@
 Composer tags — part of the Tag Improvements plugin.
 
 Markers can only carry tags, not performers. So every performer marked as
-a composer (the custom field in the "Composer field" setting, default
-"composer", set to anything but no/false/0) gets a tag of their own, kept
+a composer — the custom field in the "Composer field" setting (default
+"composer") set to anything but no/false/0, or, without that field, the
+performer tag in the "Composer performer tag" setting (default "Composer",
+as the Classical Music scraper gives it) — gets a tag of their own, kept
 in step with the performer:
 
   - same name (with the performer's disambiguation in brackets if another
@@ -32,10 +34,11 @@ import re
 import urllib.request
 
 DEFAULT_FIELD = "composer"
+DEFAULT_PERFORMER_TAG = "Composer"  # the tag the Classical Music scraper gives composers
 DEFAULT_PARENT = "Composers"
 NO = {"", "no", "false", "0", "nein", "non", "off"}
 
-PERFORMER_FIELDS = "id name disambiguation alias_list details image_path custom_fields"
+PERFORMER_FIELDS = "id name disambiguation alias_list details image_path custom_fields tags { name }"
 TAG_FIELDS = "id name aliases description custom_fields parents { id }"
 
 
@@ -45,12 +48,22 @@ def settings_of(settings):
     return field, parent
 
 
-def is_composer(performer, field):
+def performer_tag_of(settings):
+    raw = settings.get("composerPerformerTag")
+    raw = DEFAULT_PERFORMER_TAG if raw is None else str(raw).strip()
+    return "" if raw == "-" else raw or DEFAULT_PERFORMER_TAG
+
+
+def is_composer(performer, field, performer_tag=""):
+    """Marked as a composer: the custom field set (to anything but no /
+    false / 0), or — the custom field not set at all — the performer tag
+    (e.g. "Composer", as the Classical Music scraper gives it)."""
     fields = performer.get("custom_fields") or {}
     lowered = {k.lower(): v for k, v in fields.items()}
-    if field.lower() not in lowered:
-        return False
-    return str(lowered[field.lower()]).strip().lower() not in NO
+    if field.lower() in lowered:
+        return str(lowered[field.lower()]).strip().lower() not in NO
+    names = {(t.get("name") or "").strip().lower() for t in performer.get("tags") or []}
+    return bool(performer_tag) and performer_tag.lower() in names
 
 
 def sha1(data):
@@ -66,6 +79,7 @@ class ComposerSync:
     def __init__(self, stash, settings, log):
         self.stash = stash
         self.field, self.parent_name = settings_of(settings)
+        self.performer_tag = performer_tag_of(settings)
         self.log = log
         self.tags = stash.call(f"query {{ findTags(filter: {{ per_page: -1 }}) {{ tags {{ {TAG_FIELDS} }} }} }}")["findTags"]["tags"]
         self.parent_id = None
@@ -128,7 +142,7 @@ class ComposerSync:
     def sync(self, performer):
         """Creates or updates the performer's tag. Returns a short note, or
         None when there was nothing to do."""
-        if not is_composer(performer, self.field):
+        if not is_composer(performer, self.field, self.performer_tag):
             return None
         tag = self.tag_for(performer)
         parent_id = self.ensure_parent()
@@ -212,7 +226,7 @@ def run(stash, settings, log, log_progress=None, performer_id=None):
     """Syncs one performer (performer_id) or all. Returns a summary."""
     field, _parent = settings_of(settings)
     found = performers(stash, performer_id)
-    composers = [p for p in found if is_composer(p, field)]
+    composers = [p for p in found if is_composer(p, field, performer_tag_of(settings))]
     if not composers:
         return None if performer_id is not None else f"Composer tags: no performer has the custom field \"{field}\"."
     sync = ComposerSync(stash, settings, log)
