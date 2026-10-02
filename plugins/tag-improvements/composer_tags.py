@@ -54,6 +54,54 @@ def performer_tag_of(settings):
     return "" if raw == "-" else raw or DEFAULT_PERFORMER_TAG
 
 
+# Roles: which performers get a tag of their own, and under which parent
+# tags. "Parent tag: role, role; Parent tag: role …" — a performer has a
+# role when one of their tags is named like it (the Classical Music scraper
+# gives Composer, Pianist, Soprano …), or their custom field "roles" names
+# it ("composer, soloist" — the parent tag's name works too).
+DEFAULT_ROLES = ("Composers: Composer; Soloists: Soloist, Pianist, Violinist, Cellist, Violist, Soprano, "
+                 "Mezzo-soprano, Contralto, Tenor, Baritone, Countertenor, Organist, Harpsichordist, Guitarist, "
+                 "Flautist, Clarinetist, Oboist, Trumpeter, Harpist")
+ROLES_FIELD = "roles"
+
+
+def roles_of(settings):
+    """[(parent tag, {role words})], from the "Performer roles" setting —
+    with the older composer settings folded in (parent tag, performer tag)."""
+    raw = (settings.get("performerRoles") or "").strip() or DEFAULT_ROLES
+    groups = []
+    for part in raw.split(";"):
+        parent, _, words = part.partition(":")
+        parent = parent.strip()
+        if parent:
+            groups.append([parent, {w.strip().lower() for w in words.split(",") if w.strip()}])
+    old_parent = (settings.get("composerParentTag") or "").strip()
+    old_tag = performer_tag_of(settings)
+    for g in groups:
+        if "composer" in g[1]:
+            if old_parent:
+                g[0] = old_parent
+            if old_tag:
+                g[1].add(old_tag.lower())
+    return [(p, w) for p, w in groups]
+
+
+def performer_roles(performer, field, roles):
+    """The parent tags a performer belongs under, by their roles."""
+    fields = {k.lower(): v for k, v in (performer.get("custom_fields") or {}).items()}
+    words = {(t.get("name") or "").strip().lower() for t in performer.get("tags") or []}
+    words |= {w.strip().lower() for w in re.split(r"[,;/]", str(fields.get(ROLES_FIELD, ""))) if w.strip()}
+    composer_flag = fields.get(field.lower())
+    found = []
+    for parent, role_words in roles:
+        hit = bool(role_words & words) or parent.lower() in words or parent.lower().rstrip("s") in words
+        if "composer" in role_words and composer_flag is not None:
+            hit = str(composer_flag).strip().lower() not in NO  # the older "composer" field decides
+        if hit:
+            found.append(parent)
+    return found
+
+
 def is_composer(performer, field, performer_tag=""):
     """Marked as a composer: the custom field set (to anything but no /
     false / 0), or — the custom field not set at all — the performer tag
@@ -79,10 +127,10 @@ class ComposerSync:
     def __init__(self, stash, settings, log):
         self.stash = stash
         self.field, self.parent_name = settings_of(settings)
-        self.performer_tag = performer_tag_of(settings)
+        self.roles = roles_of(settings)
         self.log = log
         self.tags = stash.call(f"query {{ findTags(filter: {{ per_page: -1 }}) {{ tags {{ {TAG_FIELDS} }} }} }}")["findTags"]["tags"]
-        self.parent_id = None
+        self.parent_ids = {}
 
     # -- tag lookups -------------------------------------------------------
 
@@ -109,22 +157,23 @@ class ComposerSync:
             used.update(a.strip().lower() for a in t.get("aliases") or [])
         return used
 
-    def ensure_parent(self):
-        if self.parent_id:
-            return self.parent_id
+    def ensure_parent(self, name):
+        key = name.lower()
+        if key in self.parent_ids:
+            return self.parent_ids[key]
         for t in self.tags:
-            if t["name"].strip().lower() == self.parent_name.lower():
-                self.parent_id = str(t["id"])
-                return self.parent_id
+            if t["name"].strip().lower() == key:
+                self.parent_ids[key] = str(t["id"])
+                return self.parent_ids[key]
         created = self.stash.call(
             "mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }",
-            {"input": {"name": self.parent_name}},
+            {"input": {"name": name}},
         )["tagCreate"]
-        self.parent_id = str(created["id"])
-        self.tags.append({"id": self.parent_id, "name": self.parent_name, "aliases": [], "description": "",
+        self.parent_ids[key] = str(created["id"])
+        self.tags.append({"id": self.parent_ids[key], "name": name, "aliases": [], "description": "",
                           "custom_fields": {}, "parents": []})
-        self.log(f"Created the tag {self.parent_name}.")
-        return self.parent_id
+        self.log(f"Created the tag {name}.")
+        return self.parent_ids[key]
 
     def image_data(self, performer):
         """(data URL, hash) of the performer's image, or (None, None)."""
@@ -142,10 +191,11 @@ class ComposerSync:
     def sync(self, performer):
         """Creates or updates the performer's tag. Returns a short note, or
         None when there was nothing to do."""
-        if not is_composer(performer, self.field, self.performer_tag):
+        role_parents = performer_roles(performer, self.field, self.roles)
+        if not role_parents:
             return None
         tag = self.tag_for(performer)
-        parent_id = self.ensure_parent()
+        wanted_parents = {self.ensure_parent(p) for p in role_parents}
         used = self.used_names(except_id=tag["id"] if tag else None)
 
         name = performer["name"].strip()
@@ -168,8 +218,8 @@ class ComposerSync:
         fields = dict(tag.get("custom_fields") or {}) if tag else {}
         update = {"name": name, "aliases": aliases}
         parents = {str(p["id"]) for p in (tag.get("parents") if tag else [])}
-        if parent_id not in parents:
-            update["parent_ids"] = sorted(parents | {parent_id})
+        if not wanted_parents <= parents:  # parents it has stay; roles add theirs
+            update["parent_ids"] = sorted(parents | wanted_parents)
 
         details = (performer.get("details") or "").strip()
         current = (tag.get("description") or "").strip() if tag else ""
@@ -206,7 +256,7 @@ class ComposerSync:
             return f"updated {name} ({', '.join(sorted(list(changes) + (['link'] if 'performer_id' in changed_fields else [])))})"
 
         payload = {**update, "custom_fields": new_fields}
-        payload.setdefault("parent_ids", [parent_id])
+        payload.setdefault("parent_ids", sorted(wanted_parents))
         created = self.stash.call("mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }", {"input": payload})["tagCreate"]
         self.tags.append({"id": str(created["id"]), "name": name, "aliases": aliases,
                           "description": update.get("description", ""), "custom_fields": new_fields,
@@ -225,10 +275,12 @@ def performers(stash, performer_id=None):
 def run(stash, settings, log, log_progress=None, performer_id=None):
     """Syncs one performer (performer_id) or all. Returns a summary."""
     field, _parent = settings_of(settings)
+    roles = roles_of(settings)
     found = performers(stash, performer_id)
-    composers = [p for p in found if is_composer(p, field, performer_tag_of(settings))]
+    composers = [p for p in found if performer_roles(p, field, roles)]
     if not composers:
-        return None if performer_id is not None else f"Composer tags: no performer has the custom field \"{field}\"."
+        return None if performer_id is not None else \
+            f"Performer tags: no performer has one of the roles ({'; '.join(p for p, _w in roles)})."
     sync = ComposerSync(stash, settings, log)
     notes = []
     for i, p in enumerate(composers):
@@ -241,6 +293,6 @@ def run(stash, settings, log, log_progress=None, performer_id=None):
         if log_progress:
             log_progress((i + 1) / len(composers))
     if performer_id is not None:
-        return f"Composer tag: {notes[0]}." if notes else None
-    return (f"Composer tags: {len(composers)} composers, " +
+        return f"Performer tag: {notes[0]}." if notes else None
+    return (f"Performer tags: {len(composers)} performers with a role, " +
             (f"{len(notes)} changed — " + "; ".join(notes[:30]) + ("…" if len(notes) > 30 else "") if notes else "all up to date") + ".")

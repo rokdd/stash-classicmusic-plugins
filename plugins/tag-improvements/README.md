@@ -136,12 +136,25 @@ or its hooks run alongside Tag Tree's. Your settings there need setting
 again under Tag Tree; the record of which descriptions it wrote is picked
 up automatically from its old folder, so your own texts stay protected.
 
-## Composer tags
+## Composer tags (and soloists …)
 
-Markers can only carry tags, not performers. So every performer marked as
-a composer gets a tag of their own, which markers can carry (and which
-[Markers as Chapters](../markers-as-chapters/) fills in from chapter
-titles):
+Markers can only carry tags, not performers. So every performer with a
+**role** — composer, soloist, … — gets a tag of their own, under the role's
+parent tag (**Composers**, **Soloists** …), which markers can carry (and
+which [Markers as Chapters](../markers-as-chapters/) fills in from chapter
+titles).
+
+**Performer roles** (the setting) says which roles there are and under which
+parent tags: `Parent tag: role, role; Parent tag: role …`. The default:
+`Composers: Composer; Soloists: Soloist, Pianist, Violinist, Cellist, Violist,
+Soprano, Mezzo-soprano, Contralto, Tenor, Baritone, Countertenor, Organist,
+Harpsichordist, Guitarist, Flautist, Clarinetist, Oboist, Trumpeter, Harpist`
+— add e.g. `; Conductors: Conductor`. A performer has a role when one of
+their tags is named like it (the Classical Music scraper gives exactly these:
+Composer, Pianist, Soprano …), or when their custom field `roles` names it
+(`composer, soloist`; the parent tag's name works too). Someone with
+several roles — a pianist and composer — gets one tag under all their
+parents. The older ways still work:
 
 1. Mark the performer: **Edit → Custom Fields**, field `composer`, value
    e.g. `yes` (anything but no / false / 0) — the field name is the

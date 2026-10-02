@@ -209,7 +209,7 @@ the dialog, and every scraper's titles and tags: "schönen".
 ## Composers and other tags from the titles
 
 Every scraper's markers get tags filled in from their titles: tags below
-the **Fill in tags under** parent tags (default `Composers` — the composer
+the **Fill in tags under** parent tags (default `Composers, Soloists` — the composer
 tags [Tag Improvements](../tag-improvements/) keeps for performers marked
 as composers) are found by
 

@@ -354,7 +354,7 @@ def scrape(gql, args, settings, env_extra):
 # Upper/lower case and accents are ignored. A scraper's suggested name that
 # matches is replaced by the tag's name.
 
-DEFAULT_SUGGEST_UNDER = "Composers"
+DEFAULT_SUGGEST_UNDER = "Composers, Soloists"
 
 
 def _plain(text):
