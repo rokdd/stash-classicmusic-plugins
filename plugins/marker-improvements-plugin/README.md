@@ -184,6 +184,14 @@ The edit form is Stash's own, moved into place: the plugin leaves a
 placeholder where Stash put it and moves it back the moment you save,
 cancel or delete, before Stash handles that click.
 
+## Editing a marker's title as text
+
+Stash's marker title field is a dropdown of titles used before — a new one
+can be typed, but the current one can't be edited. The **✎** next to it
+turns it into a plain text box with the current title: change it, then
+**Enter** (or click elsewhere) puts it into Stash's field, and **Save**
+stores it as usual. **Esc** cancels; an empty box clears the title.
+
 ## Which tags the marker form offers
 
 Two settings (Settings → Plugins → Marker Improvements) limit the tags the

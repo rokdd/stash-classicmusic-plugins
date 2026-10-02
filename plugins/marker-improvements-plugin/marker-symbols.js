@@ -1993,6 +1993,116 @@
     }, 150);
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
+  // -- editing the marker title as text ------------------------------------------
+  //
+  // Stash's marker title field is a dropdown of titles used before: a new
+  // title can be typed, but the current one can't be edited. A ✎ next to it
+  // turns it into a plain text box with the current title; Enter (or
+  // leaving the box) types the result into Stash's own field and picks it
+  // there — so Stash's form has the new title, and its Save stores it with
+  // everything else. Esc cancels; an empty box clears the title.
+
+  const TITLE_EDIT_CLASS = "marker-symbols-title-edit";
+
+  function setReactSelectText(container, text) {
+    if (!text.trim()) {
+      const clear = container.querySelector('[class*="react-select__clear-indicator"]');
+      if (clear) clear.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+      return;
+    }
+    const input = container.querySelector("input");
+    if (!input) return;
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    setter.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    let tries = 0;
+    const pick = () => {
+      const options = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
+      const wanted = options.find((o) => o.textContent.trim() === text) ||
+        options.find((o) => /^create\b/i.test(o.textContent.trim()) && o.textContent.includes(text));
+      if (wanted) {
+        wanted.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+        setTimeout(() => input.blur(), 0);
+        return;
+      }
+      if (++tries < 20) {
+        setTimeout(pick, 50);
+      } else {
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+        setTimeout(() => input.blur(), 0);
+      }
+    };
+    setTimeout(pick, 50);
+  }
+
+  function addTitleEditor(container) {
+    if (container.dataset.markerSymbolsTitleEdit) return;
+    container.dataset.markerSymbolsTitleEdit = "1";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `btn btn-secondary btn-sm ${TITLE_EDIT_CLASS}`;
+    button.textContent = "✎";
+    button.title = "Edit the title as text";
+    button.style.cssText = "margin-left:6px;flex:0 0 auto;";
+    const box = document.createElement("input");
+    box.type = "text";
+    box.className = "form-control";
+    box.style.display = "none";
+    // Stash's field stays exactly where React put it; the box and the button
+    // are added after it, and its column lines them up in a row.
+    const parent = container.parentNode;
+    parent.style.display = "flex";
+    parent.style.alignItems = "center";
+    container.after(box, button);
+    container.style.flex = "1 1 auto";
+    container.style.minWidth = "0";
+    let editing = false;
+    const finish = (apply) => {
+      if (!editing) return;
+      editing = false;
+      box.style.display = "none";
+      container.style.display = "";
+      button.style.display = "";
+      if (apply) setReactSelectText(container, box.value);
+    };
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      const current = container.querySelector('[class*="react-select__single-value"]');
+      box.value = current ? current.textContent : "";
+      editing = true;
+      container.style.display = "none";
+      button.style.display = "none";
+      box.style.display = "";
+      box.style.flex = "1 1 auto";
+      box.focus();
+      box.select();
+    });
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    box.addEventListener("blur", () => finish(true));
+  }
+
+  function addTitleEditors() {
+    const panel = findMarkersPanel();
+    const forms = [];
+    if (panel) forms.push(...panel.querySelectorAll("form"));
+    if (movedForm && movedForm.form) forms.push(movedForm.form);
+    forms.forEach((form) => form.querySelectorAll(".select-suggest").forEach(addTitleEditor));
+  }
+
+  let titleEditPending = false;
+  new MutationObserver(() => {
+    if (titleEditPending) return;
+    titleEditPending = true;
+    setTimeout(() => {
+      titleEditPending = false;
+      addTitleEditors();
+    }, 200);
+  }).observe(document.body, { childList: true, subtree: true });
+
   // -- reload after a marker is saved ----------------------------------------
   //
   // Stash's own UI saves markers through GraphQL mutations over fetch().
