@@ -461,15 +461,42 @@ def scene_files(scene_id):
     return [f["path"] for f in ((data.get("data") or {}).get("findScene") or {}).get("files") or []]
 
 
+def _load_json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _words(text):
+    return {w for w in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(w) > 2}
+
+
 def json_beside(scene_id):
+    """medici.tv's JSON next to the scene's video: named like it
+    (<video>.medici.json, <video>.json), else the only one in its folder, else
+    the one whose name or title shares the most words with the video's."""
     for video in scene_files(scene_id):
         stem = os.path.splitext(video)[0]
         for path in (stem + ".medici.json", stem + ".json", video + ".json"):
-            if os.path.isfile(path):
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
+            data = _load_json(path) if os.path.isfile(path) else None
+            if looks_like_medici(data):
+                return medici_scene(data)
+        folder = os.path.dirname(video)
+        found = []
+        for name in sorted(os.listdir(folder)):
+            if name.lower().endswith(".json"):
+                data = _load_json(os.path.join(folder, name))
                 if looks_like_medici(data):
-                    return medici_scene(data)
+                    found.append((name, data))
+        if len(found) == 1:
+            return medici_scene(found[0][1])
+        video_words = _words(os.path.basename(stem))
+        scored = sorted(((len(video_words & (_words(name) | _words(d.get("title")) | _words(d.get("slug")))), d)
+                         for name, d in found), key=lambda x: -x[0])
+        if scored and scored[0][0] >= 2 and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+            return medici_scene(scored[0][1])
     return None
 
 
