@@ -742,6 +742,45 @@ def marker_composers(gql, args, settings):
 
 
 # ---------------------------------------------------------------------------
+# Chapters waiting for a scene without markers
+# ---------------------------------------------------------------------------
+#
+# For the page's offer to import them: the quick sources — a chapter file
+# next to the video (also a medici.tv JSON), the video's own chapters, and
+# ARTE / ORF ON through the scene's URLs — are tried, and those that find two
+# or more chapters (with different starts) are reported. Nothing is created.
+
+QUICK_SCRAPERS = ("chapter_files", "video_chapters", "arte", "orf")
+QUICK_TIMEOUT = 60
+
+
+def available(gql, args, settings, env_extra):
+    scene = scene_for_scraper(gql, args.get("scene_id"))
+    if not scene:
+        return {"found": []}
+    if scene.get("scene_markers"):
+        return {"found": [], "has_markers": True}
+    scrapers = load_scrapers(settings)
+    urls = scene.get("urls") or []
+    found = []
+    for sid in QUICK_SCRAPERS:
+        scraper = scrapers.get(sid)
+        if not scraper or not scraper["fragment"]:
+            continue
+        if scraper["by_url"] and not any(any(p in u for p in url_patterns(scraper)) for u in urls):
+            continue  # a scraper for websites, and the scene has none of its URLs
+        action = dict(scraper["fragment"], timeout=min(int(scraper["fragment"].get("timeout") or QUICK_TIMEOUT), QUICK_TIMEOUT))
+        try:
+            markers, notes, _pieces = run_action(scraper, action, {"scene": scene}, env_extra)
+        except Exception:  # noqa: BLE001 — nothing there, or it can't tell: not offered
+            continue
+        markers = normalise(markers)
+        if len(markers) >= 2 and len({m["seconds"] for m in markers}) > 1:
+            found.append({"scraper": sid, "name": scraper["name"], "count": len(markers), "notes": notes})
+    return {"found": found}
+
+
+# ---------------------------------------------------------------------------
 # Plugin entry point (Stash runs this with interface: raw)
 # ---------------------------------------------------------------------------
 
@@ -805,6 +844,8 @@ def main():
             output = list_scrapers(settings)
         elif mode == "marker_scrape":
             output = scrape(gql, args, settings, env_extra)
+        elif mode == "marker_available":
+            output = available(gql, args, settings, env_extra)
         elif mode == "marker_composers":
             output = marker_composers(gql, args, settings)
             if not args.get("scene_id") and "applied" in output:

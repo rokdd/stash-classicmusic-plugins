@@ -170,6 +170,36 @@ def cue_offsets(cue_path, markers):
     return ""
 
 
+def json_in_folder(video):
+    """(markers, file name) from a JSON with chapters in the video's folder:
+    the only one, or the one whose name shares the most words with the
+    video's (two at least). None if there's none, or no clear one."""
+    from json_markers import parse_json
+    folder = os.path.dirname(video)
+    words = lambda t: {w for w in re.split(r"[^a-z0-9]+", t.lower()) if len(w) > 2}  # noqa: E731
+    found = []
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return None
+    for name in names:
+        if not name.lower().endswith(".json") or name.lower().endswith(".info.json"):
+            continue
+        try:
+            parsed = parse_json(read(os.path.join(folder, name)))
+        except Exception:  # noqa: BLE001
+            parsed = None
+        if parsed and parsed[0]:
+            found.append((name, parsed[0]))
+    if len(found) == 1:
+        return found[0][1], found[0][0]
+    video_words = words(os.path.splitext(os.path.basename(video))[0])
+    scored = sorted(((len(video_words & words(n)), m, n) for n, m in found), key=lambda x: -x[0])
+    if scored and scored[0][0] >= 2 and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+        return scored[0][1], scored[0][2]
+    return None
+
+
 def candidates(video):
     base, _ext = os.path.splitext(video)
     for stem in (base, video):
@@ -197,6 +227,15 @@ def main():
                 duration = max([x.get("duration") or 0 for x in files] or [0])
                 print(json.dumps({"markers": fill_ends(markers, duration), "notes": notes}))
                 return
+    # A JSON with chapters in the video's folder under another name (as
+    # saved from medici.tv): the only one there, or the best match by name.
+    for f in files:
+        found = json_in_folder(f["path"])
+        if found:
+            markers, name = found
+            duration = max([x.get("duration") or 0 for x in files] or [0])
+            print(json.dumps({"markers": fill_ends(markers, duration), "notes": f"From {name} next to the video."}))
+            return
     base = os.path.splitext(os.path.basename(files[0]["path"]))[0]
     raise SystemExit(
         f"No chapter file next to the video — e.g. {base}.cue, {base}.chapters.txt, "

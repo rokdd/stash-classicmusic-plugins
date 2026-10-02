@@ -1,6 +1,6 @@
 name: Markers as Chapters
 description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert; ORF ON), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
-version: 0.0.22
+version: 0.0.23
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -35,4 +35,8 @@ settings:
   skipPauseCheck:
     displayName: Skip the check against the audio
     description: "Off (the default): the review dialog checks the markers against the pauses in the scene's audio — shows which start at a pause, suggests a shift, and can snap them onto the pauses. On: no check (e.g. on a slow server)."
+    type: BOOLEAN
+  noChapterOffer:
+    displayName: Don't offer chapters found
+    description: "Off (the default): when a scene without markers is opened (or its URLs change), the quick sources are checked — a chapter file next to the video (also a medici.tv JSON), the video's own chapters, ARTE / ORF ON — and a note offers to import what's found. On: no checking, no note."
     type: BOOLEAN

@@ -198,6 +198,17 @@ otherwise the **Primary tag for scraped markers** setting is used (empty:
 doesn't exist yet is created. Other tags are matched by name or alias;
 ones that don't exist are left out (and listed).
 
+## Chapters offered by themselves
+
+Open a scene that has no markers yet — or give it a URL, e.g. by scraping
+it — and the quick sources are checked by themselves: a chapter file next
+to the video (also a medici.tv JSON, whatever its name, if it's the only
+one in the folder or its name matches the video's), the video's own
+chapters, and ARTE / ORF ON through the scene's URLs. If chapters turn up,
+a note at the bottom right says where and how many — **Import…** opens the
+review dialog for them; **Not now** doesn't ask again for that scene (in
+this browser). The setting **Don't offer chapters found** switches it off.
+
 ## What you can paste
 
 **Scrape markers… → Plain text — paste text or pick a file…** reads all of
