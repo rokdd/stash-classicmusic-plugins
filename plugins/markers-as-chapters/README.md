@@ -192,6 +192,14 @@ follows the recording, so the audience's quiet between movements counts.
 The **Skip the check against the audio** setting switches it off (e.g. on
 a slow server).
 
+**Tags that don't exist yet** — composers from the chapters, mostly — are
+listed when you click **Create markers**, each with a choice: **Composer**
+(the person the [Classical Music](../../scrapers/ClassicalMusic/) scraper
+finds for the name, preselected when it's a composer — created as a
+performer tagged Composer, and Tag Improvements makes the composer tag),
+**Plain tag**, or **Leave out**. **Continue** creates them, then the
+markers with all their tags; **Back** returns to the markers.
+
 **Primary tag**: every marker needs one. A scraper can name it per marker;
 otherwise the **Primary tag for scraped markers** setting is used (empty:
 `Chapter`), and you can change it in the dialog. A primary tag that
