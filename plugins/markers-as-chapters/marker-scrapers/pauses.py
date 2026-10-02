@@ -203,6 +203,36 @@ def markers_for(levels, end_of_video, titles):
     return markers, notes
 
 
+def place_by_durations(scene, durations):
+    """Starts for pieces of known (roughly: "13 mins") lengths: the first
+    where the music starts, every next one at the pause in the audio
+    nearest to where the piece before should end — within half to one and
+    a half times its length (a piece without a length: the next pause after
+    a minute). Returns (starts, how many landed on a pause)."""
+    levels, end = scene_levels(scene)
+    min_pause, drop = CHECK_LEVEL
+    threshold = threshold_for(levels, drop)
+    loud = [t for t, db in levels if db >= threshold]
+    music_start = loud[0] if loud else 0.0
+    resumes = [b for a, b in find_pauses(levels, min_pause, drop) if a > music_start]
+    starts, snapped, t = [music_start], 0, music_start
+    for d in durations[:-1]:
+        if d:
+            window = [r for r in resumes if t + 0.5 * d <= r <= t + 1.5 * d + 60]
+            target = t + d
+        else:
+            window = [r for r in resumes if r >= t + 60][:1]
+            target = window[0] if window else t + 60
+        if window:
+            nxt = min(window, key=lambda r: abs(r - target))
+            snapped += 1
+        else:
+            nxt = target
+        starts.append(nxt)
+        t = nxt
+    return starts, snapped
+
+
 def scrape_titles(scene, titles):
     """Markers for the scene's audio split at its pauses, named by titles
     (or "Part n" without). Returns (markers, notes)."""

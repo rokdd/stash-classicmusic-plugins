@@ -580,6 +580,38 @@
   // are added to the marker, and the title loses the names (see
   // marker_composers in marker_scrapers.py). Shown first, applied for the
   // ticked ones.
+  // The old title with what goes struck through and the rest as it is:
+  // the longest common subsequence of characters between old and new.
+  function struckTitle(before, after) {
+    if (before === after) return el("span", { textContent: before });
+    const a = Array.from(before);
+    const b = Array.from(after);
+    const n = a.length;
+    const m = b.length;
+    const keep = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        keep[i][j] = a[i] === b[j] ? keep[i + 1][j + 1] + 1 : Math.max(keep[i + 1][j], keep[i][j + 1]);
+      }
+    }
+    const parts = []; // [text, removed?]
+    const push = (ch, removed) => {
+      const last = parts[parts.length - 1];
+      if (last && last[1] === removed) last[0] += ch;
+      else parts.push([ch, removed]);
+    };
+    let i = 0;
+    let j = 0;
+    while (i < n) {
+      if (j < m && a[i] === b[j]) { push(a[i], false); i++; j++; }
+      else if (j < m && keep[i][j + 1] >= keep[i + 1][j]) { j++; } // only in the new title (tidying): skip
+      else { push(a[i], true); i++; }
+    }
+    return el("span", {}, ...parts.map(([text, removed]) => removed
+      ? el("span", { textContent: text, style: { textDecoration: "line-through", color: "#e57373" } })
+      : el("span", { textContent: text })));
+  }
+
   async function composersDialog() {
     const dialog = openDialog("Composers from the marker titles");
     const footerButtons = [];
@@ -691,8 +723,7 @@
         el("td", {}, el("input", { type: "checkbox", checked: true,
           onchange: (e) => { if (e.target.checked) picked.add(p.id); else picked.delete(p.id); } })),
         el("td", { style: { whiteSpace: "nowrap" } }, formatTime(p.seconds || 0)),
-        el("td", {}, el("div", { className: "text-muted", style: { textDecoration: p.new_title !== p.title ? "line-through" : "none" }, textContent: p.title }),
-          p.new_title !== p.title ? el("div", { textContent: p.new_title }) : null),
+        el("td", {}, struckTitle(p.title, p.new_title)),
         el("td", {}, p.add_tags.length ? el("span", { className: "text-success", textContent: `+ ${p.add_tags.join(", ")}` }) : "")));
       const apply = el("button", { type: "button", className: "btn btn-primary", textContent: "Apply",
         onclick: async () => {

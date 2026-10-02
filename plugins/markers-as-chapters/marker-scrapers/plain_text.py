@@ -127,6 +127,73 @@ def parse_cue(text):
     return [m for m in markers if "seconds" in m]
 
 
+# A programme with durations, as the BBC writes it:
+#   Manuel de Falla
+#   The Three-Cornered Hat – Suite No. 2(13 mins)
+#   Giuseppe Verdi
+#   Don Carlos – 'O don fatale'(5 mins)
+#   Aida – Triumphal March(5 mins)
+# — a composer on a line of their own, then their works with "(N mins)";
+# "Unknown" is no composer; a work may have no duration.
+DURATION_RE = re.compile(r"\(\s*(?:(\d+)\s*(?:hrs?|hours?|std\.?)\s*)?(?:(\d+)\s*(?:mins?|minutes?|min\.?))?\s*\)\s*$", re.I)
+
+
+def _name_line(text):
+    words = text.split()
+    return (text.lower() == "unknown" or (1 <= len(words) <= 6 and not re.search(r"\d|[:;,()\[\]\"'–—]", text)
+            and all(w[:1].isupper() or w.lower() in ("van", "von", "de", "der", "di", "da", "du", "le", "la", "y", "del")
+                    for w in words)))
+
+
+def parse_duration_list(text):
+    """[{"title", "composer", "duration"}] for a programme with durations,
+    or None when the text isn't one (fewer than 3 "(N mins)")."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if sum(1 for l in lines if DURATION_RE.search(l) and DURATION_RE.search(l).group(0).strip("() ")) < 3:
+        return None
+    pieces, composer = [], ""
+    for i, line in enumerate(lines):
+        m = DURATION_RE.search(line)
+        has = m and m.group(0).strip("() ")
+        if has:
+            minutes = int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+            pieces.append({"title": line[:m.start()].strip(" -–—"), "composer": composer, "duration": minutes * 60})
+            continue
+        following = lines[i + 1] if i + 1 < len(lines) else ""
+        if _name_line(line) and following and not _name_line(following):
+            composer = "" if line.lower() == "unknown" else line  # a composer: their works follow
+        else:
+            pieces.append({"title": line, "composer": composer, "duration": None})
+    return [p for p in pieces if p["title"]] or None
+
+
+def duration_markers(pieces, scene):
+    """Markers for parse_duration_list's pieces: placed at the pauses in the
+    audio near where each should start (see pauses.place_by_durations),
+    else simply one after the other from 0:00. (markers, notes)."""
+    durations = [p["duration"] for p in pieces]
+    notes = f"Read as a programme with durations ({len(pieces)} pieces). "
+    known = sorted(d for d in durations if d)
+    typical = known[len(known) // 2] if known else 300  # a piece without one: about as long as the others
+    try:
+        import pauses
+        starts, snapped = pauses.place_by_durations(scene, [d or typical for d in durations])
+        notes += f"Placed by their durations and the pauses in the audio ({snapped} of {len(pieces) - 1} at a pause)."
+    except (SystemExit, Exception) as exc:  # noqa: BLE001 — no audio: the durations alone
+        starts, t = [], 0.0
+        for d in durations:
+            starts.append(t)
+            t += d or typical
+        why = str(exc) if isinstance(exc, SystemExit) else "the scene has no readable video file"
+        notes += f"Times added up from 0:00 ({why}) — shift them in the dialog."
+    markers = []
+    for i, p in enumerate(pieces):
+        title = f"{p['composer']} – {p['title']}" if p["composer"] else p["title"]
+        markers.append({"seconds": round(starts[i], 1), "end_seconds": None, "title": title,
+                        "tags": [p["composer"]] if p["composer"] else []})
+    return markers, notes
+
+
 def fill_ends(markers, duration):
     """Sorted by start; a marker without an end ends where the next starts
     (the last at the end of the video); untitled ones get "Chapter n"."""
@@ -185,6 +252,11 @@ def main():
         if found:
             markers, how = found
             print(json.dumps({"markers": fill_ends(markers, duration), "notes": how}))
+            return
+        pieces = parse_duration_list(text)
+        if pieces:
+            markers, notes = duration_markers(pieces, scene)
+            print(json.dumps({"markers": fill_ends(markers, duration), "notes": notes}))
             return
         from table_text import read_table
         table = read_table(text)

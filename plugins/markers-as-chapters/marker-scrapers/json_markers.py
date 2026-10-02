@@ -13,6 +13,8 @@ Read:
     "end" with "time_base"), yt-dlp's info file ({"chapters": [{"start_time",
     "end_time", "title"}]}), Stash's own markers ({"scene_markers": [{"seconds",
     "title", "primary_tag": {"name"}, "tags": [{"name"}]}]});
+  - medici.tv ({"chapters": [{"tc_start", "tc_end", "multiline_name":
+    "Composer\nWork\nMovement", "work": {"composers": […]}}]});
   - and in general any list of objects with a start (seconds, start,
     start_time, startTime, time, offset, timecode) and a title (title,
     name, label). Times are numbers of seconds or text like "1:02:03.5".
@@ -22,8 +24,8 @@ import json
 import re
 
 LISTS = ("markers", "chapters", "scene_markers", "segments", "items", "tracks")
-STARTS = ("seconds", "start_seconds", "start_time", "startTime", "start", "time", "offset", "timecode", "begin")
-ENDS = ("end_seconds", "end_time", "endTime", "end", "stop")
+STARTS = ("seconds", "start_seconds", "start_time", "startTime", "tc_start", "start", "time", "offset", "timecode", "begin")
+ENDS = ("end_seconds", "end_time", "endTime", "tc_end", "end", "stop")
 TITLES = ("title", "name", "label", "text")
 
 
@@ -69,10 +71,18 @@ def _marker(item):
         return None
     end = next((_time(item[k], base if k in ("end",) else None) for k in ENDS if k in item and item[k] is not None), None)
     title = next((_name(item[k]) for k in TITLES if isinstance(item.get(k), (str, dict)) and _name(item[k])), "")
+    work = item.get("work") if isinstance(item.get("work"), dict) else {}
+    composers = [c for c in (work.get("composers") or item.get("composers") or []) if isinstance(c, str) and c.strip()]
+    # medici.tv: "multiline_name" is "Composer\nWork\nMovement" — the whole
+    # piece; the composers come as tags.
+    if isinstance(item.get("multiline_name"), str) and item["multiline_name"].strip():
+        lines = [x.strip() for x in item["multiline_name"].splitlines() if x.strip()]
+        title = " – ".join(lines)
     if not title and isinstance(item.get("tags"), dict):  # ffprobe: tags.title
         title = _name(item["tags"].get("title"))
     tags = item.get("tags")
     tags = [_name(t) for t in tags if _name(t)] if isinstance(tags, list) else []
+    tags += [c for c in composers if c not in tags]
     return {
         "seconds": start,
         "end_seconds": end if end is not None and end > start else None,

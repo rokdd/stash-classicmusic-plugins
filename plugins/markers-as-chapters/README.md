@@ -119,11 +119,19 @@ Built in:
   instead, with its audio files beside it.
 
   **JSON** — what **Copy as text → JSON** writes, and the chapter lists of
-  other tools: ffprobe (`-show_chapters -of json`), yt-dlp's info file,
+  other tools: medici.tv (chapters with composer, work and movement),
+  ffprobe (`-show_chapters -of json`), yt-dlp's info file,
   Stash's own marker data, or any list of objects with a start (`seconds`,
   `start`, `start_time`, `time` …) and a title — times as seconds or as
   "1:02:03". Primary tags and tags come along. A CUE sheet copied out with
   **Copy as text** comes back with its primary tags, tags and ends too.
+
+  **Programmes with durations**, as the BBC lists them — a composer on a
+  line of their own, then their works with "(13 mins)" ("Unknown" is no
+  composer; a work may have no duration). The pieces are placed by their
+  durations and the pauses in the audio: each starts at the pause nearest
+  to where the one before should end; without audio the durations are
+  added up from 0:00. Titled "Composer – Work", with the composer as tag.
 
   **Tables** — a programme or tracklist in columns, split by tabs, `;`,
   `|`, several spaces or commas (also CSV with quotes), e.g. copied from a
@@ -242,7 +250,8 @@ composer is preselected; "Sohn" prefers the junior, "Vater" the senior
 one). **Import selected** creates the performers, tagged Composer, with
 the name as the titles have it as an extra alias — so the composer tag
 Tag Improvements makes from it matches those titles exactly — and the
-proposals below are worked out again.
+proposals below are worked out again. The preview shows each title once,
+with just the parts that go struck through.
 
 ### New composer
 
