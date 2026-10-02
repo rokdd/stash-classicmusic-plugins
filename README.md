@@ -165,8 +165,8 @@ Tag Merge** plugin.
   itself are replaced, unless you turn on "Overwrite".
 - **Better tag search** in every tag field: every word, in any order, in a
   tag's name, aliases, description and parent tags; parent tags shown after
-  each name; a switch in every tag dropdown makes it a full-height panel
-  with images and descriptions.
+  each name; a switch in every tag dropdown makes it a full-height grid of
+  tiles with images and descriptions.
 - **Scrape with…** on a scene's Edit tab (a scraper or StashDB) offers the
   scene's **existing tags plus the scraped ones**, instead of replacing
   them.
