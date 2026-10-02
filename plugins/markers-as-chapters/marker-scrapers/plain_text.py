@@ -15,6 +15,10 @@ trimmed.
 A CUE sheet (TRACK / TITLE / PERFORMER / INDEX 01 mm:ss:ff) is read
 track by track; PERFORMER becomes a tag.
 
+JSON — Markers as Chapters' own export ("Copy as text…" → JSON), or the
+chapter lists of ffprobe, yt-dlp and Stash (see json_markers.py) — is read
+as it is, with primary tags and tags.
+
 A table — columns split by tabs, ";", "|", several spaces or commas — is
 read column by column (see table_text.py): start time or duration,
 composer, title. Its markers are titled "Composer – Title", with the
@@ -67,11 +71,20 @@ def parse_lines(text):
     return markers
 
 
+def _cue_time(value):
+    mm, ss, ff = (int(x) for x in value.strip().split(":"))
+    return mm * 60 + ss + ff / 75
+
+
 def parse_cue(text):
     """Tracks of a CUE sheet. Each also gets "file" — which FILE entry it's
     in, counted from 1 (0: before any) — and that entry's "file_name": a
     sheet with several files starts every file's tracks at 0:00 again (see
-    chapter_files.py, which adds up the files' lengths)."""
+    chapter_files.py, which adds up the files' lengths).
+
+    Also read, in a track: REM PRIMARY_TAG "…", REM TAGS "a; b" (all tags —
+    else PERFORMER is the tag) and REM END mm:ss:ff — what "Copy as text →
+    CUE sheet" writes, so a sheet copied out comes back the same."""
     markers, current = [], None
     file_no, file_name = 0, ""
     for raw in text.splitlines():
@@ -87,6 +100,19 @@ def parse_cue(text):
         if word == "TRACK":
             current = {"title": "", "tags": [], "file": file_no, "file_name": file_name}
             markers.append(current)
+        elif word == "REM" and current is not None:
+            key, _, rem = rest.strip().partition(" ")
+            rem_value = rem.strip().strip('"')
+            key = key.upper()
+            if key == "PRIMARY_TAG":
+                current["primary_tag"] = rem_value
+            elif key == "TAGS":
+                current["all_tags"] = [t.strip() for t in re.split(r"[;,]", rem_value) if t.strip()]
+            elif key == "END":
+                try:
+                    current["end_seconds"] = _cue_time(rem_value)
+                except ValueError:
+                    pass
         elif current is None:
             continue
         elif word == "TITLE":
@@ -94,8 +120,10 @@ def parse_cue(text):
         elif word == "PERFORMER" and value:
             current["tags"] = [value]
         elif word == "INDEX" and value.startswith("01 "):
-            mm, ss, ff = (int(x) for x in value[3:].strip().split(":"))
-            current["seconds"] = mm * 60 + ss + ff / 75
+            current["seconds"] = _cue_time(value[3:])
+    for m in markers:
+        if "all_tags" in m:
+            m["tags"] = m.pop("all_tags")
     return [m for m in markers if "seconds" in m]
 
 
@@ -147,6 +175,12 @@ def main():
     duration = max([f.get("duration") or 0 for f in scene.get("files") or []] or [0])
 
     if not is_cue:
+        from json_markers import parse_json
+        found = parse_json(text)
+        if found:
+            markers, how = found
+            print(json.dumps({"markers": fill_ends(markers, duration), "notes": how}))
+            return
         from table_text import read_table
         table = read_table(text)
         if table:

@@ -102,6 +102,13 @@ Built in:
   no files to measure; use it as **Chapter file next to the video**
   instead, with its audio files beside it.
 
+  **JSON** — what **Copy as text → JSON** writes, and the chapter lists of
+  other tools: ffprobe (`-show_chapters -of json`), yt-dlp's info file,
+  Stash's own marker data, or any list of objects with a start (`seconds`,
+  `start`, `start_time`, `time` …) and a title — times as seconds or as
+  "1:02:03". Primary tags and tags come along. A CUE sheet copied out with
+  **Copy as text** comes back with its primary tags, tags and ends too.
+
   **Tables** — a programme or tracklist in columns, split by tabs, `;`,
   `|`, several spaces or commas (also CSV with quotes), e.g. copied from a
   website or a spreadsheet. The columns are recognised by a header row
@@ -135,7 +142,8 @@ Built in:
   gets its time in the whole recording. The files must be beside the
   sheet — by the name in the sheet, or just its file name (so
   `C:\Rips\side 2.flac` is found as `side 2.flac`). If one is missing or
-  can't be read, the dialog says so.
+  can't be read, the dialog says so. Also read: `Concert.markers.json`,
+  `Concert.chapters.json` or `Concert.json` (see JSON under Plain text).
 
 ### Checked against the audio
 
@@ -205,7 +213,13 @@ markers the scene already has. Formats:
 - **With end times** — `0:00:02 – 0:30:10 Symphonie Nr. 5`;
 - **Table**, tab-separated (start, end, title, tags) — pastes into a
   spreadsheet; Plain text reads it back too;
-- **CUE sheet**, named after the video file;
+- **CUE sheet**, named after the video file — with everything: the title,
+  the first tag as PERFORMER, and in `REM` lines (which players skip) the
+  primary tag, all tags and the end; Plain text reads it back the same
+  (times to 1/75 s, double quotes in titles become single ones);
+- **JSON** — every field exactly (start, end, title, primary tag, tags);
+  Plain text reads it back, and so does a `<video>.markers.json` next to
+  the video;
 - **ffmpeg chapters** (ffmetadata) — ffmpeg can write them into a video:
   `ffmpeg -i in.mp4 -i chapters.ffmetadata -map_metadata 1 -codec copy out.mp4`.
 

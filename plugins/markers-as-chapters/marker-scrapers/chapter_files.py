@@ -11,6 +11,8 @@ first it finds:
   .chapters.xml, .xml         Matroska chapters (mkvmerge / mkvextract)
   .ffmetadata, .ffmeta        ffmpeg metadata ([CHAPTER] START / END / title)
   .info.json                  yt-dlp's info file ("chapters")
+  .markers.json, .chapters.json, .json
+                              markers as JSON (see json_markers.py)
   .txt                        a tracklist (see plain_text.py)
 e.g. "Concert.mp4" + "Concert.cue" or "Concert.mp4.chapters.txt".
 
@@ -29,7 +31,7 @@ from encoding_fix import decode_bytes
 from plain_text import parse_cue, parse_lines, fill_ends
 
 ENDINGS = (".cue", ".chapters.txt", ".chapters", ".chapters.xml", ".xml",
-           ".ffmetadata", ".ffmeta", ".info.json", ".txt")
+           ".ffmetadata", ".ffmeta", ".info.json", ".markers.json", ".chapters.json", ".json", ".txt")
 
 
 def clock(text):
@@ -98,6 +100,10 @@ def parse(path, text):
         return parse_cue(text)
     if name.endswith(".info.json"):
         return parse_info_json(text)
+    if name.endswith(".json"):
+        from json_markers import parse_json
+        found = parse_json(text)
+        return found[0] if found else []
     if name.endswith(".xml"):
         return parse_matroska(text)
     if text.lstrip().startswith(";FFMETADATA") or name.endswith((".ffmetadata", ".ffmeta")):

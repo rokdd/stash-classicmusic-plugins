@@ -236,7 +236,7 @@
     });
     const file = el("input", {
       type: "file",
-      accept: ".txt,.cue,.md,.csv,.srt,.vtt,text/*",
+      accept: ".txt,.cue,.md,.csv,.tsv,.json,.srt,.vtt,text/*,application/json",
       className: "form-control-file",
       onchange: () => {
         const f = file.files && file.files[0];
@@ -434,8 +434,9 @@
     tracklist: { label: "Tracklist (0:00 Title)", ext: "txt" },
     ranges: { label: "With end times (0:00 – 5:12 Title)", ext: "txt" },
     table: { label: "Table, tab-separated (for a spreadsheet)", ext: "tsv" },
-    cue: { label: "CUE sheet", ext: "cue" },
+    cue: { label: "CUE sheet (everything — Plain text reads it back)", ext: "cue" },
     ffmeta: { label: "ffmpeg chapters (ffmetadata)", ext: "ffmetadata" },
+    json: { label: "JSON (everything — Plain text reads it back)", ext: "markers.json" },
   };
 
   function exportText(format, items, withTags, info) {
@@ -464,13 +465,37 @@
       const lines = [];
       if (info.title) lines.push(`TITLE "${q(info.title)}"`);
       lines.push(`FILE "${q(info.file || "video")}" WAVE`);
+      // Everything, so the CUE reader gets back what went in: the title as
+      // it is, the first tag as PERFORMER (players show "Performer –
+      // Title"), and in REM lines (which players skip) the primary tag,
+      // all tags and the end.
       items.forEach((m, i) => {
+        const e = endOf(m, i);
         lines.push(`  TRACK ${String(i + 1).padStart(2, "0")} AUDIO`);
-        lines.push(`    TITLE "${q(withTags ? label(m) : m.title)}"`);
+        lines.push(`    TITLE "${q(m.title)}"`);
         if (m.tags && m.tags.length) lines.push(`    PERFORMER "${q(m.tags[0])}"`);
+        if (m.primary_tag) lines.push(`    REM PRIMARY_TAG "${q(m.primary_tag)}"`);
+        if (m.tags && m.tags.length) lines.push(`    REM TAGS "${q(m.tags.join("; "))}"`);
+        if (e != null) lines.push(`    REM END ${frames(e)}`);
         lines.push(`    INDEX 01 ${frames(m.seconds)}`);
       });
       return lines.join("\n");
+    }
+    if (format === "json") {
+      // Everything, field by field: Plain text (and a chapter file
+      // "<video>.markers.json") read it back as it is.
+      return JSON.stringify({
+        version: 1,
+        title: info.title || undefined,
+        file: info.file || undefined,
+        markers: items.map((m) => ({
+          seconds: Math.round(m.seconds * 1000) / 1000,
+          end_seconds: m.end_seconds == null ? null : Math.round(m.end_seconds * 1000) / 1000,
+          title: m.title || "",
+          primary_tag: m.primary_tag || "",
+          tags: m.tags || [],
+        })),
+      }, null, 2);
     }
     if (format === "ffmeta") {
       const esc = (t) => String(t || "").replace(/([=;#\\\n])/g, "\\$1");
@@ -559,7 +584,8 @@
       ]);
       const items = ((data.findScene || {}).scene_markers || [])
         .map((m) => ({ seconds: m.seconds, end_seconds: m.end_seconds == null ? null : m.end_seconds,
-          title: m.title || (m.primary_tag || {}).name || "", tags: (m.tags || []).map((t) => t.name) }))
+          title: m.title || (m.primary_tag || {}).name || "", primary_tag: (m.primary_tag || {}).name || "",
+          tags: (m.tags || []).map((t) => t.name) }))
         .sort((a, b) => a.seconds - b.seconds);
       if (!items.length) {
         dialog.body.replaceChildren(el("p", { textContent: "This scene has no markers yet." }));
@@ -984,7 +1010,8 @@
     const picked = () => rows.filter((r) => r.pick && !r.notMusic)
       .map((r, i) => {
         const t = textOf(r);
-        return { seconds: shifted(r.seconds), end_seconds: shifted(endOf(r, rows.indexOf(r))), title: t.title, tags: t.tags };
+        return { seconds: shifted(r.seconds), end_seconds: shifted(endOf(r, rows.indexOf(r))), title: t.title, tags: t.tags,
+          primary_tag: (t.primary_tag || "").trim() || primaryAll.value.trim() || DEFAULT_PRIMARY };
       })
       .sort((a, b) => a.seconds - b.seconds);
     const asText = el("button", { type: "button", className: "btn btn-secondary mr-auto", textContent: "Copy as text…",
