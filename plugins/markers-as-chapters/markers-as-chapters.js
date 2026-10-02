@@ -257,7 +257,22 @@
 
   async function scrape(scraper, url, text) {
     const dialog = openDialog(`Scrape markers — ${scraper.name}`);
-    dialog.body.append(el("p", { textContent: url ? `Scraping ${url} …` : "Scraping …" }));
+    // How long it's been working — reading the audio for the pauses (titles
+    // without times) can take minutes on a long concert and a small server.
+    const status = el("p", {});
+    const hint = el("p", { className: "small text-muted" });
+    const began = Date.now();
+    const tick = () => {
+      const s = Math.round((Date.now() - began) / 1000);
+      status.textContent = `${url ? `Scraping ${url}` : "Scraping"} … ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      if (s >= 8) {
+        hint.textContent = "Still working. Finding the pauses in the audio reads the whole soundtrack — for a long concert " +
+          "that can take a few minutes the first time (it's remembered for the next time). Closing this dialog doesn't stop it.";
+      }
+    };
+    tick();
+    const timer = setInterval(() => { if (!status.isConnected) clearInterval(timer); else tick(); }, 1000);
+    dialog.body.append(status, hint);
     let result;
     let settings = {};
     try {
@@ -269,9 +284,11 @@
       const plugins = (conf && conf.configuration.plugins) || {};
       settings = { ...(plugins[OLD_PLUGIN_ID] || {}), ...(plugins[PLUGIN_ID] || {}) };
     } catch (err) {
+      clearInterval(timer);
       dialog.body.replaceChildren(el("div", { className: "alert alert-danger", style: { whiteSpace: "pre-wrap" }, textContent: String(err.message || err) }));
       return;
     }
+    clearInterval(timer);
     if (!result.markers.length) {
       dialog.body.replaceChildren(el("p", { textContent: result.notes || "No markers found." }));
       return;

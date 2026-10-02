@@ -73,12 +73,28 @@ Built in:
   of the video). A **CUE sheet** works too: one marker per track, its
   PERFORMER as a tag.
 
+  **Tables** — a programme or tracklist in columns, split by tabs, `;`,
+  `|`, several spaces or commas (also CSV with quotes), e.g. copied from a
+  website or a spreadsheet. The columns are recognised by a header row
+  (Zeit/Time, Dauer/Duration, Komponist/Composer, Titel/Werk/Title,
+  Interpret/Performer, Nr.) or by their content: increasing times are
+  start times, other times durations (added up from 0:00, as in a CD
+  tracklist); 1, 2, 3 … is a track number; the column with repeated names
+  is the composer, the one with work numbers ("op.", "Nr.") the title,
+  another name column the performers. Markers are titled "Composer –
+  Title", with the composer as a tag; the dialog says how the table was
+  read ("tab-separated, 3 columns: start time, composer, title"). Without
+  a time column the rows are placed at the pauses, as below.
+
   **Titles only** — no line has a time: the lines are taken as the pieces
   in order, e.g. the programme from ARD, BBC or the concert hall's site,
   which list the pieces but no times. The video is split at the longest
   pauses in its audio into exactly that many pieces, named in order (with
   too few pauses, shorter ones count too); the dialog says how many pauses
   were found, and which titles got no marker if there were too few.
+  Reading the audio takes a while for a long concert on a small server —
+  the dialog shows how long it's been working; the result is remembered,
+  so the next time is instant.
 - **Chapter file next to the video** — a file with the video's name next
   to it on the server: `Concert.cue`, `Concert.chapters.txt` (OGM
   chapters or a tracklist), `Concert.chapters.xml` (Matroska chapters, as

@@ -46,7 +46,7 @@ def loudness(path, ffmpeg):
     samples = int(8000 * WINDOW)
     proc = subprocess.run(
         [ffmpeg, "-nostats", "-v", "error", "-i", path, "-map", "0:a:0", "-vn", "-sn", "-dn",
-         "-af", f"aresample=8000,asetnsamples=n={samples}:p=0,astats=metadata=1:reset=1,"
+         "-af", f"aformat=channel_layouts=mono,aresample=8000,asetnsamples=n={samples}:p=0,astats=metadata=1:reset=1,"
                 "ametadata=mode=print:key=lavfi.astats.Overall.RMS_level:file=-",
          "-f", "null", "-"],
         capture_output=True, text=True,

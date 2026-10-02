@@ -15,6 +15,11 @@ trimmed.
 A CUE sheet (TRACK / TITLE / PERFORMER / INDEX 01 mm:ss:ff) is read
 track by track; PERFORMER becomes a tag.
 
+A table — columns split by tabs, ";", "|", several spaces or commas — is
+read column by column (see table_text.py): start time or duration,
+composer, title. Its markers are titled "Composer – Title", with the
+composer as a tag.
+
 Titles only — no line has a time: the lines are the pieces in order, and
 they're placed at the pauses in the scene's audio (see pauses.py): the
 video is split at the longest pauses into as many pieces as there are
@@ -97,11 +102,58 @@ def fill_ends(markers, duration):
     return markers
 
 
+def table_markers(rows, scene):
+    """Markers from read_table's rows, or (titles, tags) when there are no
+    times: ([markers], notes) / (None, (titles, tags))."""
+    def title_of(r):
+        composer, title = r.get("composer") or "", r.get("title") or ""
+        return f"{composer} – {title}" if composer and title else (title or composer)
+
+    def tags_of(r):
+        return [r["composer"]] if r.get("composer") and r.get("title") else []
+
+    if any(r.get("start") is not None for r in rows):
+        markers = [{"seconds": r["start"], "end_seconds": r.get("end"), "title": title_of(r), "tags": tags_of(r)}
+                   for r in rows if r.get("start") is not None]
+        return markers, ""
+    if any(r.get("duration") for r in rows):
+        # Durations (a CD tracklist): each piece starts where the one before
+        # ends, counted from 0:00.
+        markers, t = [], 0.0
+        for r in rows:
+            d = r.get("duration") or 0
+            markers.append({"seconds": t, "end_seconds": t + d if d else None, "title": title_of(r), "tags": tags_of(r)})
+            t += d
+        return markers, ("The times are durations, added up from 0:00 — if the music starts later, "
+                         "shift all times (the Audio column suggests by how much).")
+    return None, ([title_of(r) for r in rows], [tags_of(r) for r in rows])
+
+
 def main():
     payload = json.load(sys.stdin)
     text = payload.get("text") or ""
     scene = payload.get("scene") or {}
     is_cue = re.search(r"^\s*INDEX\s+01\s", text, re.M | re.I)
+    duration = max([f.get("duration") or 0 for f in scene.get("files") or []] or [0])
+
+    if not is_cue:
+        from table_text import read_table
+        table = read_table(text)
+        if table:
+            rows, how = table
+            markers, extra = table_markers(rows, scene)
+            if markers is None:
+                import pauses
+                titles, tags = extra
+                markers, notes = pauses.scrape_titles(scene, titles)
+                for m, t in zip(markers, tags):
+                    m["tags"] = t
+                print(json.dumps({"markers": markers, "notes":
+                    f"{how} No times, so the rows were placed at the pauses in the audio. {notes}"}))
+                return
+            print(json.dumps({"markers": fill_ends(markers, duration), "notes": f"{how} {extra}".strip()}))
+            return
+
     markers = parse_cue(text) if is_cue else parse_lines(text)
     if not markers and not is_cue:
         import pauses  # titles without times: place them at the pauses
@@ -111,7 +163,6 @@ def main():
             print(json.dumps({"markers": markers,
                               "notes": "No times in the text, so the lines were placed at the pauses in the audio. " + notes}))
             return
-    duration = max([f.get("duration") or 0 for f in scene.get("files") or []] or [0])
     print(json.dumps({"markers": fill_ends(markers, duration), "notes": ""}))
 
 
