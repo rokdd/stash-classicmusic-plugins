@@ -527,20 +527,36 @@ def main():
     urls = [data["url"]] if data.get("url") else []
     if mode == "fragment":
         urls = list(data.get("urls") or []) + ([data["url"]] if data.get("url") else [])
-    for url in urls:
-        result = scrape(url)
-        if result:
-            print(json.dumps(result))
-            return
+    problems = []
+    # Scrape with… on a scene: medici.tv's JSON next to the video first — it
+    # has more than any page (cast, composers, chapters) — keeping the
+    # scene's URLs.
     if mode == "fragment" and data.get("id"):
         try:
             result = json_beside(data["id"])
         except Exception as exc:  # noqa: BLE001 — Stash not reachable from here: just no file
-            sys.stderr.write(f"Classical Concerts: couldn't look for a JSON file next to the video ({exc})\n")
+            problems.append(f"couldn't look for a JSON file next to the video ({exc})")
             result = None
+        if result:
+            result["urls"] = list(dict.fromkeys((result.get("urls") or []) + list(data.get("urls") or [])))
+            print(json.dumps(result))
+            return
+    # Then the URLs, one after the other: one that fails (e.g. a programme
+    # medici.tv doesn't show any more) doesn't stop the next.
+    for url in urls:
+        try:
+            result = scrape(url)
+        except SystemExit as exc:
+            problems.append(f"{url}: {exc.code}")
+            continue
+        except Exception as exc:  # noqa: BLE001
+            problems.append(f"{url}: {type(exc).__name__}: {exc}")
+            continue
         if result:
             print(json.dumps(result))
             return
+    if problems:
+        raise SystemExit("Nothing found — " + "; ".join(problems))
     raise SystemExit("No URL of ARTE, ORF ON, ARD Mediathek, ZDF, 3sat, BBC or medici.tv on this scene, "
                      "and no medici.tv JSON next to its video.")
 
