@@ -20,6 +20,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+from encoding_fix import decode_bytes
 from plain_text import parse_cue, parse_lines, fill_ends
 
 ENDINGS = (".cue", ".chapters.txt", ".chapters", ".chapters.xml", ".xml",
@@ -110,13 +111,7 @@ def candidates(video):
 
 def read(path):
     with open(path, "rb") as f:
-        raw = f.read()
-    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
-        try:
-            return raw.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", "replace")
+        return decode_bytes(f.read())
 
 
 def main():

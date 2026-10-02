@@ -69,6 +69,8 @@ OLD_PLUGIN_ID = "markerImprovements"
 SETTING_KEYS = ("scrapedMarkerTag", "markerScrapersPath", "ytdlpPath")
 
 BUILT_IN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "marker-scrapers")
+sys.path.insert(0, BUILT_IN_DIR)
+from encoding_fix import fix_text  # noqa: E402 — lives with the scrapers
 SCRIPT_TIMEOUT = 180
 
 
@@ -259,9 +261,9 @@ def normalise(markers):
         out.append({
             "seconds": round(float(m["seconds"]), 3),
             "end_seconds": round(float(m["end_seconds"]), 3) if m.get("end_seconds") is not None else None,
-            "title": str(m.get("title") or ""),
-            "primary_tag": str(m.get("primary_tag") or ""),
-            "tags": [str(t) for t in (tags if isinstance(tags, list) else [tags]) if t],
+            "title": fix_text(str(m.get("title") or "")),
+            "primary_tag": fix_text(str(m.get("primary_tag") or "")),
+            "tags": [fix_text(str(t)) for t in (tags if isinstance(tags, list) else [tags]) if t],
         })
     out.sort(key=lambda m: m["seconds"])
     return out

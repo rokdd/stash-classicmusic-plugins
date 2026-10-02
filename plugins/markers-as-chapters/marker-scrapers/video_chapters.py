@@ -4,7 +4,9 @@ stdin: {"scene": {...}}  → stdout: {"markers": [...], "notes": "..."}.
 Uses ffprobe (STASH_FFPROBE: Stash's own, else the one on the PATH).
 
 Some files carry broken chapters: every one starting at 0:00, titles like
-"nan", "Init" or the file's own name. Then:
+"nan", "Init" or the file's own name, titles in the wrong encoding. Then:
+  - titles are decoded right (see encoding_fix.py: "sch\xf6nen" and
+    "schÃ¶nen" both become "schönen");
   - titles that aren't chapter titles are left out;
   - for MP4 / M4V / MOV the QuickTime chapter track is read directly (see
     mp4_chapters.py) — it may still have the times ffprobe lost;
@@ -19,21 +21,25 @@ import subprocess
 import sys
 
 import mp4_chapters
+from encoding_fix import decode_bytes, fix_text
 
 JUNK = {"", "nan", "none", "null", "init", "untitled", "chapter"}
 
 
 def ffprobe_chapters(path, ffprobe):
     out = subprocess.run(
-        [ffprobe, "-v", "error", "-show_chapters", "-of", "json", path],
+        # string_validation=ignore: the titles' bytes as they are — ffprobe
+        # would put "�" in place of anything that isn't UTF-8, and that
+        # can't be undone; decode_bytes reads those parts as Windows-1252.
+        [ffprobe, "-v", "error", "-show_chapters", "-of", "json=string_validation=ignore", path],
         capture_output=True, timeout=120,
     )
     if out.returncode != 0:
         raise RuntimeError(out.stderr.decode("utf-8", "replace").strip() or f"ffprobe failed on {path}")
-    chapters = json.loads(out.stdout.decode("utf-8", "replace") or "{}").get("chapters") or []
+    chapters = json.loads(decode_bytes(out.stdout) or "{}").get("chapters") or []
     return [(float(c.get("start_time") or 0),
              float(c["end_time"]) if c.get("end_time") else None,
-             ((c.get("tags") or {}).get("title") or "").strip()) for c in chapters]
+             fix_text(((c.get("tags") or {}).get("title") or "").strip())) for c in chapters]
 
 
 def is_junk(title, path):

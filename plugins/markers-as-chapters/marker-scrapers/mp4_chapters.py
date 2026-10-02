@@ -13,6 +13,8 @@ video.
 
 import struct
 
+from encoding_fix import decode_bytes, fix_text
+
 CONTAINERS = {b"moov", b"trak", b"mdia", b"minf", b"stbl", b"edts", b"dinf", b"udta"}
 
 
@@ -67,12 +69,7 @@ def _read_moov(path):
 
 
 def _decode(raw):
-    if raw.startswith(b"\xfe\xff") or raw.startswith(b"\xff\xfe"):
-        return raw.decode("utf-16", "replace")
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return raw.decode("cp1252", "replace")
+    return fix_text(decode_bytes(raw))
 
 
 def _text_track(moov, start, end):

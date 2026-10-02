@@ -107,6 +107,14 @@ otherwise the **Primary tag for scraped markers** setting is used (empty:
 doesn't exist yet is created. Other tags are matched by name or alias;
 ones that don't exist are left out (and listed).
 
+## Text in the wrong encoding
+
+Old tools often write titles in Windows-1252 instead of UTF-8, which shows
+up as "sch�nen" or "schÃ¶nen". This is set right everywhere — chapters in
+the video file (read as raw bytes, before ffprobe could turn them into
+"�"), its chapter track, chapter files next to it, text files you pick in
+the dialog, and every scraper's titles and tags: "schönen".
+
 ## Composers and other tags from the titles
 
 Every scraper's markers get tags filled in from their titles: tags below

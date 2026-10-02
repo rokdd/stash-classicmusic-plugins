@@ -199,6 +199,19 @@
 
   // -- scraping and the review dialog --------------------------------------------------
 
+  // A text file's content in the right encoding: UTF-16 with a byte order
+  // mark, else UTF-8 — and when that isn't valid, Windows-1252 (old
+  // tracklists and CUE sheets often are: "schönen" as one byte).
+  function decodeText(bytes) {
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch (e) {
+      return new TextDecoder("windows-1252").decode(bytes);
+    }
+  }
+
   // Text scrapers: paste the text, or pick a file (read in the browser, so
   // from this device), check and edit it, then scrape.
   function textDialog(scraper) {
@@ -220,8 +233,8 @@
         const f = file.files && file.files[0];
         if (!f) return;
         const reader = new FileReader();
-        reader.onload = () => { area.value = String(reader.result || ""); };
-        reader.readAsText(f);
+        reader.onload = () => { area.value = decodeText(new Uint8Array(reader.result)); };
+        reader.readAsArrayBuffer(f);
       },
     });
     dialog.body.append(
