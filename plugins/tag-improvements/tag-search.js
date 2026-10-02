@@ -245,7 +245,10 @@
       `${large_} { position: fixed !important; top: 8px !important; bottom: 8px !important; left: 50% !important;` +
         " right: auto !important; transform: translateX(-50%); width: min(1100px, 96vw) !important; margin: 0 !important;" +
         " z-index: 2000 !important; display: flex !important; flex-direction: column;" +
-        " box-shadow: 0 0 0 100vmax rgba(0,0,0,.45) !important; }",
+        // Stash's dropdown colour, set outright: the panel stands in front
+        // of the page, which is dimmed behind it.
+        " background-color: #394b59 !important; color: #f5f8fa; border-radius: 6px; overflow: hidden;" +
+        " box-shadow: 0 0 0 100vmax rgba(0,0,0,.55), 0 8px 32px rgba(0,0,0,.6) !important; }",
       `${large_} ${LIST} { max-height: none !important; flex: 1 1 auto; min-height: 0; position: static !important; }`,
       `.${SWITCH_CLASS} { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 0.8em;` +
         " border-bottom: 1px solid rgba(128,128,128,.3); }",
@@ -258,12 +261,18 @@
       ".tag-search-parents { margin-left: 6px; opacity: .6; font-size: .85em; }",
       ".tag-search-extra > .tag-search-image, .tag-search-extra > .tag-search-description { display: none; }",
       // Large: a grid of tiles — image on top, name, parents and description below.
+      // grid-auto-rows: max-content — in a list of fixed height, rows of
+      // tiles that clip their overflow would otherwise be squeezed to share
+      // the height (with hundreds of tags: a few pixels each).
       `${large_} ${LIST} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));` +
-        " gap: 6px; padding: 6px !important; align-content: start; }",
+        " grid-auto-rows: max-content; gap: 6px; padding: 6px !important; align-content: start; }",
       `${large_} ${OPTION} { display: block !important; padding: 6px !important; border-radius: 4px; overflow: hidden;` +
-        " white-space: normal !important; word-break: break-word; }",
-      `${large_} .tag-search-extra > .tag-search-image { display: block; width: 100%; height: 90px; object-fit: contain;` +
-        " background: #fff; margin-bottom: 4px; }",
+        " white-space: normal !important; word-break: break-word; min-height: min-content;" +
+        " background-color: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }",
+      `${large_} ${OPTION}[class*="--is-focused"] { background-color: rgba(138,155,168,.3) !important; border-color: rgba(255,255,255,.35); }`,
+      `.${LARGE_CLASS} .${MENU_CLASS} .${SWITCH_CLASS} { background-color: rgba(0,0,0,.2); }`,
+      `${large_} .tag-search-extra > .tag-search-image { display: block; width: 100%; height: 90px; min-height: 90px;` +
+        " object-fit: contain; background: #fff; margin-bottom: 4px; border-radius: 3px; }",
       `${large_} .tag-search-extra > .tag-search-description { display: -webkit-box; margin-top: 2px; font-size: 0.75em;` +
         " opacity: 0.75; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }",
     ].join("\n");
