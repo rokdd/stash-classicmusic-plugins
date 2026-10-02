@@ -1,0 +1,8 @@
+name: Sidecar / local files
+# Scenes from the files next to their video: a medici.tv JSON, a Kodi /
+# Jellyfin NFO, yt-dlp's .info.json, and a cover image. Nothing online.
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - sidecar.py

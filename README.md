@@ -18,6 +18,7 @@ And scrapers:
 |---|---|
 | [Classical Music](scrapers/ClassicalMusic/) | Performers: composers, conductors, soloists, orchestras from Wikidata — Wikipedia text, portrait, dates, country, roles and (Open Opus) the composer's epoch as tags |
 | [Classical Concerts](scrapers/ClassicalConcerts/) | Scenes from ARTE (ARTE Concert), ORF ON, ARD Mediathek, ZDF, 3sat, BBC and medici.tv — title, programme, concert date, cover, broadcaster, and orchestra, conductor, soloists and composers as performers |
+| [Sidecar / local files](scrapers/Sidecar/) | Scenes from the files next to the video: a medici.tv JSON, a Kodi / Jellyfin NFO, yt-dlp's .info.json and a cover image |
 
 ## Install
 
@@ -46,8 +47,8 @@ Settings → Plugins → **Reload plugins**.
    ```
    https://rokdd.github.io/stash-classicmusic-plugins/main/scrapers/index.yml
    ```
-2. Tick **Classical Music (Wikidata, Open Opus)** and **Classical Concerts
-   (ARTE, ORF, ARD, ZDF, 3sat, BBC)** and click **Install**.
+2. Tick **Classical Music (Wikidata, Open Opus)**, **Classical Concerts** and
+   **Sidecar / local files** and click **Install**.
 3. On a performer: **Edit → Scrape with… → Classical Music**, search by
    name (also just a surname: "Mutter", "Karajan") and pick the right
    one — or paste a Wikidata, Wikipedia or MusicBrainz link into the URL
