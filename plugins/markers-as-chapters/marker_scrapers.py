@@ -659,14 +659,18 @@ def composer_proposals(gql, settings, scene_id=None):
     if not composers:
         return [], f"No tags under {', '.join(parents) or '(none)'} — nothing to look for."
     matcher = TagMatcher(composers)
-    by_name = {_plain(t["name"]): t for t in composers}
-    proposals = []
+    by_name = {_plain(t["name"]) for t in composers} and {_plain(t["name"]): t for t in composers}
+    proposals, missing = [], {}
     for m in find_markers(gql, scene_id):
         title = m.get("title") or ""
         if not title.strip():
             continue
         have = {_plain(t["name"]) for t in m.get("tags") or []}
         found = [by_name[_plain(n)] for n in matcher.match(title) if _plain(n) in by_name]
+        if not found and not any(k in by_name for k in have):
+            head = missing_composer(title)
+            if head:
+                missing[head] = missing.get(head, 0) + 1
         add = [t for t in found if _plain(t["name"]) not in have]
         named = found + [by_name[k] for k in have if k in by_name]
         new_title = strip_names(title, [[t["name"], *(t.get("aliases") or [])] for t in named]) if named else tidy(title)
@@ -684,7 +688,29 @@ def composer_proposals(gql, settings, scene_id=None):
             "tag_ids": [str(t["id"]) for t in m.get("tags") or []],
         })
     proposals.sort(key=lambda p: (p["scene"], p["seconds"] or 0))
+    composer_proposals.missing = [{"name": n, "count": c, "query": search_name(n)} for n, c in missing.items()]
     return proposals, ""
+
+
+def missing_composer(title):
+    """The name before the separator of a title that names no known composer
+    — "Karl Komzak Sohn - Badner Madln" → "Karl Komzak Sohn" — if it looks
+    like a person's name, else None."""
+    m = re.match(r"^\s*(.+?)\s*(?:\s[-–—]\s|:\s|\s\|\s)", title or "")
+    if not m:
+        return None
+    head = tidy(m.group(1))
+    words = head.split()
+    if not 2 <= len(words) <= 6 or re.search(r"\d|[()\[\]]", head):
+        return None
+    ok = all(w[:1].isupper() or w.lower().strip(".") in PARTICLES or w.lower().strip(".") in SUFFIXES for w in words)
+    return head if ok else None
+
+
+def search_name(name):
+    """The name to search for: without Sohn / Vater / II / jr. …"""
+    words = [w for w in name.split() if w.lower().strip(".") not in SUFFIXES or len(w) == 1]
+    return " ".join(words) or name
 
 
 def apply_composers(gql, proposals, only_ids=None, log=None):
@@ -704,7 +730,7 @@ def apply_composers(gql, proposals, only_ids=None, log=None):
 def marker_composers(gql, args, settings):
     proposals, note = composer_proposals(gql, settings, args.get("scene_id") or None)
     if str(args.get("apply", "false")).lower() != "true":
-        return {"proposals": proposals, "notes": note}
+        return {"proposals": proposals, "notes": note, "missing": getattr(composer_proposals, "missing", [])}
     only = None
     if args.get("ids"):
         only = {str(i) for i in json.loads(args["ids"])}

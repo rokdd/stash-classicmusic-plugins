@@ -582,55 +582,146 @@
   // ticked ones.
   async function composersDialog() {
     const dialog = openDialog("Composers from the marker titles");
-    dialog.body.append(el("p", { textContent: "Looking …" }));
-    let result;
-    try {
-      result = await runOperation({ mode: "marker_composers", scene_id: sceneId() });
-    } catch (err) {
-      dialog.body.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
-      return;
-    }
-    const proposals = result.proposals || [];
-    if (!proposals.length) {
-      dialog.body.replaceChildren(el("p", { textContent: result.notes ||
-        "Nothing to change: no marker title names a composer tag it doesn't have, and the titles are clean." }));
-      return;
-    }
-    const picked = new Set(proposals.map((p) => p.id));
-    const rows = proposals.map((p) => el("tr", {},
-      el("td", {}, el("input", { type: "checkbox", checked: true,
-        onchange: (e) => { if (e.target.checked) picked.add(p.id); else picked.delete(p.id); } })),
-      el("td", { style: { whiteSpace: "nowrap" } }, formatTime(p.seconds || 0)),
-      el("td", {}, el("div", { className: "text-muted", style: { textDecoration: p.new_title !== p.title ? "line-through" : "none" }, textContent: p.title }),
-        p.new_title !== p.title ? el("div", { textContent: p.new_title }) : null),
-      el("td", {}, p.add_tags.length ? el("span", { className: "text-success", textContent: `+ ${p.add_tags.join(", ")}` }) : "")));
-    dialog.body.replaceChildren(
-      el("p", { className: "small text-muted", textContent:
-        "Composer tags named in a marker's title — by name, alias or surname — are added to it, and the title loses the names. " +
-        "Primary tag, times and other tags stay." }),
-      el("table", { className: "table table-sm" },
-        el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Tags"))),
-        el("tbody", {}, ...rows)));
-    const apply = el("button", { type: "button", className: "btn btn-primary", textContent: "Apply",
-      onclick: async () => {
-        if (!picked.size) return;
-        apply.disabled = true;
-        apply.textContent = "Applying…";
-        try {
-          const done = await runOperation({ mode: "marker_composers", scene_id: sceneId(), apply: "true", ids: JSON.stringify([...picked]) });
-          dialog.body.replaceChildren(el("div", { className: "alert alert-success",
-            textContent: `${done.applied} marker${done.applied === 1 ? "" : "s"} changed.` }));
-          apply.remove();
-          await refreshStash();
-        } catch (err) {
-          apply.disabled = false;
-          apply.textContent = "Apply";
-          dialog.body.prepend(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
-        }
-      } });
-    dialog.footer.prepend(apply);
-    dialog.footer.prepend(el("button", { type: "button", className: "btn btn-secondary mr-auto", textContent: "New composer…",
-      onclick: () => newComposerDialog() }));
+    const footerButtons = [];
+    const clearFooter = () => { footerButtons.forEach((b) => b.remove()); footerButtons.length = 0; };
+    const addFooter = (button) => { footerButtons.push(button); dialog.footer.prepend(button); };
+
+    const load = async () => {
+      clearFooter();
+      dialog.body.replaceChildren(el("p", { textContent: "Looking …" }));
+      let result;
+      try {
+        result = await runOperation({ mode: "marker_composers", scene_id: sceneId() });
+      } catch (err) {
+        dialog.body.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+        return;
+      }
+      const parts = [];
+      const missing = result.missing || [];
+      if (missing.length) parts.push(await missingSection(missing));
+      const proposals = result.proposals || [];
+      if (proposals.length) {
+        parts.push(proposalsSection(proposals));
+      } else if (!missing.length) {
+        parts.push(el("p", { textContent: result.notes ||
+          "Nothing to change: no marker title names a composer tag it doesn't have, and the titles are clean." }));
+      }
+      dialog.body.replaceChildren(...parts);
+      addFooter(el("button", { type: "button", className: "btn btn-secondary mr-auto", textContent: "New composer…",
+        onclick: () => newComposerDialog() }));
+    };
+
+    // Names before the separator that aren't composers yet: look each up
+    // with the Classical Music scraper, pick, import.
+    const missingSection = async (missing) => {
+      const box = el("div", { className: "mb-4 p-2", style: { border: "1px solid rgba(128,128,128,.4)", borderRadius: "4px" } });
+      const scraperId = await performerScraperId().catch(() => null);
+      box.append(el("strong", { textContent: "Import missing composers" }),
+        el("p", { className: "small text-muted mb-2", textContent:
+          "Names in the titles that aren't composers yet. Pick the right person for each — the performer is created " +
+          "(tagged Composer, with the name as the titles have it as an alias), Tag Improvements makes the composer tag, " +
+          "and the titles below are worked out again." }));
+      if (!scraperId) {
+        box.append(el("div", { className: "alert alert-warning mb-0", textContent:
+          "The Classical Music performer scraper isn't installed (Settings → Metadata Providers → Available Scrapers)." }));
+        return box;
+      }
+      const rows = [];
+      const tbody = el("tbody");
+      for (const item of missing) {
+        const check = el("input", { type: "checkbox", checked: true });
+        const select = el("select", { className: "form-control form-control-sm" }, el("option", { textContent: "Searching …" }));
+        tbody.append(el("tr", {}, el("td", {}, check),
+          el("td", {}, el("strong", { textContent: item.name }),
+            el("div", { className: "small text-muted", textContent: `${item.count} marker${item.count === 1 ? "" : "s"}` })),
+          el("td", { style: { width: "60%" } }, select)));
+        const row = { item, check, select, found: [] };
+        rows.push(row);
+        searchPerformers(scraperId, item.query).then((found) => {
+          row.found = found;
+          select.replaceChildren(el("option", { value: "", textContent: found.length ? "— don't import —" : "Nothing found" }),
+            ...found.map((p, i) => el("option", { value: String(i), textContent: `${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
+          // "… Sohn" / "… Vater" in the title: the junior / senior one first.
+          const generation = /\b(sohn|jun\.?|junior|ii|jr\.?)\b/i.test(item.name) ? /junior|jüngere|\bii\b|jr|sohn/i
+            : /\b(vater|sen\.?|senior|i)\b/i.test(item.name) ? /senior|ältere|\bi\b|vater/i : null;
+          const isComposer = (p) => COMPOSER_WORDS.test(p.disambiguation || "");
+          let best = generation ? found.findIndex((p) => isComposer(p) && generation.test(`${p.name} ${p.disambiguation || ""}`)) : -1;
+          if (best < 0) best = found.findIndex(isComposer);
+          select.value = found.length ? String(best >= 0 ? best : 0) : "";
+          if (!found.length) check.checked = false;
+        }).catch((err) => {
+          select.replaceChildren(el("option", { value: "", textContent: `Search failed: ${err.message || err}` }));
+          check.checked = false;
+        });
+      }
+      const status = el("div", { className: "small mt-2" });
+      const importButton = el("button", { type: "button", className: "btn btn-primary btn-sm", textContent: "Import selected",
+        onclick: async () => {
+          const chosen = rows.filter((r) => r.check.checked && r.select.value !== "" && r.found[Number(r.select.value)]);
+          if (!chosen.length) return;
+          importButton.disabled = true;
+          const done = [];
+          for (const r of chosen) {
+            status.textContent = `Importing ${r.item.name} …`;
+            try {
+              const res = await createComposer(scraperId, r.found[Number(r.select.value)], r.item.name);
+              done.push(res.name);
+            } catch (err) {
+              status.textContent = `${r.item.name}: ${err.message || err}`;
+            }
+          }
+          // Tag Improvements makes the composer tags as the performers are
+          // saved (a hook, run by the server): give it a moment, then look again.
+          status.textContent = `Imported ${done.join(", ")} — waiting for the composer tags …`;
+          for (let i = 0; i < 8; i++) {
+            await new Promise((r) => setTimeout(r, 1000));
+            const again = await runOperation({ mode: "marker_composers", scene_id: sceneId() }).catch(() => null);
+            if (again && (again.missing || []).length < missing.length) break;
+          }
+          load();
+        } });
+      box.append(el("table", { className: "table table-sm mb-1" }, tbody), importButton, status);
+      return box;
+    };
+
+    // What changes in the titles and tags.
+    const proposalsSection = (proposals) => {
+      const picked = new Set(proposals.map((p) => p.id));
+      const rows = proposals.map((p) => el("tr", {},
+        el("td", {}, el("input", { type: "checkbox", checked: true,
+          onchange: (e) => { if (e.target.checked) picked.add(p.id); else picked.delete(p.id); } })),
+        el("td", { style: { whiteSpace: "nowrap" } }, formatTime(p.seconds || 0)),
+        el("td", {}, el("div", { className: "text-muted", style: { textDecoration: p.new_title !== p.title ? "line-through" : "none" }, textContent: p.title }),
+          p.new_title !== p.title ? el("div", { textContent: p.new_title }) : null),
+        el("td", {}, p.add_tags.length ? el("span", { className: "text-success", textContent: `+ ${p.add_tags.join(", ")}` }) : "")));
+      const apply = el("button", { type: "button", className: "btn btn-primary", textContent: "Apply",
+        onclick: async () => {
+          if (!picked.size) return;
+          apply.disabled = true;
+          apply.textContent = "Applying…";
+          try {
+            const done = await runOperation({ mode: "marker_composers", scene_id: sceneId(), apply: "true", ids: JSON.stringify([...picked]) });
+            clearFooter();
+            dialog.body.replaceChildren(el("div", { className: "alert alert-success",
+              textContent: `${done.applied} marker${done.applied === 1 ? "" : "s"} changed.` }));
+            await refreshStash();
+          } catch (err) {
+            apply.disabled = false;
+            apply.textContent = "Apply";
+            dialog.body.prepend(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+          }
+        } });
+      addFooter(apply);
+      return el("div", {},
+        el("p", { className: "small text-muted", textContent:
+          "Composer tags named in a marker's title — by name, alias or surname — are added to it, and the title loses the names. " +
+          "Primary tag, times and other tags stay." }),
+        el("table", { className: "table table-sm" },
+          el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Tags"))),
+          el("tbody", {}, ...rows)));
+    };
+
+    load();
   }
 
   // -- a new composer, from the Classical Music performer scraper ------------------------------
@@ -673,6 +764,57 @@
     }
   }
 
+  // Creates the composer for a search result of the Classical Music
+  // scraper (or tags an existing performer): returns { id, name, existed }.
+  // extraAlias: a spelling to add (the name as the marker titles have it),
+  // so the composer tag made from it matches them exactly.
+  async function createComposer(scraperId, picked, extraAlias) {
+    const full = (await gql(
+      "query($s: ScraperSourceInput!, $i: ScrapeSinglePerformerInput!) { scrapeSinglePerformer(source: $s, input: $i) { " +
+      "name aliases urls birthdate death_date gender country details images tags { name stored_id } } }",
+      { s: { scraper_id: scraperId }, i: { performer_input: { name: picked.name, urls: picked.urls || [] } } }
+    )).scrapeSinglePerformer[0];
+    if (!full) throw new Error(`The scraper returned nothing for ${picked.name}.`);
+    const marker = await composerTagName();
+    const markerId = await tagIdFor(marker, true);
+    const existing = (await gql(
+      "query($n: String!) { findPerformers(performer_filter: { name: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { performers { id name alias_list tags { id } } } }",
+      { n: full.name })).findPerformers.performers[0];
+    if (existing) {
+      const ids = [...new Set([...existing.tags.map((t) => String(t.id)), markerId])];
+      const aliases = extraAlias && extraAlias !== existing.name && !(existing.alias_list || []).includes(extraAlias)
+        ? [...(existing.alias_list || []), extraAlias] : null;
+      await gql("mutation($input: PerformerUpdateInput!) { performerUpdate(input: $input) { id } }",
+        { input: { id: existing.id, tag_ids: ids, ...(aliases ? { alias_list: aliases } : {}) } });
+      return { id: existing.id, name: existing.name, existed: true, marker };
+    }
+    const tagIds = [markerId];
+    for (const t of full.tags || []) {
+      const id = t.stored_id ? String(t.stored_id) : await tagIdFor(t.name, true);
+      if (id && !tagIds.includes(id)) tagIds.push(id);
+    }
+    const aliasList = (full.aliases || "").split(",").map((a) => a.trim()).filter(Boolean);
+    if (extraAlias && extraAlias !== full.name && !aliasList.includes(extraAlias)) aliasList.push(extraAlias);
+    const input = { name: full.name, alias_list: aliasList, urls: full.urls || [], tag_ids: tagIds };
+    if (full.birthdate) input.birthdate = full.birthdate;
+    if (full.death_date) input.death_date = full.death_date;
+    if (full.gender) input.gender = full.gender;
+    if (full.country) input.country = full.country;
+    if (full.details) input.details = full.details;
+    if (full.images && full.images.length) input.image = full.images[0];
+    const made = await gql("mutation($input: PerformerCreateInput!) { performerCreate(input: $input) { id name } }", { input });
+    return { id: made.performerCreate.id, name: made.performerCreate.name, existed: false, marker };
+  }
+
+  async function searchPerformers(scraperId, query) {
+    const data = await gql(
+      "query($s: ScraperSourceInput!, $i: ScrapeSinglePerformerInput!) { scrapeSinglePerformer(source: $s, input: $i) { name disambiguation urls } }",
+      { s: { scraper_id: scraperId }, i: { query } });
+    return data.scrapeSinglePerformer || [];
+  }
+
+  const COMPOSER_WORDS = /komponist|composer|compositeur|compositore|compositor|kapellmeister/i;
+
   async function newComposerDialog() {
     const dialog = openDialog("New composer");
     const scraperId = await performerScraperId().catch(() => null);
@@ -711,49 +853,12 @@
       results.replaceChildren();
       status.replaceChildren(el("p", { className: "text-muted", textContent: `Getting ${picked.name} …` }));
       try {
-        const full = (await gql(
-          "query($s: ScraperSourceInput!, $i: ScrapeSinglePerformerInput!) { scrapeSinglePerformer(source: $s, input: $i) { " +
-          "name aliases urls birthdate death_date gender country details images tags { name stored_id } } }",
-          { s: { scraper_id: scraperId }, i: { performer_input: { name: picked.name, urls: picked.urls || [] } } }
-        )).scrapeSinglePerformer[0];
-        if (!full) throw new Error("The scraper returned nothing for it.");
-        const marker = await composerTagName();
-        const markerId = await tagIdFor(marker, true);
-        // Already there? Then it just gets the composer tag.
-        const existing = (await gql(
-          "query($n: String!) { findPerformers(performer_filter: { name: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { performers { id name tags { id } } } }",
-          { n: full.name })).findPerformers.performers[0];
-        if (existing) {
-          const ids = [...new Set([...existing.tags.map((t) => String(t.id)), markerId])];
-          await gql("mutation($input: PerformerUpdateInput!) { performerUpdate(input: $input) { id } }",
-            { input: { id: existing.id, tag_ids: ids } });
-          status.replaceChildren(el("div", { className: "alert alert-success" },
-            `${existing.name} was there already and is now tagged ${marker}. `,
-            el("a", { href: `/performers/${existing.id}`, textContent: "Open" })));
-          return;
-        }
-        const tagIds = [markerId];
-        for (const t of full.tags || []) {
-          const id = t.stored_id ? String(t.stored_id) : await tagIdFor(t.name, true);
-          if (id && !tagIds.includes(id)) tagIds.push(id);
-        }
-        const input_ = {
-          name: full.name,
-          alias_list: (full.aliases || "").split(",").map((a) => a.trim()).filter(Boolean),
-          urls: full.urls || [],
-          tag_ids: tagIds,
-        };
-        if (full.birthdate) input_.birthdate = full.birthdate;
-        if (full.death_date) input_.death_date = full.death_date;
-        if (full.gender) input_.gender = full.gender;
-        if (full.country) input_.country = full.country;
-        if (full.details) input_.details = full.details;
-        if (full.images && full.images.length) input_.image = full.images[0];
-        const made = await gql("mutation($input: PerformerCreateInput!) { performerCreate(input: $input) { id name } }",
-          { input: input_ });
+        const done = await createComposer(scraperId, picked, null);
         status.replaceChildren(el("div", { className: "alert alert-success" },
-          `${made.performerCreate.name} created, tagged ${marker} — Tag Improvements makes the composer tag. `,
-          el("a", { href: `/performers/${made.performerCreate.id}`, textContent: "Open" })));
+          done.existed
+            ? `${done.name} was there already and is now tagged ${done.marker}. `
+            : `${done.name} created, tagged ${done.marker} — Tag Improvements makes the composer tag. `,
+          el("a", { href: `/performers/${done.id}`, textContent: "Open" })));
       } catch (err) {
         status.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
       }

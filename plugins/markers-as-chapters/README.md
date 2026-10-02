@@ -233,6 +233,17 @@ then **Apply**. Primary tag, times and other tags stay. For the whole
 library at once: **Settings → Tasks → Composers from marker titles (all
 scenes)** — every change is logged.
 
+**Import missing composers** (at the top of that dialog): names before the
+separator of titles that name no composer yet ("Karl Komzak Sohn -
+Badner Madln" → "Karl Komzak Sohn") are listed, each looked up with the
+[Classical Music](../../scrapers/ClassicalMusic/) scraper (searched
+without Sohn / Vater / II …) — pick the right person in its dropdown (a
+composer is preselected; "Sohn" prefers the junior, "Vater" the senior
+one). **Import selected** creates the performers, tagged Composer, with
+the name as the titles have it as an extra alias — so the composer tag
+Tag Improvements makes from it matches those titles exactly — and the
+proposals below are worked out again.
+
 ### New composer
 
 **Scrape markers… → New composer…** (also in the dialog above): enter a
