@@ -122,7 +122,8 @@ Details: [Scene Improvements README](plugins/advanced-file-operations/README.md)
   saved, added or deleted.
 - **Marker scrapers**: **Scrape markers…** next to Create Marker imports
   markers like Stash scrapes scenes — built in: chapters in the video file,
-  and chapters online (YouTube, Vimeo … via yt-dlp). Review them in a
+  chapters online (YouTube, Vimeo … via yt-dlp), and plain text — paste
+  a tracklist or pick a text/CUE file. Review them in a
   dialog (pick, rename, tag, shift all times), then create. Add your own
   scrapers as .yaml files in Stash's scraper format.
 

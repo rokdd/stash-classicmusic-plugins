@@ -5,7 +5,8 @@
 // a "Scrape markers" button next to "Create Marker" in a scene's Markers
 // tab lists every marker scraper — one entry per scraper that scrapes the
 // scene itself, and one per scene URL a URL scraper handles (plus "Other
-// URL…"), like Stash's scrape menu. The markers found are shown in a
+// URL…"), and one per scraper that reads text (pasted, or from a file),
+// like Stash's scrape menu. The markers found are shown in a
 // dialog to review: pick which to create, change titles and tags, shift
 // all times (when the online video has a different intro), and markers
 // already in the scene are flagged and not picked. Then "Create" adds
@@ -163,6 +164,7 @@
       el("button", { type: "button", className: "dropdown-item", textContent: label, onclick: () => { closeMenu(); run(); } });
     const items = [];
     scrapers.filter((s) => s.fragment).forEach((s) => items.push(item(s.name, () => scrape(s, null))));
+    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
     if (byUrl.length) {
       items.push(el("div", { className: "dropdown-divider" }));
@@ -186,14 +188,54 @@
 
   // -- scraping and the review dialog --------------------------------------------------
 
-  async function scrape(scraper, url) {
+  // Text scrapers: paste the text, or pick a file (read in the browser, so
+  // from this device), check and edit it, then scrape.
+  function textDialog(scraper) {
+    const dialog = openDialog(`Scrape markers — ${scraper.name}`);
+    const area = el("textarea", {
+      className: "form-control",
+      rows: 16,
+      spellcheck: false,
+      placeholder: "0:00 I. Allegro con brio\n7:41 II. Andante con moto\n17:30 - 23:02 III. Scherzo\n…",
+      style: { fontFamily: "monospace", fontSize: "0.9em" },
+    });
+    const file = el("input", {
+      type: "file",
+      accept: ".txt,.cue,.md,.csv,.srt,.vtt,text/*",
+      className: "form-control-file",
+      onchange: () => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => { area.value = String(reader.result || ""); };
+        reader.readAsText(f);
+      },
+    });
+    dialog.body.append(
+      el("p", { className: "small text-muted", textContent:
+        "One marker per line with a time in it (e.g. a tracklist or a video description); the rest of the line is its title. " +
+        "Times like 1:23, 1:02:03, [12:34], 3m20s; a range like 1:23 - 4:56 gives the end too. A CUE sheet works as well. " +
+        "Pick a file or paste the text, check it, then scrape." }),
+      el("div", { className: "mb-2" }, file),
+      area
+    );
+    const go = el("button", { type: "button", className: "btn btn-primary", textContent: "Scrape",
+      onclick: () => {
+        if (!area.value.trim()) return area.focus();
+        scrape(scraper, null, area.value);
+      } });
+    dialog.footer.prepend(go);
+    setTimeout(() => area.focus(), 0);
+  }
+
+  async function scrape(scraper, url, text) {
     const dialog = openDialog(`Scrape markers — ${scraper.name}`);
     dialog.body.append(el("p", { textContent: url ? `Scraping ${url} …` : "Scraping …" }));
     let result;
     let settings = {};
     try {
       const [res, conf] = await Promise.all([
-        runOperation({ mode: "marker_scrape", scraper: scraper.id, scene_id: sceneId(), url: url || "" }),
+        runOperation({ mode: "marker_scrape", scraper: scraper.id, scene_id: sceneId(), url: url || "", text: text || "" }),
         gql("query { configuration { plugins } }").catch(() => null),
       ]);
       result = res;

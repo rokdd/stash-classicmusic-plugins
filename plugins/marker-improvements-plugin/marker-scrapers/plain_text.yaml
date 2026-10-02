@@ -1,0 +1,8 @@
+# Markers from text you paste or a text file you pick: one marker per line
+# with a time in it (a tracklist, a YouTube description …), or a CUE sheet.
+name: Plain text
+markerByText:
+  action: script
+  script:
+    - python
+    - plain_text.py

@@ -4,7 +4,7 @@ everything it needs is in this plugin).
 
 Stash's scrapers have no "marker" type, and a plugin can't add one to
 Stash itself. So this is a marker scraper system that works like Stash's
-own: scrapers are .yaml (or .yml) files, in Stash's format, with two new
+own: scrapers are .yaml (or .yml) files, in Stash's format, with three new
 kinds of entry —
 
     name: Video file chapters
@@ -21,9 +21,14 @@ kinds of entry —
         script:
           - python
           - online_chapters.py
+    markerByText:                # from text you paste or a file you pick
+      action: script
+      script:
+        - python
+        - plain_text.py
 
 A script gets JSON on stdin — {"scene": {...}} for a fragment, plus
-"url" for a URL — and prints a JSON list of markers:
+"url" for a URL, plus "text" for text — and prints a JSON list of markers:
 
     [{"seconds": 0, "end_seconds": 512.4, "title": "I. Allegro con brio",
       "primary_tag": "Movement", "tags": ["Beethoven"]}, ...]
@@ -41,7 +46,7 @@ Scrapers are read from the "marker-scrapers" folder next to this file
 scrapers folder" setting. Runs through Stash's runPluginOperation:
   - marker_scrapers_list: every scraper with what it can do
   - marker_scrape:        args "scraper" (its id), "scene_id", optional
-                          "url" — the markers it found
+                          "url" or "text" — the markers it found
 Standard library only.
 """
 
@@ -163,7 +168,7 @@ def load_scrapers(settings):
                         config = parse_yaml(f.read())
                 except Exception:  # noqa: BLE001
                     continue
-                if not isinstance(config, dict) or not (config.get("markerByFragment") or config.get("markerByURL")):
+                if not isinstance(config, dict) or not (config.get("markerByFragment") or config.get("markerByURL") or config.get("markerByText")):
                     continue  # not a marker scraper (e.g. one of Stash's own)
                 scraper_id = os.path.splitext(name)[0]
                 by_url = config.get("markerByURL") or []
@@ -175,6 +180,7 @@ def load_scrapers(settings):
                     "dir": root,
                     "fragment": config.get("markerByFragment"),
                     "by_url": by_url,
+                    "by_text": config.get("markerByText"),
                 }
     return scrapers
 
@@ -189,7 +195,8 @@ def url_patterns(scraper):
 
 def list_scrapers(settings):
     return [
-        {"id": s["id"], "name": s["name"], "fragment": bool(s["fragment"]), "urls": url_patterns(s)}
+        {"id": s["id"], "name": s["name"], "fragment": bool(s["fragment"]), "urls": url_patterns(s),
+         "text": bool(s["by_text"])}
         for s in sorted(load_scrapers(settings).values(), key=lambda s: s["name"].lower())
     ]
 
@@ -257,8 +264,14 @@ def scrape(gql, args, settings, env_extra):
     if not scene:
         raise ValueError(f"No scene {args.get('scene_id')}.")
     url = (args.get("url") or "").strip()
+    text = args.get("text") or ""
     payload = {"scene": scene}
-    if url:
+    if text.strip():
+        action = scraper["by_text"]
+        if not action:
+            raise ValueError(f"Scraper {scraper['name']} doesn't read text.")
+        payload["text"] = text
+    elif url:
         action = next(
             (e for e in scraper["by_url"]
              if any(p and p in url for p in ([e.get("url")] if isinstance(e.get("url"), str) else e.get("url") or []))),

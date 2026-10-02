@@ -9,7 +9,7 @@ One folder per plugin; each is independent of the others.
   `requests` there.
 - **[`marker-improvements-plugin/`](marker-improvements-plugin/)** — tag
   images on the video's seek bar, click-to-edit markers, per-tag styles,
-  marker scrapers (chapters from the file or online).
+  marker scrapers (chapters from the file or online, or from plain text).
   Python 3 for the scrapers (no extra modules).
 - **[`tag-improvements/`](tag-improvements/)** — a tag tree on the Tags
   page, tag descriptions from StashDB, and scraping that adds tags instead

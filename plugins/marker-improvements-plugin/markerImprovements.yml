@@ -1,6 +1,6 @@
 name: Marker Improvements
-description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video's seek bar, so it shows and hides right along with that indicator. Click an icon to jump to that marker. Also marker scrapers: import markers (e.g. chapters from the video file or from YouTube) like Stash scrapes scenes."
-version: 0.0.31
+description: "Shows every one of a scene marker's tags that has an image, mounted directly inside Stash's own colored marker indicator on the video's seek bar, so it shows and hides right along with that indicator. Click an icon to jump to that marker. Also marker scrapers: import markers (chapters from the video file or YouTube, a pasted tracklist or text file) like Stash scrapes scenes."
+version: 0.0.32
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-improvements-plugin
 exec:
   - python
@@ -45,7 +45,7 @@ settings:
     type: STRING
   markerScrapersPath:
     displayName: Marker scrapers folder
-    description: "Optional: a folder on the server with marker scrapers of your own — .yaml files like Stash's scrapers, with markerByFragment and/or markerByURL (action: script). See the plugin's README. The built-in ones (video file chapters, online chapters) are always there."
+    description: "Optional: a folder on the server with marker scrapers of your own — .yaml files like Stash's scrapers, with markerByFragment, markerByURL and/or markerByText (action: script). See the plugin's README. The built-in ones (video file chapters, online chapters, plain text) are always there."
     type: STRING
   ytdlpPath:
     displayName: Path to yt-dlp

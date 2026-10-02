@@ -210,7 +210,8 @@ button next to **Create Marker** in the Markers tab lists
 
 - every scraper that scrapes the scene itself,
 - one entry per scene URL a URL scraper handles, and **other URL…** to
-  enter one.
+  enter one,
+- every scraper that reads text (**… paste text or pick a file**).
 
 The markers found open in a dialog: tick the ones to create, change
 titles, primary tag and tags, and **shift all times** (when the online
@@ -226,6 +227,14 @@ Built in:
   chapters, e.g. a concert's movements), from the scene's URLs or one you
   enter. Needs yt-dlp on the server (the **Path to yt-dlp** setting, else
   Scene Improvements' one, else the PATH).
+- **Plain text** — paste text or pick a file (it's read in your browser,
+  so from the device you're on), check and edit it, then **Scrape**. Every
+  line with a time in it becomes a marker, the rest of the line its title;
+  lines without a time are skipped. Times like `1:23`, `1:02:03`,
+  `[12:34]`, `(5:10)`, `3m20s`; a range like `1:23 - 4:56` gives the end
+  too, otherwise a marker ends where the next starts (the last at the end
+  of the video). A **CUE sheet** works too: one marker per track, its
+  PERFORMER as a tag.
 
 **Primary tag**: every marker needs one. A scraper can name it per marker;
 otherwise the **Primary tag for scraped markers** setting is used (empty:
@@ -237,7 +246,8 @@ ones that don't exist are left out (and listed).
 
 Put them in a folder on the server and enter it as **Marker scrapers
 folder**. A scraper is a `.yaml` file in Stash's scraper format, with
-`markerByFragment` (scrape the scene) and/or `markerByURL` (scrape a URL):
+`markerByFragment` (scrape the scene), `markerByURL` (scrape a URL) and/or
+`markerByText` (read pasted text or a file):
 
 ```yaml
 name: My concert site
@@ -253,11 +263,17 @@ markerByURL:
     script:
       - python
       - my_scraper.py
+markerByText:
+  action: script
+  script:
+    - python
+    - my_scraper.py
 ```
 
 The script runs in the scraper's folder. It gets JSON on stdin —
 `{"scene": {id, title, code, details, date, urls, files: [{path,
-duration}], scene_markers: [...]}}`, plus `"url"` when scraping a URL — and
+duration}], scene_markers: [...]}}`, plus `"url"` when scraping a URL or
+`"text"` when reading text — and
 prints a JSON list of markers:
 
 ```json
