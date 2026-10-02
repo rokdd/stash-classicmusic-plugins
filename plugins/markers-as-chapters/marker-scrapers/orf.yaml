@@ -1,0 +1,17 @@
+# The segments of an ORF ON video (on.orf.at, formerly tvthek.orf.at) — for
+# concerts usually one per piece — from ORF's own API.
+# From the scene's ORF URL, or one you enter.
+name: ORF ON
+markerByFragment:
+  action: script
+  script:
+    - python
+    - orf.py
+markerByURL:
+  - action: script
+    url:
+      - on.orf.at
+      - tvthek.orf.at
+    script:
+      - python
+      - orf.py

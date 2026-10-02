@@ -133,7 +133,7 @@ Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.
 - **Built-in scrapers**: chapters in the video file; a chapter file next to
   it (CUE, OGM, Matroska XML, ffmetadata, yt-dlp info, tracklist); chapters
   online (YouTube, ZDF … via yt-dlp); arte.tv / ARTE Concert (one marker
-  per work); plain text — paste a tracklist or pick a text/CUE file.
+  per work); ORF ON (its segments); plain text — paste a tracklist or pick a text/CUE file.
 - **Checked against the audio**: the review dialog shows which markers
   start at a pause in the audio, suggests a shift when most would fit
   better, and snaps markers onto the pauses.

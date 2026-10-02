@@ -58,6 +58,12 @@ Built in:
   (paste the programme from the description into **Plain text** — titles
   only are placed at the pauses). Each chapter ends where the next starts, the last at the end of
   the video. Needs nothing extra (reads arte's player API).
+- **ORF ON** — the segments of an ORF ON video (on.orf.at, also old
+  tvthek.orf.at links), from the scene's ORF URL or one you enter. ORF
+  splits a broadcast into segments with titles — a concert usually into
+  its pieces; each segment starts where the one before it ends (their
+  exact lengths add up to the whole video). ORF ON keeps videos only for a
+  while — after that there's nothing to read, and the dialog says so.
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every
   line with a time in it becomes a marker, the rest of the line its title;
