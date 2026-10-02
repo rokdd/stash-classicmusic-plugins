@@ -19,9 +19,10 @@
 // a tag out (names lower case)
 // (Marker Improvements uses this for its "Marker tags" settings).
 //
-// Also the "Large tag dropdown" setting: the dropdown uses most of the
-// window's height, shows each tag's image and description, and closes
-// once a tag is picked.
+// Also a switch at the top of every tag dropdown, "Larger, with images":
+// the dropdown uses most of the window's height, shows each tag's image and
+// description, and closes once a tag is picked (remembered per browser;
+// the "Large tag dropdown" setting is how it starts).
 
 (function () {
   "use strict";
@@ -182,27 +183,72 @@
   wrapped.__tagSearchWrapped = true;
   window.fetch = wrapped;
 
-  // -- large tag dropdown (setting) -------------------------------------------------------
+  // -- large tag dropdown ---------------------------------------------------------------
+  //
+  // Every tag dropdown gets a switch at its top: "Larger, with images" makes
+  // it use most of the window's height and shows each tag's image and
+  // description; it then closes once a tag is picked. The choice is kept in
+  // this browser; the "Large tag dropdown" setting is how it starts.
+
+  const LARGE_KEY = "tagImprovements.largeTagDropdown";
+  const LARGE_CLASS = "tag-search-large";
+  const MENU_CLASS = "tag-search-menu";
+  const SWITCH_CLASS = "tag-search-switch";
+
+  function readLarge(fallback) {
+    try {
+      const v = window.localStorage.getItem(LARGE_KEY);
+      return v == null ? fallback : v === "1";
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function writeLarge(on) {
+    try {
+      window.localStorage.setItem(LARGE_KEY, on ? "1" : "0");
+    } catch (e) {
+      // not remembered then
+    }
+  }
 
   loadSettings().then((s) => {
-    if (s.largeTagDropdown !== true) return;
+    let large = readLarge(s.largeTagDropdown === true);
+    const root = document.documentElement;
+    root.classList.toggle(LARGE_CLASS, large);
 
     const style = document.createElement("style");
     style.textContent = [
-      ".react-select__menu-list { max-height: 75vh !important; }",
-      // Image on the left, spanning the name and description rows.
-      ".tag-search-extra { display: grid !important; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; }",
-      ".tag-search-extra > .tag-search-image { grid-row: span 2; height: 48px; width: auto; max-width: 96px;" +
-        " object-fit: contain; background: #fff; }",
-      ".tag-search-extra > .tag-search-description { font-size: 0.8em; opacity: 0.75; white-space: normal;" +
-        " display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }",
+      `.${LARGE_CLASS} .${MENU_CLASS} .react-select__menu-list { max-height: 75vh !important; }`,
+      `.${SWITCH_CLASS} { display: flex; justify-content: flex-end; padding: 2px 8px; font-size: 0.8em;` +
+        " border-bottom: 1px solid rgba(128,128,128,.3); }",
+      `.${SWITCH_CLASS} button { background: none; border: 0; padding: 0; color: inherit; opacity: .75; cursor: pointer; }`,
+      `.${SWITCH_CLASS} button:hover { opacity: 1; text-decoration: underline; }`,
+      // Image on the left, spanning the name and description rows — only
+      // in the large dropdown.
+      `.${LARGE_CLASS} .tag-search-extra { display: grid !important; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; }`,
+      ".tag-search-extra > .tag-search-image, .tag-search-extra > .tag-search-description { display: none; }",
+      `.${LARGE_CLASS} .tag-search-extra > .tag-search-image { display: block; grid-row: span 2; height: 48px; width: auto;` +
+        " max-width: 96px; object-fit: contain; background: #fff; }",
+      `.${LARGE_CLASS} .tag-search-extra > .tag-search-description { display: -webkit-box; font-size: 0.8em; opacity: 0.75;` +
+        " white-space: normal; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }",
     ].join("\n");
     document.head.appendChild(style);
 
-    // Each option gets its tag's image and description, from the tag list.
-    // Only added around the option's own content, never moving it — that
-    // content is React's, and it must stay where React put it. Options are
-    // reused for other tags as you type, so it's redone when the name changes.
+    const setLarge = (on) => {
+      large = on;
+      writeLarge(on);
+      root.classList.toggle(LARGE_CLASS, on);
+      document.querySelectorAll(`.${SWITCH_CLASS} button`).forEach(labelSwitch);
+    };
+    const labelSwitch = (button) => {
+      button.textContent = large ? "⤡ Smaller" : "⤢ Larger, with images";
+    };
+
+    // Each option gets its tag's image and description, from the tag list
+    // (shown only while large). Only added around the option's own
+    // content, never moving it — that content is React's, and it must stay
+    // where React put it. Options are reused for other tags as you type, so
+    // it's redone when the name changes.
     const ownName = (option) => {
       let text = "";
       option.childNodes.forEach((n) => {
@@ -214,30 +260,55 @@
     const decorate = () => {
       if (!cache) return;
       const byName = new Map(cache.entries.map((e) => [e.name, e.tag]));
-      document.querySelectorAll('[class*="react-select__option"]').forEach((option) => {
-        const name = ownName(option);
-        if (option.dataset.tagSearchFor === name) return;
-        option.dataset.tagSearchFor = name;
-        option.querySelectorAll(":scope > .tag-search-image, :scope > .tag-search-description").forEach((n) => n.remove());
-        option.classList.remove("tag-search-extra");
-        const tag = byName.get(name);
-        if (!tag) return;
-        const hasImage = tag.image_path && !/[?&]default=true\b/.test(tag.image_path);
-        if (!hasImage && !tag.description) return;
-        option.classList.add("tag-search-extra");
-        if (hasImage) {
-          const img = document.createElement("img");
-          img.className = "tag-search-image";
-          img.src = tag.image_path;
-          img.alt = "";
-          option.insertBefore(img, option.firstChild);
+      document.querySelectorAll('[class*="react-select__menu-list"]').forEach((list) => {
+        const options = list.querySelectorAll('[class*="react-select__option"]');
+        // A tag dropdown: one whose options are tags.
+        const isTagMenu = Array.from(options).some((o) => byName.has(ownName(o)));
+        const menu = list.parentElement;
+        if (!isTagMenu || !menu) return;
+        menu.classList.add(MENU_CLASS); // React may reset its classes: re-added each time
+        if (!menu.querySelector(`:scope > .${SWITCH_CLASS}`)) {
+          const button = document.createElement("button");
+          button.type = "button";
+          labelSwitch(button);
+          // mousedown, with the default prevented: the field keeps its focus,
+          // so the dropdown stays open.
+          button.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setLarge(!large);
+          });
+          const bar = document.createElement("div");
+          bar.className = SWITCH_CLASS;
+          bar.appendChild(button);
+          menu.insertBefore(bar, list);
         }
-        if (tag.description) {
-          const d = document.createElement("div");
-          d.className = "tag-search-description";
-          d.textContent = tag.description;
-          option.appendChild(d);
-        }
+        options.forEach((option) => {
+          const name = ownName(option);
+          if (option.dataset.tagSearchFor === name) return;
+          option.dataset.tagSearchFor = name;
+          option.querySelectorAll(":scope > .tag-search-image, :scope > .tag-search-description").forEach((n) => n.remove());
+          option.classList.remove("tag-search-extra");
+          const tag = byName.get(name);
+          if (!tag) return;
+          const hasImage = tag.image_path && !/[?&]default=true\b/.test(tag.image_path);
+          if (!hasImage && !tag.description) return;
+          option.classList.add("tag-search-extra");
+          if (hasImage) {
+            const img = document.createElement("img");
+            img.className = "tag-search-image";
+            img.loading = "lazy";
+            img.src = tag.image_path;
+            img.alt = "";
+            option.insertBefore(img, option.firstChild);
+          }
+          if (tag.description) {
+            const d = document.createElement("div");
+            d.className = "tag-search-description";
+            d.textContent = tag.description;
+            option.appendChild(d);
+          }
+        });
       });
     };
     let pending = false;
@@ -250,10 +321,12 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
 
-    // Close the dropdown once a tag is picked — also in fields that pick
-    // several tags, which normally stay open.
+    // In the large dropdown, close it once a tag is picked — also in fields
+    // that pick several tags, which normally stay open.
     document.addEventListener("click", (e) => {
-      if (!e.target.closest || !e.target.closest('[class*="react-select__option"]')) return;
+      if (!large || !e.target.closest) return;
+      const option = e.target.closest('[class*="react-select__option"]');
+      if (!option || !option.closest(`.${MENU_CLASS}`)) return;
       setTimeout(() => {
         const active = document.activeElement;
         if (active && active.blur) active.blur();

@@ -1,6 +1,6 @@
 name: Tag Improvements
 description: "Tag tools for Stash: a collapsible tree of all tags on the Tags page (with images, descriptions and counts); tag descriptions copied from StashDB and kept up to date; scraping a scene from its Edit tab adds the scraped tags to the existing ones instead of replacing them; and a tag for every composer (performers with a composer custom field), kept in step."
-version: 0.0.12
+version: 0.0.13
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-improvements
 exec:
   - python
@@ -43,7 +43,7 @@ settings:
     type: BOOLEAN
   largeTagDropdown:
     displayName: Large tag dropdown
-    description: "Tag dropdowns use most of the window's height, show each tag's image and description, and close once a tag is picked."
+    description: "How tag dropdowns start: large — most of the window's height, each tag's image and description, closing once a tag is picked. Every tag dropdown has a switch at its top to change this (Larger, with images / Smaller); your browser remembers the last choice."
     type: BOOLEAN
   replaceTags:
     displayName: Replace tags instead (Stash's default)

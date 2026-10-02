@@ -68,9 +68,11 @@ search** to get Stash's own (name and aliases, as typed).
 
 ### Large tag dropdown
 
-Turn on **Large tag dropdown** and tag dropdowns use most of the window's
-height, show each tag's **image** and **description**, and close as soon as
-you've picked a tag.
+Every tag dropdown has a switch at its top: **⤢ Larger, with images**. Then
+the dropdown uses most of the window's height, shows each tag's **image**
+and **description**, and closes as soon as you've picked a tag; **⤡
+Smaller** switches back. Your browser remembers the choice for all tag
+dropdowns; the **Large tag dropdown** setting is how they start.
 
 ## StashDB descriptions
 
