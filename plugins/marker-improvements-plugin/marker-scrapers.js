@@ -226,6 +226,7 @@
       el("p", { className: "small text-muted", textContent: scraper.description ||
         "One marker per line with a time in it (e.g. a tracklist or a video description); the rest of the line is its title. " +
         "Times like 1:23, 1:02:03, [12:34], 3m20s; a range like 1:23 - 4:56 gives the end too. A CUE sheet works as well. " +
+        "Titles only, without any times: they're taken as the pieces in order and placed at the pauses in the audio. " +
         "Pick a file or paste the text, check it, then scrape." }),
       el("div", { className: "mb-2" }, file),
       area
@@ -256,7 +257,7 @@
       return;
     }
     if (!result.markers.length) {
-      dialog.body.replaceChildren(el("p", { textContent: "No markers found." }));
+      dialog.body.replaceChildren(el("p", { textContent: result.notes || "No markers found." }));
       return;
     }
     review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY);
@@ -315,6 +316,7 @@
       onchange: (e) => { rows.forEach((r) => { r.pick = e.target.checked; }); render(); } });
 
     dialog.body.replaceChildren(
+      result.notes ? el("div", { className: "alert alert-info py-2", textContent: result.notes }) : "",
       el("div", { className: "mb-2 d-flex flex-wrap align-items-center", style: { gap: "1em" } },
         el("label", { className: "mb-0" }, "Shift all times by ", offset, " s"),
         el("label", { className: "mb-0" }, "Primary tag (where none is given) ", primaryAll)),

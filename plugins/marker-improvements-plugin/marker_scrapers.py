@@ -33,7 +33,8 @@ A script gets JSON on stdin — {"scene": {...}} for a fragment, plus
     [{"seconds": 0, "end_seconds": 512.4, "title": "I. Allegro con brio",
       "primary_tag": "Movement", "tags": ["Beethoven"]}, ...]
 
-(only "seconds" is required). An action may set "timeout: <seconds>"
+(only "seconds" is required) — or {"markers": [...], "notes": "..."}, the
+notes shown above the markers in the review dialog. An action may set "timeout: <seconds>"
 (default 180), and a scraper "description:" — shown in the text dialog.
 Scripts run in their scraper's folder, with the environment variables
 STASH_FFMPEG, STASH_FFPROBE (Stash's own ffmpeg / ffprobe) and
@@ -238,7 +239,9 @@ def run_action(scraper, action, payload, env_extra):
         result = json.loads(proc.stdout or "[]")
     except ValueError as exc:
         raise RuntimeError(f"Scraper {scraper['name']} didn't print JSON: {exc}") from exc
-    return result if isinstance(result, list) else result.get("markers", [])
+    if isinstance(result, list):
+        return result, ""
+    return result.get("markers", []), str(result.get("notes") or "")
 
 
 def normalise(markers):
@@ -287,8 +290,9 @@ def scrape(gql, args, settings, env_extra):
         action = scraper["fragment"]
         if not action:
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
-    markers = normalise(run_action(scraper, action, payload, env_extra))
-    return {"scraper": scraper["name"], "markers": markers, "existing": scene.get("scene_markers") or []}
+    markers, notes = run_action(scraper, action, payload, env_extra)
+    return {"scraper": scraper["name"], "markers": normalise(markers), "notes": notes,
+            "existing": scene.get("scene_markers") or []}
 
 
 # ---------------------------------------------------------------------------

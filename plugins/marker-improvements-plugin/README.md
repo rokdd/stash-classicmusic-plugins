@@ -245,7 +245,10 @@ Built in:
   `[12:34]`, `(5:10)`, `3m20s`; a range like `1:23 - 4:56` gives the end
   too, otherwise a marker ends where the next starts (the last at the end
   of the video). A **CUE sheet** works too: one marker per track, its
-  PERFORMER as a tag.
+  PERFORMER as a tag. **Titles only** — no line has a time: the lines are
+  taken as the pieces in order and placed at the pauses in the audio, as
+  **Pauses between movements** does; the dialog then says how many pauses
+  were found, and which titles got no marker if there were too few.
 - **Chapter file next to the video** — a file with the video's name next
   to it on the server: `Concert.cue`, `Concert.chapters.txt` (OGM
   chapters or a tracklist), `Concert.chapters.xml` (Matroska chapters, as

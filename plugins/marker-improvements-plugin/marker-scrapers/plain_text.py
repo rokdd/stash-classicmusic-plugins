@@ -1,6 +1,6 @@
 """Marker scraper: markers from plain text.
 
-stdin: {"scene": {...}, "text": "..."}  → stdout: a JSON list of markers.
+stdin: {"scene": {...}, "text": "..."}  → stdout: {"markers": [...], "notes": …}.
 
 Every line with a time in it becomes a marker; the rest of the line is its
 title. Lines without a time are skipped. Understood:
@@ -13,7 +13,12 @@ around the title (- – — | : . brackets, track numbers like "1." stay) are
 trimmed.
 
 A CUE sheet (TRACK / TITLE / PERFORMER / INDEX 01 mm:ss:ff) is read
-track by track; PERFORMER becomes a tag."""
+track by track; PERFORMER becomes a tag.
+
+Titles only — no line has a time: the lines are the pieces in order, and
+they're placed at the pauses in the scene's audio (see pauses.py): the
+video is split at the longest pauses into as many pieces as there are
+lines."""
 
 import json
 import re
@@ -98,8 +103,16 @@ def main():
     scene = payload.get("scene") or {}
     is_cue = re.search(r"^\s*INDEX\s+01\s", text, re.M | re.I)
     markers = parse_cue(text) if is_cue else parse_lines(text)
+    if not markers and not is_cue:
+        import pauses  # titles without times: place them at the pauses
+        titles = pauses.titles_from(text)
+        if titles:
+            markers, notes = pauses.scrape_titles(scene, titles)
+            print(json.dumps({"markers": markers,
+                              "notes": "No times in the text, so the lines were placed at the pauses in the audio. " + notes}))
+            return
     duration = max([f.get("duration") or 0 for f in scene.get("files") or []] or [0])
-    print(json.dumps(fill_ends(markers, duration)))
+    print(json.dumps({"markers": fill_ends(markers, duration), "notes": ""}))
 
 
 if __name__ == "__main__":

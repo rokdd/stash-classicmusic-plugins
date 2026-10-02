@@ -1,6 +1,7 @@
 """Marker scraper: the pauses between movements or works.
 
-stdin: {"scene": {...}, "text": optional}  → stdout: a JSON list of markers.
+stdin: {"scene": {...}, "text": optional}
+stdout: {"markers": [...], "notes": "what was found"}
 
 Measures the loudness of the scene's audio every half second (ffmpeg's
 astats; STASH_FFMPEG, else ffmpeg on the PATH) and looks for stretches
@@ -12,7 +13,9 @@ pause begins.
 With text — titles, one per line, in order — it looks for as many pieces
 as there are titles: the longest pauses split the video, and the pieces
 get the titles. If it finds too few pauses it tries again with shorter and
-shallower ones. Without text, every pause gives a marker ("Part n")."""
+shallower ones. Without text, every pause gives a marker ("Part n").
+The plain text scraper uses this too (scrape_titles), for a list of
+titles without times."""
 
 import json
 import os
@@ -91,13 +94,16 @@ def titles_from(text):
 
 
 def markers_for(levels, end_of_video, titles):
+    """(markers, notes)."""
     first_t = levels[0][0] if levels else 0.0
     best = None
+    found = 0
     for min_pause, drop in LEVELS:
         pauses = find_pauses(levels, min_pause, drop)
         lead = pauses[0] if pauses and pauses[0][0] <= first_t + WINDOW else None
         trail = pauses[-1] if pauses and pauses[-1][1] >= end_of_video - WINDOW and pauses[-1] is not lead else None
         inner = [p for p in pauses if p is not lead and p is not trail]
+        found = len(inner)
         wanted = len(titles) - 1 if titles else None
         if wanted is not None:
             if len(inner) < wanted and (min_pause, drop) != LEVELS[-1]:
@@ -118,12 +124,22 @@ def markers_for(levels, end_of_video, titles):
     for i, (s, e) in enumerate(zip(starts, ends)):
         title = titles[i] if titles and i < len(titles) else f"Part {i + 1}"
         markers.append({"seconds": round(s, 1), "end_seconds": round(e, 1) if e > s else None, "title": title})
-    return markers
+    if titles and len(markers) < len(titles):
+        left = titles[len(markers):]
+        notes = (f"Only {found} pause{'' if found == 1 else 's'} found for {len(titles)} titles, so "
+                 f"{len(left)} title{'' if len(left) == 1 else 's'} got no marker: {'; '.join(left)}. "
+                 "Check which pieces run together, or add times to those lines.")
+    elif titles:
+        notes = (f"{len(titles)} titles, {found} pause{'' if found == 1 else 's'} found"
+                 + (f" — used the {len(titles) - 1} longest." if found > len(titles) - 1 else "."))
+    else:
+        notes = f"{found} pause{'' if found == 1 else 's'} found."
+    return markers, notes
 
 
-def main():
-    payload = json.load(sys.stdin)
-    scene = payload.get("scene") or {}
+def scrape_titles(scene, titles):
+    """Markers for the scene's audio split at its pauses, named by titles
+    (or "Part n" without). Returns (markers, notes)."""
     files = scene.get("files") or []
     if not files:
         raise SystemExit("The scene has no file.")
@@ -134,7 +150,13 @@ def main():
     if not levels:
         raise SystemExit("The file has no audio.")
     end = max(files[0].get("duration") or 0, levels[-1][0] + WINDOW)
-    print(json.dumps(markers_for(levels, end, titles_from(payload.get("text")))))
+    return markers_for(levels, end, titles)
+
+
+def main():
+    payload = json.load(sys.stdin)
+    markers, notes = scrape_titles(payload.get("scene") or {}, titles_from(payload.get("text")))
+    print(json.dumps({"markers": markers, "notes": notes}))
 
 
 if __name__ == "__main__":
