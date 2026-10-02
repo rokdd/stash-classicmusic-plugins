@@ -584,76 +584,49 @@
       audioBar.replaceChildren(...parts);
     };
 
-    // -- the timeline -----------------------------------------------------------------
+    // -- the table as a timeline -----------------------------------------------------
     //
-    // The whole video from top to bottom: every marker a block as long as it
-    // lasts, the pauses as thin lines. Hovering shows that moment of the
-    // video; clicking a block shows its row.
-    const timeline = el("div", { className: "mac-timeline" });
-    const hoverLine = el("div", { className: "mac-hover-line" });
+    // One row per marker, in time order, as tall as it lasts (a minimum
+    // height keeps the fields usable; "Height" stretches the scale), and an
+    // empty row for every gap between markers — a pause, applause, or music
+    // without a marker. A strip on the left of every row shows the marker's
+    // colour and the pauses found in the audio; hovering it shows that
+    // moment of the video.
+    const MIN_ROW = 38; // px: room for the fields
+    const MIN_GAP = 6; // px
+    let zoom = 1;
+    const zoomSelect = el("select", { className: "form-control form-control-sm d-inline-block", style: { width: "5em" },
+      onchange: (e) => { zoom = parseFloat(e.target.value) || 1; render(); } },
+      ...[1, 2, 4, 8].map((z) => el("option", { value: String(z), textContent: `${z}×` })));
     const preview = el("div", { className: "mac-preview" });
     const previewTime = el("div", { className: "mac-preview-time" });
     let previewVideo = null;
     const total = () => Math.max((media && media.duration) || 0,
       ...rows.map((r, i) => shifted(endOf(r, i)) || 0), audio && audio.music_end ? audio.music_end : 0, 1);
+    // px per second: all rows together get about half a window more than
+    // their minimum heights, times the zoom
+    const scale = () => ((window.innerHeight * 0.5) / total()) * zoom;
 
-    const renderTimeline = () => {
-      const t = total();
-      const pct = (x) => `${Math.max(0, Math.min(100, (x / t) * 100))}%`;
-      const parts = [];
-      if (audio && audio.pauses) {
-        audio.pauses.forEach(([a, b]) => parts.push(el("div", { className: "mac-pause", style: { top: pct(a), height: pct(b - a) } })));
-      }
-      const height = timeline.clientHeight || 400;
-      rows.forEach((r, i) => {
-        const s = shifted(r.seconds);
-        const e = Math.max(s, shifted(endOf(r, i)));
-        const kind = r.notMusic ? "not-music" : r.exists ? "exists" : r.pick ? "picked" : "unpicked";
-        const block = el("div", {
-          className: `mac-block mac-${kind}`,
-          title: `${formatTime(s)} – ${formatTime(e)}  ${textOf(r).title || ""}`,
-          style: { top: pct(s), height: `max(3px, ${pct(e - s)})` },
-          onclick: () => {
-            const tr = tbody.children[i];
-            if (tr) {
-              tr.scrollIntoView({ block: "center", behavior: "smooth" });
-              tr.classList.add("mac-flash");
-              setTimeout(() => tr.classList.remove("mac-flash"), 1200);
-            }
-          },
-        });
-        parts.push(block);
-        if (((e - s) / t) * height >= 13) {
-          parts.push(el("div", { className: "mac-label", style: { top: pct(s) },
-            textContent: r.notMusic ? "not music" : (textOf(r).title || "") }));
-        }
-      });
-      timeline.replaceChildren(...parts, hoverLine);
-    };
-
-    const showPreview = (event) => {
-      const rect = timeline.getBoundingClientRect();
+    const showPreview = (event, bar, from, to) => {
+      const rect = bar.getBoundingClientRect();
       const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-      const at = (y / rect.height) * total();
-      hoverLine.style.display = "block";
-      hoverLine.style.top = `${y}px`;
+      const at = from + (rect.height ? (y / rect.height) * (to - from) : 0);
+      bar.querySelector(".mac-hover-line").style.top = `${y}px`;
+      bar.querySelector(".mac-hover-line").style.display = "block";
       previewTime.textContent = formatTime(at);
       const cue = media && media.cues.find((c) => at >= c.start && at < c.end);
       preview.replaceChildren();
       if (cue) {
-        const scale = 200 / cue.w;
-        preview.append(el("div", { style: {
-          width: `${cue.w * scale}px`, height: `${cue.h * scale}px`,
+        const k = 200 / cue.w;
+        const frame = el("div", { style: {
+          width: `${cue.w * k}px`, height: `${cue.h * k}px`,
           backgroundImage: `url("${cue.url}")`, backgroundRepeat: "no-repeat",
-          backgroundPosition: `-${cue.x * scale}px -${cue.y * scale}px`,
-          backgroundSize: `auto`, transform: "none",
-        } }));
+          backgroundPosition: `-${cue.x * k}px -${cue.y * k}px`,
+        } });
+        preview.append(frame);
         // the sprite is scaled with the frame: size it once it's known
         const img = new Image();
-        img.onload = () => {
-          const frame = preview.firstChild;
-          if (frame) frame.style.backgroundSize = `${img.width * scale}px ${img.height * scale}px`;
-        };
+        img.onload = () => { frame.style.backgroundSize = `${img.width * k}px ${img.height * k}px`; };
         img.src = cue.url;
       } else if (media && media.stream) {
         if (!previewVideo) {
@@ -665,55 +638,99 @@
       }
       preview.append(previewTime);
       preview.style.display = "block";
-      const left = rect.right + 10;
-      preview.style.left = `${left + 210 > window.innerWidth ? rect.left - 220 : left}px`;
+      preview.style.left = `${rect.right + 10}px`;
       preview.style.top = `${Math.max(8, Math.min(window.innerHeight - 160, event.clientY - 60))}px`;
     };
-    timeline.addEventListener("mousemove", showPreview);
-    timeline.addEventListener("mouseleave", () => {
-      hoverLine.style.display = "none";
+    const hidePreview = (bar) => {
+      bar.querySelector(".mac-hover-line").style.display = "none";
       preview.style.display = "none";
-    });
+    };
     document.body.appendChild(preview);
+
+    // The strip: the marker's colour, the pauses inside its time as lines.
+    const strip = (kind, from, to, height) => {
+      const bar = el("div", { className: `mac-bar mac-${kind}`, style: { height: `${height}px` } });
+      if (audio && audio.pauses && to > from) {
+        audio.pauses.forEach(([a, b]) => {
+          if (b <= from || a >= to) return;
+          bar.append(el("div", { className: "mac-pause", style: {
+            top: `${((Math.max(a, from) - from) / (to - from)) * 100}%`,
+            height: `max(1px, ${((Math.min(b, to) - Math.max(a, from)) / (to - from)) * 100}%)` } }));
+        });
+      }
+      bar.append(el("div", { className: "mac-hover-line" }));
+      bar.addEventListener("mousemove", (e) => showPreview(e, bar, from, to));
+      bar.addEventListener("mouseleave", () => hidePreview(bar));
+      return bar;
+    };
+
+    const columns = 7 + (checkAudio ? 1 : 0);
+    const gapRow = (from, to, k) => {
+      const height = Math.max(MIN_GAP, (to - from) * k);
+      const long = to - from > 20;
+      const label = height >= 16
+        ? `${formatTime(to - from)} ${long ? "without a marker" : "pause"} (${formatTime(from)} – ${formatTime(to)})` : "";
+      return el("tr", { className: `mac-gap${long ? " mac-gap-long" : ""}`, style: { height: `${height}px` } },
+        el("td", { className: "mac-strip-cell" }, strip("gap", from, to, height)),
+        el("td", { colSpan: columns - 1, className: "mac-gap-label", textContent: label }));
+    };
 
     // -- the table ----------------------------------------------------------------------
     const render = () => {
       renderAudioBar();
-      tbody.replaceChildren(...rows.map((r) => {
-        const t = textOf(r);
-        const timeText = `${formatTime(shifted(r.seconds))}${r.end_seconds != null ? ` – ${formatTime(shifted(r.end_seconds))}` : ""}`;
-        if (r.notMusic) {
-          return el("tr", { className: "mac-row-not-music" },
-            el("td", {}),
-            el("td", { style: { whiteSpace: "nowrap" } }, timeText),
-            el("td", { colSpan: 3, className: "text-muted" },
-              el("em", { textContent: r.piece == null && !pieces ? `not music — ${t.title || ""}` : "not music" })),
-            checkAudio ? el("td", {}) : null,
-            el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", textContent: "undo",
-              onclick: () => undoNotMusic(r) })));
-        }
-        const check = el("input", { type: "checkbox", checked: r.pick, onchange: (e) => { r.pick = e.target.checked; renderTimeline(); } });
-        const title = el("input", { type: "text", value: t.title, className: "form-control form-control-sm",
-          oninput: (e) => { t.title = e.target.value; t.edited = true; } });
-        const primary = el("input", { type: "text", value: t.primary_tag, placeholder: primaryAll.value, className: "form-control form-control-sm",
-          oninput: (e) => { t.primary_tag = e.target.value; } });
-        const tags = el("input", { type: "text", value: t.tags.join(", "), placeholder: "Tag, Tag …", className: "form-control form-control-sm",
-          oninput: (e) => { t.tags = e.target.value.split(",").map((x) => x.trim()).filter(Boolean); } });
-        return el("tr", { style: r.exists ? { opacity: 0.6 } : {} },
-          el("td", {}, check),
-          el("td", { style: { whiteSpace: "nowrap" } }, timeText,
-            r.exists ? el("div", { className: "small text-warning", textContent: "already a marker here" }) : null),
-          el("td", {}, title),
-          el("td", {}, primary),
-          el("td", {}, tags),
-          checkAudio ? el("td", { className: "small" }, audioCell(r)) : null,
-          el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", style: { whiteSpace: "nowrap" },
-            textContent: "not music", title: pieces
-              ? "Applause, a speech … — not a piece: the titles after it move on to the next pieces"
-              : "Applause, a speech … — not a piece: no marker for it",
-            onclick: () => markNotMusic(r) })));
-      }));
-      renderTimeline();
+      const k = scale();
+      const order = rows.map((r, i) => ({ r, i, s: shifted(r.seconds), e: Math.max(shifted(r.seconds), shifted(endOf(r, i))) }))
+        .sort((x, y) => x.s - y.s);
+      const out = [];
+      let cursor = 0;
+      order.forEach(({ r, s, e }) => {
+        if (s - cursor > 1) out.push(gapRow(cursor, s, k));
+        out.push(markerRow(r, s, e, Math.max(MIN_ROW, (e - s) * k)));
+        cursor = Math.max(cursor, e);
+      });
+      const end = total();
+      if (end - cursor > 1) out.push(gapRow(cursor, end, k));
+      tbody.replaceChildren(...out);
+    };
+
+    const markerRow = (r, s, e, height) => {
+      const t = textOf(r);
+      const timeText = `${formatTime(s)}${r.end_seconds != null || e > s ? ` – ${formatTime(e)}` : ""}`;
+      const kind = r.notMusic ? "not-music" : r.exists ? "exists" : r.pick ? "picked" : "unpicked";
+      const first = el("td", { className: "mac-strip-cell" }, strip(kind, s, e, height));
+      if (r.notMusic) {
+        return el("tr", { className: "mac-row-not-music", style: { height: `${height}px` } },
+          first,
+          el("td", {}),
+          el("td", { style: { whiteSpace: "nowrap" } }, timeText),
+          el("td", { colSpan: 3, className: "text-muted" },
+            el("em", { textContent: r.piece == null && !pieces ? `not music — ${t.title || ""}` : "not music" })),
+          checkAudio ? el("td", {}) : null,
+          el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", textContent: "undo",
+            onclick: () => undoNotMusic(r) })));
+      }
+      const check = el("input", { type: "checkbox", checked: r.pick, onchange: (ev) => { r.pick = ev.target.checked; render(); } });
+      const title = el("input", { type: "text", value: t.title, className: "form-control form-control-sm",
+        oninput: (ev) => { t.title = ev.target.value; t.edited = true; } });
+      const primary = el("input", { type: "text", value: t.primary_tag, placeholder: primaryAll.value, className: "form-control form-control-sm",
+        oninput: (ev) => { t.primary_tag = ev.target.value; } });
+      const tags = el("input", { type: "text", value: t.tags.join(", "), placeholder: "Tag, Tag …", className: "form-control form-control-sm",
+        oninput: (ev) => { t.tags = ev.target.value.split(",").map((x) => x.trim()).filter(Boolean); } });
+      return el("tr", { style: { height: `${height}px`, ...(r.exists ? { opacity: 0.6 } : {}) } },
+        first,
+        el("td", {}, check),
+        el("td", { style: { whiteSpace: "nowrap" } }, timeText,
+          el("div", { className: "small text-muted", textContent: formatTime(e - s) }),
+          r.exists ? el("div", { className: "small text-warning", textContent: "already a marker here" }) : null),
+        el("td", {}, title),
+        el("td", {}, primary),
+        el("td", {}, tags),
+        checkAudio ? el("td", { className: "small" }, audioCell(r)) : null,
+        el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", style: { whiteSpace: "nowrap" },
+          textContent: "not music", title: pieces
+            ? "Applause, a speech … — not a piece: the titles after it move on to the next pieces"
+            : "Applause, a speech … — not a piece: no marker for it",
+          onclick: () => markNotMusic(r) })));
     };
     offset.addEventListener("input", render);
     primaryAll.addEventListener("input", render);
@@ -724,20 +741,21 @@
     if (!document.getElementById("mac-style")) {
       const style = el("style", { id: "mac-style" });
       style.textContent = [
-        ".mac-layout { display: flex; gap: 12px; align-items: flex-start; }",
-        ".mac-side { flex: 0 0 190px; position: sticky; top: 0; }",
-        ".mac-timeline { position: relative; height: 62vh; cursor: crosshair; }",
-        ".mac-timeline::before { content: ''; position: absolute; left: 0; width: 26px; top: 0; bottom: 0; background: rgba(128,128,128,.15); border-radius: 3px; }",
-        ".mac-pause { position: absolute; left: 0; width: 26px; min-height: 1px; background: rgba(0,0,0,.55); }",
-        ".mac-block { position: absolute; left: 3px; width: 20px; border-radius: 2px; box-shadow: inset 0 -1px 0 rgba(0,0,0,.4); cursor: pointer; }",
+        ".mac-table td { vertical-align: top; }",
+        ".mac-table td.mac-strip-cell { width: 24px; padding: 0 6px 0 0 !important; }",
+        ".mac-bar { position: relative; width: 18px; cursor: crosshair; border-radius: 2px; }",
         ".mac-picked { background: #3b82f6; } .mac-unpicked { background: #6b7280; } .mac-exists { background: #f59e0b; }",
         ".mac-not-music { background: repeating-linear-gradient(45deg, #6b7280 0 4px, transparent 4px 8px); }",
-        ".mac-label { position: absolute; left: 32px; right: 0; font-size: .72em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }",
-        ".mac-hover-line { display: none; position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid #f43f5e; pointer-events: none; }",
+        ".mac-gap { background: rgba(0,0,0,.18); } .mac-gap td { padding-top: 0 !important; padding-bottom: 0 !important; border-top: 0 !important; }",
+        ".mac-bar.mac-gap { background: rgba(128,128,128,.25); }",
+        ".mac-gap-long .mac-bar { background: repeating-linear-gradient(0deg, rgba(245,158,11,.5) 0 2px, transparent 2px 6px); }",
+        ".mac-gap-label { font-size: .72em; opacity: .7; vertical-align: middle !important; white-space: nowrap; }",
+        ".mac-gap-long .mac-gap-label { color: #f59e0b; opacity: 1; }",
+        ".mac-pause { position: absolute; left: 0; right: 0; background: rgba(0,0,0,.6); }",
+        ".mac-hover-line { display: none; position: absolute; left: -2px; right: -2px; height: 0; border-top: 2px solid #f43f5e; pointer-events: none; }",
         ".mac-preview { display: none; position: fixed; z-index: 3000; padding: 4px; background: #111; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; }",
         ".mac-preview-time { color: #fff; font-size: .8em; text-align: center; padding-top: 2px; }",
-        ".mac-row-not-music { opacity: .6; } .mac-flash { outline: 2px solid #3b82f6; }",
-        ".mac-main { flex: 1 1 auto; min-width: 0; }",
+        ".mac-row-not-music { opacity: .6; }",
       ].join("\n");
       document.head.appendChild(style);
     }
@@ -747,19 +765,17 @@
       el("div", { className: "mb-2 d-flex flex-wrap align-items-center", style: { gap: "1em" } },
         el("label", { className: "mb-0" }, "Shift all times by ", offset, " s"),
         el("label", { className: "mb-0" }, "Primary tag (where none is given) ", primaryAll),
-        el("label", { className: "mb-0" }, stripBox, " Take the tags' names out of the titles")),
+        el("label", { className: "mb-0" }, stripBox, " Take the tags' names out of the titles"),
+        el("label", { className: "mb-0" }, "Height ", zoomSelect)),
       audioBar,
       notice,
-      el("div", { className: "mac-layout" },
-        el("div", { className: "mac-side" }, timeline),
-        el("div", { className: "mac-main" },
-          el("table", { className: "table table-sm" },
-            el("thead", {}, el("tr", {},
-              el("th", {}, toggleAll), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Primary tag"), el("th", {}, "Tags"),
-              checkAudio ? el("th", {}, "Audio") : null, el("th", {}))),
-            tbody),
-          el("p", { className: "small text-muted", textContent:
-            "Tags are matched by name or alias. A primary tag that doesn't exist yet is created; other tags that don't exist are left out." }))));
+      el("table", { className: "table table-sm mac-table" },
+        el("thead", {}, el("tr", {},
+          el("th", {}), el("th", {}, toggleAll), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Primary tag"), el("th", {}, "Tags"),
+          checkAudio ? el("th", {}, "Audio") : null, el("th", {}))),
+        tbody),
+      el("p", { className: "small text-muted", textContent:
+        "Tags are matched by name or alias. A primary tag that doesn't exist yet is created; other tags that don't exist are left out." }));
     applyStrip();
     render();
 
@@ -801,7 +817,7 @@
     dialog.footer.prepend(create);
     // The preview lives on the page: gone with the dialog.
     const watch = new MutationObserver(() => {
-      if (!timeline.isConnected) { preview.remove(); watch.disconnect(); }
+      if (!tbody.isConnected) { preview.remove(); watch.disconnect(); }
     });
     watch.observe(document.body, { childList: true });
   }

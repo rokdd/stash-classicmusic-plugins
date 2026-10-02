@@ -36,12 +36,15 @@ video has a longer or shorter intro than your file). Markers already in
 the scene at that time are flagged and not ticked. **Create markers**
 adds them, and the page updates. Also in the dialog:
 
-- **A timeline** beside the table: the whole video from top to bottom,
-  every marker a block as long as it lasts (blue: to create, grey: not
-  ticked, orange: already a marker there, hatched: not music), the pauses
-  in the audio as thin lines. **Hovering** it shows that moment of the
-  video (Stash's seek bar thumbnails, or the video itself if there are
-  none) with its time; **clicking** a block shows its row.
+- **The table is a timeline**: one row per marker in time order, each as
+  tall as it lasts (with a minimum height for the fields; **Height** 1×–8×
+  stretches it), and an empty row for every gap between markers — a
+  pause, or, when it's longer than 20 seconds, "… without a marker" in
+  orange. A strip on the left of each row shows its colour (blue: to
+  create, grey: not ticked, orange: already a marker there, hatched: not
+  music) and the pauses found in the audio as dark lines; **hovering** the
+  strip shows that moment of the video (Stash's seek bar thumbnails, or
+  the video itself if there are none) with its time.
 - **Take the tags' names out of the titles** (on by default): a marker
   that got a tag — a composer — loses that name in its title: "Johann
   Strauss Sohn – Im Krapfenwaldl" → "Im Krapfenwaldl". First names,
