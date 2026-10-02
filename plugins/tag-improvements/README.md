@@ -158,6 +158,12 @@ that already has the performer's name is taken over, not duplicated.
 Nothing is ever deleted: a performer no longer marked as composer keeps
 the tag.
 
+To try it out, `python3 example_composer.py [http://host:9999]` (next to
+this README, run it anywhere that can reach Stash) creates the performer
+Ludwig van Beethoven (alias Beethoven, `composer` = `yes`) and runs
+**Sync composer tags**: the **Composers** tag and Beethoven's tag below it
+appear.
+
 ## Merging tags when scraping a scene
 
 When you scrape a scene from its **Edit** tab — **Scrape with…** a scraper
