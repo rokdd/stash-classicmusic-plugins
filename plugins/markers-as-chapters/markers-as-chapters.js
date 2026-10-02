@@ -182,6 +182,7 @@
     scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     items.push(item("Composers from the titles…", () => composersDialog()));
+    items.push(item("New composer…", () => newComposerDialog()));
     if (byUrl.length) {
       // A URL a scraper for that very site handles isn't offered to the
       // catch-all ones (a pattern like "http") too.
@@ -627,6 +628,141 @@
         }
       } });
     dialog.footer.prepend(apply);
+    dialog.footer.prepend(el("button", { type: "button", className: "btn btn-secondary mr-auto", textContent: "New composer…",
+      onclick: () => newComposerDialog() }));
+  }
+
+  // -- a new composer, from the Classical Music performer scraper ------------------------------
+  //
+  // Enter a name, pick the right one of the scraper's results, and the
+  // performer is created with everything the scraper fills in — and the
+  // performer tag that marks composers ("Composer", Tag Improvements'
+  // "Composer performer tag" setting), so Tag Improvements makes the
+  // composer tag. A performer who exists already just gets that tag.
+
+  async function performerScraperId() {
+    const data = await gql("query { listScrapers(types: [PERFORMER]) { id name } }");
+    const found = (data.listScrapers || []).find((s) => /classical\s*music/i.test(`${s.id} ${s.name}`));
+    return found ? found.id : null;
+  }
+
+  async function tagIdFor(name, create) {
+    const data = await gql(
+      "query($n: String!) { findTags(tag_filter: { name: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { tags { id } } }",
+      { n: name });
+    const tag = data.findTags.tags[0];
+    if (tag) return String(tag.id);
+    const alias = await gql(
+      "query($n: String!) { findTags(tag_filter: { aliases: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { tags { id } } }",
+      { n: name }).catch(() => ({ findTags: { tags: [] } }));
+    if (alias.findTags.tags[0]) return String(alias.findTags.tags[0].id);
+    if (!create) return null;
+    const made = await gql("mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }", { input: { name } });
+    return String(made.tagCreate.id);
+  }
+
+  async function composerTagName() {
+    try {
+      const conf = await gql("query { configuration { plugins } }");
+      const raw = ((conf.configuration.plugins || {}).tagTree || {}).composerPerformerTag;
+      const name = (raw == null ? "" : String(raw)).trim();
+      return name && name !== "-" ? name : "Composer";
+    } catch (e) {
+      return "Composer";
+    }
+  }
+
+  async function newComposerDialog() {
+    const dialog = openDialog("New composer");
+    const scraperId = await performerScraperId().catch(() => null);
+    if (!scraperId) {
+      dialog.body.append(el("div", { className: "alert alert-warning", textContent:
+        "The Classical Music performer scraper isn't installed: Settings → Metadata Providers → Available Scrapers, " +
+        "source https://rokdd.github.io/stash-classicmusic-plugins/main/scrapers/index.yml." }));
+      return;
+    }
+    const input = el("input", { type: "text", className: "form-control", placeholder: "Name — a surname is enough: Strauss, Rachmaninow …" });
+    const results = el("div", { className: "mt-3" });
+    const status = el("div", { className: "mt-2" });
+    const search = async () => {
+      const query = input.value.trim();
+      if (!query) return;
+      results.replaceChildren(el("p", { className: "text-muted", textContent: "Searching …" }));
+      try {
+        const data = await gql(
+          "query($s: ScraperSourceInput!, $i: ScrapeSinglePerformerInput!) { scrapeSinglePerformer(source: $s, input: $i) { name disambiguation urls } }",
+          { s: { scraper_id: scraperId }, i: { query } });
+        const found = data.scrapeSinglePerformer || [];
+        if (!found.length) {
+          results.replaceChildren(el("p", { textContent: "Nothing found." }));
+          return;
+        }
+        results.replaceChildren(el("div", { className: "list-group" }, ...found.map((p) =>
+          el("button", { type: "button", className: "list-group-item list-group-item-action text-left",
+            onclick: () => create(p) },
+            el("strong", { textContent: p.name }),
+            p.disambiguation ? el("div", { className: "small text-muted", textContent: p.disambiguation }) : null))));
+      } catch (err) {
+        results.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+      }
+    };
+    const create = async (picked) => {
+      results.replaceChildren();
+      status.replaceChildren(el("p", { className: "text-muted", textContent: `Getting ${picked.name} …` }));
+      try {
+        const full = (await gql(
+          "query($s: ScraperSourceInput!, $i: ScrapeSinglePerformerInput!) { scrapeSinglePerformer(source: $s, input: $i) { " +
+          "name aliases urls birthdate death_date gender country details images tags { name stored_id } } }",
+          { s: { scraper_id: scraperId }, i: { performer_input: { name: picked.name, urls: picked.urls || [] } } }
+        )).scrapeSinglePerformer[0];
+        if (!full) throw new Error("The scraper returned nothing for it.");
+        const marker = await composerTagName();
+        const markerId = await tagIdFor(marker, true);
+        // Already there? Then it just gets the composer tag.
+        const existing = (await gql(
+          "query($n: String!) { findPerformers(performer_filter: { name: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { performers { id name tags { id } } } }",
+          { n: full.name })).findPerformers.performers[0];
+        if (existing) {
+          const ids = [...new Set([...existing.tags.map((t) => String(t.id)), markerId])];
+          await gql("mutation($input: PerformerUpdateInput!) { performerUpdate(input: $input) { id } }",
+            { input: { id: existing.id, tag_ids: ids } });
+          status.replaceChildren(el("div", { className: "alert alert-success" },
+            `${existing.name} was there already and is now tagged ${marker}. `,
+            el("a", { href: `/performers/${existing.id}`, textContent: "Open" })));
+          return;
+        }
+        const tagIds = [markerId];
+        for (const t of full.tags || []) {
+          const id = t.stored_id ? String(t.stored_id) : await tagIdFor(t.name, true);
+          if (id && !tagIds.includes(id)) tagIds.push(id);
+        }
+        const input_ = {
+          name: full.name,
+          alias_list: (full.aliases || "").split(",").map((a) => a.trim()).filter(Boolean),
+          urls: full.urls || [],
+          tag_ids: tagIds,
+        };
+        if (full.birthdate) input_.birthdate = full.birthdate;
+        if (full.death_date) input_.death_date = full.death_date;
+        if (full.gender) input_.gender = full.gender;
+        if (full.country) input_.country = full.country;
+        if (full.details) input_.details = full.details;
+        if (full.images && full.images.length) input_.image = full.images[0];
+        const made = await gql("mutation($input: PerformerCreateInput!) { performerCreate(input: $input) { id name } }",
+          { input: input_ });
+        status.replaceChildren(el("div", { className: "alert alert-success" },
+          `${made.performerCreate.name} created, tagged ${marker} — Tag Improvements makes the composer tag. `,
+          el("a", { href: `/performers/${made.performerCreate.id}`, textContent: "Open" })));
+      } catch (err) {
+        status.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+      }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+    dialog.body.append(
+      el("div", { className: "d-flex", style: { gap: "8px" } }, input,
+        el("button", { type: "button", className: "btn btn-primary", textContent: "Search", onclick: search })),
+      results, status);
+    setTimeout(() => input.focus(), 0);
   }
 
   // The scene's own markers, as text (from the Scrape markers menu).

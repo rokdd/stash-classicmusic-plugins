@@ -217,7 +217,21 @@ Im Krapfenwaldl, Polka française op. 336" → *Johann Strauss* + "Im
 Krapfenwaldl, Polka française op. 336"); untick what shouldn't change,
 then **Apply**. Primary tag, times and other tags stay. For the whole
 library at once: **Settings → Tasks → Composers from marker titles (all
-scenes)** — every change is logged. A name the
+scenes)** — every change is logged.
+
+### New composer
+
+**Scrape markers… → New composer…** (also in the dialog above): enter a
+name — a surname is enough — **Search**, and click the right one of the
+results (with their short description, e.g. "österreichischer
+Operettenkomponist (1819–1895)"). The performer is created with
+everything the [Classical Music](../../scrapers/ClassicalMusic/) scraper
+fills in — name, aliases, dates, country, portrait, Wikipedia text, links,
+tags (missing ones are created) — plus the tag **Composer** (Tag
+Improvements' **Composer performer tag**), so
+[Tag Improvements](../tag-improvements/) makes the composer tag under
+**Composers** right away. A performer who exists already just gets the
+**Composer** tag. Needs the Classical Music scraper installed. A name the
 scraper suggests (ARTE Concert's composers) is replaced by the matching
 tag. The review dialog says how many markers got tags this way; change
 them there as needed.
