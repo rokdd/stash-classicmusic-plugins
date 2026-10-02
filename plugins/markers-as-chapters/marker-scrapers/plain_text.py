@@ -175,6 +175,11 @@ def main():
     duration = max([f.get("duration") or 0 for f in scene.get("files") or []] or [0])
 
     if not is_cue:
+        import subtitles  # SRT / WebVTT pasted: read as subtitles
+        if subtitles.looks_like_subtitles(text):
+            markers, notes = subtitles.markers_from(subtitles.parse(text), duration)
+            print(json.dumps({"markers": markers, "notes": "Read as subtitles: " + notes}))
+            return
         from json_markers import parse_json
         found = parse_json(text)
         if found:

@@ -510,8 +510,14 @@ _SEP_RUN = re.compile(r"\s*([%s])(?:\s*[%s])+\s*" % (re.escape(SEPARATORS), re.e
 def tidy(title):
     if not title:
         return title
+    import unicodedata
+    title = unicodedata.normalize("NFC", title)  # "u" + "¨" → "ü": one letter, one word
     out = _SPACES.sub(" ", title)
+    # brackets left with just a linking word: "(für )", "(by)"
+    out = re.sub(r"[(\[]\s*(?:für|fuer|for|by|von|de|di|du|of|nach|after|à)?\s*[)\]]", " ", out, flags=re.I)
     out = _EMPTY_BRACKETS.sub(" ", out)
+    out = re.sub(r"([(\[])\s+", r"\1", out)
+    out = re.sub(r"\s+([)\]])", r"\1", out)
     out = re.sub(r"\s+\.(?=\s|$)", " ", out)  # a full stop on its own
     out = _SEP_RUN.sub(lambda m: f" {m.group(1)} " if m.group(1) not in ",;:" else f"{m.group(1)} ", out)
     out = re.sub(r"\s+([,;.])", r"\1", out)
@@ -535,6 +541,8 @@ def _tag_words(names):
 
 def strip_names(title, tag_names):
     """title without the names in tag_names (lists of name + aliases)."""
+    import unicodedata
+    title = unicodedata.normalize("NFC", title or "")
     tokens = [(m.start(), m.end(), _plain(m.group())) for m in re.finditer(r"[^\W_]+", title)]
     spans = []
     for names in tag_names:

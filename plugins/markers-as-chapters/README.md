@@ -92,6 +92,20 @@ Built in:
   its pieces; each segment starts where the one before it ends (their
   exact lengths add up to the whole video). ORF ON keeps videos only for a
   while — after that there's nothing to read, and the dialog says so.
+- **Subtitles** — from a `.srt` / `.vtt` / `.ass` next to the video (also
+  `Concert.de.srt`), from the video file's own subtitle track (text
+  subtitles; picture ones can't be read), or online with yt-dlp — the
+  scene's URLs or one you enter (ARTE, ARD, ZDF, ORF … have subtitles for
+  some broadcasts); or paste them / pick a file (Plain text recognises
+  them too). Concert subtitles show what's said or shown, not the music,
+  so: entries less than 20 s apart make one group; a short one — a title
+  card — gets a marker where it shows, an announcement (longer, or with
+  "es folgt", "und nun", "wir beginnen mit" …) one where it ends. The title
+  is the card's text or the announcement's last sentence without its
+  lead-in ("Und nun der Radetzky-Marsch von Johann Strauss Vater" →
+  "Radetzky-Marsch" + the composer tag). ♪ / "(Musik)" start music,
+  "[Applaus]" ends it; "U/T" and the like are ignored. Many concerts have
+  no subtitles at all; the dialog says where it looked.
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every
   line with a time in it becomes a marker, the rest of the line its title;

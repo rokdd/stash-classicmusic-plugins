@@ -1,0 +1,30 @@
+# Markers from subtitles: next to the video, in it, or online (yt-dlp) —
+# announcements and title cards become markers.
+name: Subtitles
+description: "Paste subtitles (SRT or WebVTT) or pick a .srt / .vtt file. Announcements and title cards become markers, their text the titles."
+markerByFragment:
+  action: script
+  timeout: 400
+  script:
+    - python
+    - subtitles.py
+markerByURL:
+  - action: script
+    timeout: 300
+    url:
+      - arte.tv
+      - ardmediathek.de
+      - zdf.de
+      - 3sat.de
+      - on.orf.at
+      - youtube.com
+      - youtu.be
+      - vimeo.com
+    script:
+      - python
+      - subtitles.py
+markerByText:
+  action: script
+  script:
+    - python
+    - subtitles.py
