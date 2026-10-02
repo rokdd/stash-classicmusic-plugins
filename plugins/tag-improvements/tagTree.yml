@@ -1,6 +1,6 @@
 name: Tag Improvements
 description: "Tag tools for Stash: a collapsible tree of all tags on the Tags page (with images, descriptions and counts); tag descriptions copied from StashDB and kept up to date; and scraping a scene from its Edit tab adds the scraped tags to the existing ones instead of replacing them."
-version: 0.0.9
+version: 0.0.10
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-improvements
 exec:
   - python
@@ -8,6 +8,7 @@ exec:
 interface: raw
 ui:
   javascript:
+    - tag-search.js
     - tag-tree.js
     - stashdb-auto-refresh.js
     - scrape-tag-merge.js
@@ -25,6 +26,14 @@ tasks:
     defaultArgs:
       mode: sync_all
 settings:
+  plainTagSearch:
+    displayName: Use Stash's plain tag search
+    description: "Off (the default): tag fields everywhere find tags by every word you type, in any order, in the tag's name, aliases, description and parent tags' names. On: Stash's own search (name and aliases, as typed)."
+    type: BOOLEAN
+  largeTagDropdown:
+    displayName: Large tag dropdown
+    description: "Tag dropdowns use most of the window's height, show each tag's image and description, and close once a tag is picked."
+    type: BOOLEAN
   replaceTags:
     displayName: Replace tags instead (Stash's default)
     description: "Off (the default): scraping a scene from its Edit tab offers its existing tags plus the scraped ones. On: the scraped tags replace the existing ones, as in Stash without this plugin."

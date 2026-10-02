@@ -1964,12 +1964,16 @@
     const only = await idsOf(markerTagsOnlyUnder);
     const not = await idsOf(markerTagsNotUnder);
     if (!only.length && !not.length) return null;
-    const under = (ids) => ({ value: ids, modifier: "INCLUDES", depth: -1 });
-    const extra = {};
-    if (only.length) extra.parents = under(only);
-    if (not.length) extra.NOT = { parents: under(not) };
+    // Stash allows only one of AND / OR / NOT per filter level, so this is a
+    // chain of plain levels joined by AND: "below these" and "not below
+    // those" (EXCLUDES) as criteria of their own, then Stash's own filter.
+    const levels = [];
+    if (only.length) levels.push({ parents: { value: only, modifier: "INCLUDES", depth: -1 } });
+    if (not.length) levels.push({ parents: { value: not, modifier: "EXCLUDES", depth: -1 } });
     const vars = request.variables || (request.variables = {});
-    vars.tag_filter = vars.tag_filter ? { ...extra, AND: vars.tag_filter } : extra;
+    let chain = vars.tag_filter || null;
+    for (let i = levels.length - 1; i >= 0; i--) chain = chain ? { ...levels[i], AND: chain } : levels[i];
+    vars.tag_filter = chain;
     return { body: JSON.stringify(request), dropIds: new Set(not) };
   }
 
@@ -1985,11 +1989,33 @@
     return new Response(JSON.stringify(json), { status: response.status, statusText: response.statusText, headers: response.headers });
   }
 
+  // With Tag Improvements installed, it answers tag searches itself from
+  // the whole tag list; the limits are applied there, by tag names.
+  function registerWithTagImprovements() {
+    if (!window.TagImprovementsSearch || registerWithTagImprovements.done) return;
+    registerWithTagImprovements.done = true;
+    window.TagImprovementsSearch.addFilter((tag, ancestorIds, ancestorNames) => {
+      if (!markerFormHasFocus()) return true;
+      const only = markerTagsOnlyUnder.map((n) => n.toLowerCase());
+      const not = markerTagsNotUnder.map((n) => n.toLowerCase());
+      if (only.length && !ancestorNames.some((n) => only.includes(n))) return false;
+      if (not.length && (not.includes((tag.name || "").toLowerCase()) || ancestorNames.some((n) => not.includes(n)))) return false;
+      return true;
+    });
+  }
+  registerWithTagImprovements();
+  // Plugins load in no fixed order: try again once everything has loaded.
+  window.addEventListener("load", registerWithTagImprovements);
+  setTimeout(registerWithTagImprovements, 2000);
+
   if (typeof window.fetch === "function" && !window.fetch.__markerSymbolsWrapped) {
     const originalFetch = window.fetch;
     const wrappedFetch = function (input, init) {
       const tagSearch = init && typeof init.body === "string" && init.body.includes("FindTagsForSelect");
-      if (tagSearch && (markerTagsOnlyUnder.length || markerTagsNotUnder.length) && markerFormHasFocus()) {
+      // With Tag Improvements answering tag searches itself, its filter hook
+      // (below) applies the limits instead.
+      const tagImprovements = window.TagImprovementsSearch && window.TagImprovementsSearch.handles();
+      if (tagSearch && !tagImprovements && (markerTagsOnlyUnder.length || markerTagsNotUnder.length) && markerFormHasFocus()) {
         const self = this;
         // Anything going wrong here falls back to Stash's own request.
         return restrictMarkerTagSearch(init.body)

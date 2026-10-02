@@ -6,6 +6,8 @@ Tag tools for Stash, in one plugin (formerly called **Tag Tree**):
   parents and children, as a view on Stash's own Tags page.
 - **[StashDB descriptions](#stashdb-descriptions)** — tag descriptions
   copied from StashDB and kept up to date.
+- **[Better tag search](#better-tag-search)** — every word, in any order,
+  in name, aliases, description and parent tags — in every tag field.
 - **[Merging tags when scraping](#merging-tags-when-scraping-a-scene)** —
   scraping a scene adds the scraped tags to the existing ones instead of
   replacing them.
@@ -47,6 +49,28 @@ Stash's pages).
 - **Search** matches tag names and aliases. Matching tags are shown in
   their place in the tree, with the path from the top down to each one
   opened automatically.
+
+## Better tag search
+
+Every tag field in Stash — on a scene's Edit tab, in the marker form, for
+performers, in filters — finds tags more easily:
+
+- **Every word you type, in any order**: `symph beet` finds
+  "Beethoven: Symphony No. 5".
+- **Not just the name**: a word can match the tag's name, its aliases, its
+  **description** or the names of the tags **above it** — so `strings`
+  finds Violin and Viola if they're sub-tags of Strings.
+- Tags whose name matches come first.
+
+The search runs in the browser, over the whole tag list (loaded once and
+again whenever tags change). Turn it off with **Use Stash's plain tag
+search** to get Stash's own (name and aliases, as typed).
+
+### Large tag dropdown
+
+Turn on **Large tag dropdown** and tag dropdowns use most of the window's
+height, show each tag's **image** and **description**, and close as soon as
+you've picked a tag.
 
 ## StashDB descriptions
 

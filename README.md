@@ -139,6 +139,9 @@ Tag Merge** plugin.
   demand — a button for all tags and a ↻ per tag on the tree page.
 - **Keeps your own text**: only empty descriptions and ones it wrote
   itself are replaced, unless you turn on "Overwrite".
+- **Better tag search** in every tag field: every word, in any order, in a
+  tag's name, aliases, description and parent tags; optionally a large
+  dropdown with images and descriptions.
 - **Scrape with…** on a scene's Edit tab (a scraper or StashDB) offers the
   scene's **existing tags plus the scraped ones**, instead of replacing
   them.
