@@ -181,6 +181,7 @@
     scrapers.filter((s) => s.fragment && !(s.urls || []).length).forEach((s) => items.push(item(s.name, () => scrape(s, null))));
     scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
+    items.push(item("Composers from the titles…", () => composersDialog()));
     if (byUrl.length) {
       // A URL a scraper for that very site handles isn't offered to the
       // catch-all ones (a pattern like "http") too.
@@ -569,6 +570,63 @@
     panel.refresh = update;
     update();
     return panel;
+  }
+
+  // -- composers in the titles of the scene's markers ----------------------------------------
+  //
+  // For the markers the scene already has: composer tags named in a title
+  // are added to the marker, and the title loses the names (see
+  // marker_composers in marker_scrapers.py). Shown first, applied for the
+  // ticked ones.
+  async function composersDialog() {
+    const dialog = openDialog("Composers from the marker titles");
+    dialog.body.append(el("p", { textContent: "Looking …" }));
+    let result;
+    try {
+      result = await runOperation({ mode: "marker_composers", scene_id: sceneId() });
+    } catch (err) {
+      dialog.body.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+      return;
+    }
+    const proposals = result.proposals || [];
+    if (!proposals.length) {
+      dialog.body.replaceChildren(el("p", { textContent: result.notes ||
+        "Nothing to change: no marker title names a composer tag it doesn't have, and the titles are clean." }));
+      return;
+    }
+    const picked = new Set(proposals.map((p) => p.id));
+    const rows = proposals.map((p) => el("tr", {},
+      el("td", {}, el("input", { type: "checkbox", checked: true,
+        onchange: (e) => { if (e.target.checked) picked.add(p.id); else picked.delete(p.id); } })),
+      el("td", { style: { whiteSpace: "nowrap" } }, formatTime(p.seconds || 0)),
+      el("td", {}, el("div", { className: "text-muted", style: { textDecoration: p.new_title !== p.title ? "line-through" : "none" }, textContent: p.title }),
+        p.new_title !== p.title ? el("div", { textContent: p.new_title }) : null),
+      el("td", {}, p.add_tags.length ? el("span", { className: "text-success", textContent: `+ ${p.add_tags.join(", ")}` }) : "")));
+    dialog.body.replaceChildren(
+      el("p", { className: "small text-muted", textContent:
+        "Composer tags named in a marker's title — by name, alias or surname — are added to it, and the title loses the names. " +
+        "Primary tag, times and other tags stay." }),
+      el("table", { className: "table table-sm" },
+        el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Tags"))),
+        el("tbody", {}, ...rows)));
+    const apply = el("button", { type: "button", className: "btn btn-primary", textContent: "Apply",
+      onclick: async () => {
+        if (!picked.size) return;
+        apply.disabled = true;
+        apply.textContent = "Applying…";
+        try {
+          const done = await runOperation({ mode: "marker_composers", scene_id: sceneId(), apply: "true", ids: JSON.stringify([...picked]) });
+          dialog.body.replaceChildren(el("div", { className: "alert alert-success",
+            textContent: `${done.applied} marker${done.applied === 1 ? "" : "s"} changed.` }));
+          apply.remove();
+          await refreshStash();
+        } catch (err) {
+          apply.disabled = false;
+          apply.textContent = "Apply";
+          dialog.body.prepend(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+        }
+      } });
+    dialog.footer.prepend(apply);
   }
 
   // The scene's own markers, as text (from the Scrape markers menu).

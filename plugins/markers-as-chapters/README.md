@@ -198,7 +198,26 @@ as composers) are found by
   too (*Rachmaninow* / *Rachmaninoff*, *Mussorgski* / *Mussorgsky*); for
   others give the tag an alias.
 
-Upper/lower case and accents (Dvořák / Dvorak) don't matter. A name the
+Safeguards: the part of a title before the first separator (` - `, ` – `,
+`: `, ` | `) is checked first — if it is exactly a tag's name or alias
+("Johann Strauss Vater" → *Johann Strauss (Vater)*), that's the tag. A
+"Vater" / "Sohn" (I / II, sen. / jun.) after a name has to fit the tag,
+a surname alone doesn't count right after another composer's first name
+("Johann Strauss" isn't Joseph Strauss), and a one-word alias doesn't count
+inside a longer name of another tag.
+
+Upper/lower case and accents (Dvořák / Dvorak) don't matter.
+
+### For markers that already exist
+
+**Scrape markers… → Composers from the titles…** does the same for the
+scene's markers: it shows every marker where a composer tag named in the
+title would be added and the title cleaned ("Johann Strauss Sohn -
+Im Krapfenwaldl, Polka française op. 336" → *Johann Strauss* + "Im
+Krapfenwaldl, Polka française op. 336"); untick what shouldn't change,
+then **Apply**. Primary tag, times and other tags stay. For the whole
+library at once: **Settings → Tasks → Composers from marker titles (all
+scenes)** — every change is logged. A name the
 scraper suggests (ARTE Concert's composers) is replaced by the matching
 tag. The review dialog says how many markers got tags this way; change
 them there as needed.

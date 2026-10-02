@@ -1,6 +1,6 @@
 name: Markers as Chapters
 description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert; ORF ON), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
-version: 0.0.15
+version: 0.0.16
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -9,6 +9,12 @@ interface: raw
 ui:
   javascript:
     - markers-as-chapters.js
+tasks:
+  - name: Composers from marker titles (all scenes)
+    description: For every marker in the library — composer tags (under "Fill in tags under", default Composers) named in its title by name, alias or surname are added, and the title loses the names. Primary tag, times and other tags stay. Each change is logged. For one scene with a preview first, use Scrape markers… → Composers from the titles… instead.
+    defaultArgs:
+      mode: marker_composers
+      apply: "true"
 settings:
   scrapedMarkerTag:
     displayName: Primary tag for scraped markers

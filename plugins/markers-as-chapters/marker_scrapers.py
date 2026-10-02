@@ -52,6 +52,8 @@ scrapers folder" setting. Runs through Stash's runPluginOperation:
                           "url" or "text" — the markers it found
   - marker_pauses:        args "scene_id" — the pauses in the scene's
                           audio, for the review dialog's check
+  - marker_composers:     composers named in existing markers' titles —
+                          proposals, or with "apply" applied (see below)
 Standard library only.
 """
 
@@ -362,8 +364,8 @@ def _similar(a, b):
     """Same surname, maybe in another spelling of its last letters."""
     if a == b:
         return True
-    if min(len(a), len(b)) < 6:
-        return False
+    if min(len(a), len(b)) < 6 or abs(len(a) - len(b)) > 2:
+        return False  # "Walzer" isn't a spelling of "Walzerkönig"
     common = 0
     for x, y in zip(a, b):
         if x != y:
@@ -395,18 +397,89 @@ class TagMatcher:
         self.tags = []
         for t in tags:
             phrases = [p for p in {_plain(x) for x in [t["name"], *(t.get("aliases") or [])]} if p]
-            surnames = {p.split()[-1] for p in phrases if len(p.split()[-1]) >= 4}
+            # the surname: the last real name word ("Johann Strauss Sohn" → strauss)
+            surnames = set()
+            for p in phrases:
+                words = [w for w in p.split() if w not in SUFFIXES and w not in PARTICLES]
+                if words and len(words[-1]) >= 4:
+                    surnames.add(words[-1])
             self.tags.append((t["name"], phrases, surnames))
 
     def match(self, text):
+        """The tags named in text. First the part before the first separator
+        (" - ", " – ", ": ", " | "), which in a title like "Johann Strauss
+        Vater – Radetzky-Marsch" is the composer: if it is exactly a tag's
+        name or alias, that tag it is — plus any named after it. Else the
+        whole text, word by word (see _match)."""
+        head = re.match(r"^\s*(.+?)\s*(?:\s[-–—]\s|:\s|\s\|\s)\s*(.*)$", text or "", re.S)
+        if head:
+            plain_head = _plain(head.group(1))
+            exact = [name for name, phrases, _s in self.tags if plain_head in phrases]
+            if exact:
+                rest = [n for n in self._match(head.group(2)) if n not in exact]
+                return list(dict.fromkeys(exact + rest))
+        return self._match(text)
+
+    def _match(self, text):
         words = _plain(text).split()
-        joined = f" {' '.join(words)} "
-        full = [name for name, phrases, _s in self.tags if any(f" {p} " in joined for p in phrases)]
+        # Whole names and aliases, with where in the title they are (word
+        # positions).
+        words_of = {name: {w for p in phrases for w in p.split()} for name, phrases, _s in self.tags}
+
+        father = {"vater", "i", "sen", "senior", "elder", "sr", "pere", "padre", "starszy"}
+        son = {"sohn", "ii", "jun", "junior", "younger", "jr", "fils", "hijo", "mladsi", "syn"}
+
+        def wrong_generation(name, end):
+            """A father/son word right after the name that doesn't fit the tag:
+            "Johann Strauss Vater" and the son's tag (aliases Sohn, II, jr.)."""
+            after = words[end] if end < len(words) else ""
+            group, other = (father, son) if after in father else (son, father) if after in son else (None, None)
+            return bool(group) and not (words_of[name] & group) and bool(words_of[name] & other)
+
+        def other_first_name(name, i):
+            """The word before position i is a name word of another tag, not
+            of this one: "Johann Strauss" isn't Joseph Strauss's "Strauss"."""
+            if i == 0:
+                return False
+            prev = words[i - 1]
+            if prev in PARTICLES or prev in SUFFIXES or len(prev) < 3 or prev in words_of[name]:
+                return False
+            return any(prev in ws for other, ws in words_of.items() if other != name)
+
+        spans = {}
+        for name, phrases, _s in self.tags:
+            for p in phrases:
+                pw = p.split()
+                for i in range(len(words) - len(pw) + 1):
+                    if words[i:i + len(pw)] == pw and not (len(pw) == 1 and other_first_name(name, i)):
+                        spans.setdefault(name, []).append((i, i + len(pw)))
+        # A match that lies inside a longer one of another tag doesn't count:
+        # Joseph Strauss's alias "Strauss" in "Johann Strauss Sohn" (an alias
+        # of Johann Strauss).
+        def inside(a, b):
+            return b[0] <= a[0] and a[1] <= b[1] and (b[1] - b[0]) > (a[1] - a[0])
+        # "Johann Strauss Vater" isn't the tag of the son (aliases Sohn, II,
+        # jr. …), nor the other way round: a father/son word right after the
+        # name has to fit the tag.
+        for name in list(spans):
+            fitting = [(a, b) for a, b in spans[name] if not wrong_generation(name, b)]
+            if fitting:
+                spans[name] = fitting
+            else:
+                del spans[name]
+        full = [name for name, own in sorted(spans.items(), key=lambda kv: min(s[0] for s in kv[1]))
+                if not all(any(inside(s, o) for other, theirs in spans.items() if other != name for o in theirs)
+                           for s in own)]
+        covered = {i for name in full for a, b in spans[name] for i in range(a, b)}
         # A surname alone counts when exactly one tag has it, and no tag
         # matched by its whole name explains it already.
         unique = []
-        for w in dict.fromkeys(words):
-            names = [name for name, _p, surnames in self.tags if any(_similar(w, s) for s in surnames)]
+        for i, w in enumerate(words):
+            if i in covered:
+                continue
+            names = [name for name, _p, surnames in self.tags
+                     if any(_similar(w, s) for s in surnames) and not other_first_name(name, i)
+                     and not wrong_generation(name, i + 1)]
             if len(names) == 1 and names[0] not in full:
                 unique.append(names[0])
         return list(dict.fromkeys(full + unique))
@@ -497,8 +570,15 @@ def strip_names(title, tag_names):
             i = j + 1
     if not spans:
         return tidy(title)
+    # Overlapping stretches (two tags naming the same words) taken out as one.
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
     out = title
-    for a, b in sorted(spans, reverse=True):
+    for a, b in reversed(merged):
         out = out[:a] + " " + out[b:]
     out = TRAILING_LINKS.sub("", tidy(out))
     out = tidy(out)
@@ -534,6 +614,93 @@ def suggest_tags(gql, markers, settings):
         aliases = {_plain(t["name"]): [t["name"], *(t.get("aliases") or [])] for t in tags}
         m["title_stripped"] = strip_names(m["title"], [aliases.get(_plain(t), [t]) for t in m["tags"]])
     return changed
+
+
+# ---------------------------------------------------------------------------
+# Composers in the titles of markers that already exist
+# ---------------------------------------------------------------------------
+#
+# The same as for scraped markers (see suggest_tags), for the markers in
+# Stash: every composer tag (under "Fill in tags under") named in a marker's
+# title — whole name, alias or surname — is added to the marker, and the
+# title loses the composers' names (also of composer tags it had already),
+# with the separators and brackets they leave. Primary tag, times and other
+# tags stay. "marker_composers" proposes the changes for one scene (args
+# "scene_id") or every marker (no scene_id), and applies them with "apply":
+# "true" — all, or only the markers in "ids" (a JSON list).
+
+MARKER_FIELDS = "id title seconds scene { id title } primary_tag { id name } tags { id name }"
+
+
+def find_markers(gql, scene_id=None):
+    if scene_id:
+        data = gql("query($id: ID!) { findScene(id: $id) { scene_markers { " + MARKER_FIELDS + " } } }", {"id": scene_id})
+        return (data.get("findScene") or {}).get("scene_markers") or []
+    data = gql("query { findSceneMarkers(filter: { per_page: -1 }) { scene_markers { " + MARKER_FIELDS + " } } }")
+    return data["findSceneMarkers"]["scene_markers"]
+
+
+def composer_proposals(gql, settings, scene_id=None):
+    raw = (settings.get("suggestTagsUnder") or "").strip() or DEFAULT_SUGGEST_UNDER
+    parents = [n.strip() for n in raw.split(",") if n.strip() and n.strip() != "-"]
+    composers = tags_under(gql, parents) if parents else []
+    if not composers:
+        return [], f"No tags under {', '.join(parents) or '(none)'} — nothing to look for."
+    matcher = TagMatcher(composers)
+    by_name = {_plain(t["name"]): t for t in composers}
+    proposals = []
+    for m in find_markers(gql, scene_id):
+        title = m.get("title") or ""
+        if not title.strip():
+            continue
+        have = {_plain(t["name"]) for t in m.get("tags") or []}
+        found = [by_name[_plain(n)] for n in matcher.match(title) if _plain(n) in by_name]
+        add = [t for t in found if _plain(t["name"]) not in have]
+        named = found + [by_name[k] for k in have if k in by_name]
+        new_title = strip_names(title, [[t["name"], *(t.get("aliases") or [])] for t in named]) if named else tidy(title)
+        if not add and new_title == title:
+            continue
+        proposals.append({
+            "id": str(m["id"]),
+            "scene_id": str((m.get("scene") or {}).get("id") or ""),
+            "scene": (m.get("scene") or {}).get("title") or "",
+            "seconds": m.get("seconds"),
+            "title": title,
+            "new_title": new_title,
+            "add_tags": [t["name"] for t in add],
+            "add_tag_ids": [str(t["id"]) for t in add],
+            "tag_ids": [str(t["id"]) for t in m.get("tags") or []],
+        })
+    proposals.sort(key=lambda p: (p["scene"], p["seconds"] or 0))
+    return proposals, ""
+
+
+def apply_composers(gql, proposals, only_ids=None, log=None):
+    done = 0
+    for p in proposals:
+        if only_ids is not None and p["id"] not in only_ids:
+            continue
+        gql("mutation($input: SceneMarkerUpdateInput!) { sceneMarkerUpdate(input: $input) { id } }",
+            {"input": {"id": p["id"], "title": p["new_title"], "tag_ids": list(dict.fromkeys(p["tag_ids"] + p["add_tag_ids"]))}})
+        done += 1
+        if log:
+            log(f"{p['scene']} {p['seconds']:.0f}s: \"{p['title']}\" → \"{p['new_title']}\""
+                + (f" + {', '.join(p['add_tags'])}" if p["add_tags"] else ""))
+    return done
+
+
+def marker_composers(gql, args, settings):
+    proposals, note = composer_proposals(gql, settings, args.get("scene_id") or None)
+    if str(args.get("apply", "false")).lower() != "true":
+        return {"proposals": proposals, "notes": note}
+    only = None
+    if args.get("ids"):
+        only = {str(i) for i in json.loads(args["ids"])}
+    log = None
+    if not args.get("scene_id"):  # the task: tell the log what changed
+        log = lambda line: sys.stderr.write("\x01i\x02" + line + "\n")  # noqa: E731
+    done = apply_composers(gql, proposals, only, log)
+    return {"applied": done, "notes": note}
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +767,10 @@ def main():
             output = list_scrapers(settings)
         elif mode == "marker_scrape":
             output = scrape(gql, args, settings, env_extra)
+        elif mode == "marker_composers":
+            output = marker_composers(gql, args, settings)
+            if not args.get("scene_id") and "applied" in output:
+                sys.stderr.write(f"\x01i\x02Composers from marker titles: {output['applied']} markers changed.\n")
         elif mode == "marker_pauses":
             os.environ.update(env_extra)
             sys.path.insert(0, BUILT_IN_DIR)
