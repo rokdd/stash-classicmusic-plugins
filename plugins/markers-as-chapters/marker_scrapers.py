@@ -35,7 +35,9 @@ A script gets JSON on stdin — {"scene": {...}} for a fragment, plus
 
 (only "seconds" is required) — or {"markers": [...], "notes": "..."}, the
 notes shown above the markers in the review dialog. An action may set "timeout: <seconds>"
-(default 180), and a scraper "description:" — shown in the text dialog.
+(default 180), and a scraper "description:" — shown in the text dialog — and
+"fragmentInMenu: true" to be listed at the top of the menu even though it
+handles URLs (it reads the scene's own files too).
 Scripts run in their scraper's folder, with the environment variables
 STASH_FFMPEG, STASH_FFPROBE (Stash's own ffmpeg / ffprobe) and
 STASH_YTDLP (the "Path to yt-dlp" setting; else Scene Improvements' one;
@@ -195,6 +197,7 @@ def load_scrapers(settings):
                     "fragment": config.get("markerByFragment"),
                     "by_url": by_url,
                     "by_text": config.get("markerByText"),
+                    "fragment_in_menu": bool(config.get("fragmentInMenu")),
                 }
     return scrapers
 
@@ -210,7 +213,8 @@ def url_patterns(scraper):
 def list_scrapers(settings):
     return [
         {"id": s["id"], "name": s["name"], "fragment": bool(s["fragment"]), "urls": url_patterns(s),
-         "text": bool(s["by_text"]), "description": s["description"]}
+         "text": bool(s["by_text"]), "description": s["description"],
+         "fragment_in_menu": s.get("fragment_in_menu", False)}
         for s in sorted(load_scrapers(settings).values(), key=lambda s: s["name"].lower())
     ]
 

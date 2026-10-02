@@ -2,6 +2,8 @@
 # announcements and title cards become markers.
 name: Subtitles
 description: "Paste subtitles (SRT or WebVTT) or pick a .srt / .vtt file. Announcements and title cards become markers, their text the titles."
+# Also on top of the menu: it reads the video's own subtitles too, not only URLs.
+fragmentInMenu: true
 markerByFragment:
   action: script
   timeout: 400

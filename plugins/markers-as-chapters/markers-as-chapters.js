@@ -178,7 +178,8 @@
     // scraper for websites goes below the line only — scraping "the scene"
     // with it just means scraping the scene's URL, listed there.
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
-    scrapers.filter((s) => s.fragment && !(s.urls || []).length).forEach((s) => items.push(item(s.name, () => scrape(s, null))));
+    scrapers.filter((s) => s.fragment && (!(s.urls || []).length || s.fragment_in_menu))
+      .forEach((s) => items.push(item(s.name, () => scrape(s, null))));
     scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     items.push(item("Composers from the titles…", () => composersDialog()));
