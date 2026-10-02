@@ -227,12 +227,15 @@ Built in:
   chapters, e.g. a concert's movements), from the scene's URLs or one you
   enter. Needs yt-dlp on the server (the **Path to yt-dlp** setting, else
   Scene Improvements' one, else the PATH).
-- **arte.tv** — the chapters of an arte.tv video, from the scene's arte.tv
-  URL or one you enter: ARTE Concert splits a concert into its works
+- **arte.tv / ARTE Concert** — the chapters of an arte.tv video (ARTE
+  Concert videos are arte.tv videos too), from the scene's arte.tv URL or
+  one you enter: ARTE Concert splits a concert into its works
   (e.g. "Sergej Rachmaninow - Konzert für Klavier und Orchester Nr. 3").
-  Titles come in the URL's language (/de/, /fr/ …). The composer before
-  " - " is suggested as a tag — used when you have a tag of that name or
-  alias. Each chapter ends where the next starts, the last at the end of
+  Titles come in the URL's language (/de/, /fr/ …). Composer and
+  orchestra named in a title ("Orchestra : Composer - Work", "Composer,
+  Work") are suggested as tags — used when you have a tag of that name or
+  alias. Some videos have no chapters at arte; then nothing is found (the
+  plain text scraper with the program from the description helps). Each chapter ends where the next starts, the last at the end of
   the video. Needs nothing extra (reads arte's player API).
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every

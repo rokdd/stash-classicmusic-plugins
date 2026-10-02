@@ -5,8 +5,10 @@ Without "url" it uses the scene's arte.tv URL. Reads arte's player API
 (api.arte.tv/api/player/v2/config/<language>/<program id>), the same
 data arte's own player shows its chapters from. Each chapter ends where
 the next starts, the last at the end of the video. ARTE Concert chapters
-are usually "Composer - Work": the composer is suggested as a tag (used
-when you have a tag of that name or alias)."""
+name composer and performers in their titles: those are suggested as
+tags (used when you have a tag of that name or alias, see suggested_tags).
+Some videos have no chapters at arte — then nothing is found; the plain
+text scraper with the program from the description is the way then."""
 
 import json
 import re
@@ -23,6 +25,29 @@ def program_of(url):
         return None
     lang = (m.groupdict().get("lang") or "de").lower()
     return lang, m.group("program").upper()
+
+
+NAME_RE = re.compile(r"^[^\d:;()\[\]]{3,60}$")
+
+
+def suggested_tags(title):
+    """Names from a chapter title, as tag suggestions. ARTE Concert writes
+    "Composer - Work", "Composer, Work" or "Orchestra : Composer - Work";
+    a part counts as a name when it's short and has no digits. Only names
+    you have tags for are used, so a wrong guess costs nothing."""
+    tags = []
+    performer, sep, rest = title.partition(" : ")
+    if not sep:
+        rest = title
+    elif NAME_RE.match(performer.strip()):
+        tags.append(performer.strip())
+    composer, sep, _work = rest.partition(" - ")
+    if not sep:
+        composer, sep, _work = rest.partition(", ")
+    composer = composer.strip()
+    if sep and NAME_RE.match(composer) and len(composer.split()) <= 5:
+        tags.append(composer)
+    return tags
 
 
 def fetch(lang, program):
@@ -48,12 +73,11 @@ def main():
         start = float(c.get("startTime") or 0)
         end = float(chapters[i + 1].get("startTime") or 0) if i + 1 < len(chapters) else duration
         title = (c.get("title") or "").strip() or f"Chapter {i + 1}"
-        composer, sep, _work = title.partition(" - ")
         markers.append({
             "seconds": start,
             "end_seconds": float(end) if end and float(end) > start else None,
             "title": title,
-            "tags": [composer.strip()] if sep and composer.strip() else [],
+            "tags": suggested_tags(title),
         })
     print(json.dumps(markers))
 

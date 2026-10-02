@@ -1,6 +1,6 @@
 # Chapters of an arte.tv video (ARTE Concert: one per work), from arte's player API.
 # From the scene's arte.tv URL, or one you enter.
-name: arte.tv
+name: arte.tv / ARTE Concert
 markerByFragment:
   action: script
   script:

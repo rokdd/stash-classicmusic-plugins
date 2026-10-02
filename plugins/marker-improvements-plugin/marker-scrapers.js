@@ -85,20 +85,29 @@
 
   // -- the button ---------------------------------------------------------------
 
+  // The Markers tab's content: Stash's own .scene-markers-panel (its tab
+  // panes have no ids in v0.31), else the active tab's pane when that tab
+  // is labelled "Markers".
   function findMarkersPanel() {
-    return (
+    const own = document.querySelector(".scene-markers-panel");
+    if (own) return own;
+    const pane =
       document.querySelector('[id$="tabpane-scene-markers-panel"]') ||
-      document.getElementById("scene-markers-panel")
-    );
+      document.getElementById("scene-markers-panel");
+    if (pane) return pane;
+    const activeTab = document.querySelector(".nav-tabs .nav-link.active");
+    return activeTab && /marker/i.test(activeTab.textContent) ? document.querySelector(".tab-pane.active") : null;
   }
 
   // Next to Stash's "Create Marker" button: the panel's primary button
-  // outside any form.
+  // outside any form and outside this plugin's marker list.
   function placeButton() {
     if (!sceneId()) return;
     const panel = findMarkersPanel();
     if (!panel || panel.querySelector(`#${BUTTON_ID}`)) return;
-    const create = Array.from(panel.querySelectorAll("button.btn-primary")).find((b) => !b.closest("form"));
+    const create = Array.from(panel.querySelectorAll("button.btn-primary")).find(
+      (b) => !b.closest("form") && !b.closest("#marker-symbols-timeline")
+    );
     if (!create) return;
     const button = el("button", {
       id: BUTTON_ID,
