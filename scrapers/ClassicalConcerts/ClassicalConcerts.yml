@@ -1,4 +1,4 @@
-name: Classical Concerts (ARTE, ORF, ARD, ZDF, 3sat, BBC)
+name: Classical Concerts (ARTE, ORF, ARD, ZDF, 3sat, BBC, medici.tv)
 # Scenes from broadcasters' concert pages: title, programme text, concert
 # date, cover, broadcaster as studio, and orchestra, conductor, soloists and
 # composers as performers.
@@ -14,6 +14,7 @@ sceneByURL:
       - bbc.co.uk/programmes
       - bbc.co.uk/iplayer
       - bbc.co.uk/sounds
+      - medici.tv
     script:
       - python
       - classical_concerts.py

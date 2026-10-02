@@ -17,7 +17,7 @@ And scrapers:
 | Scraper | What it's for |
 |---|---|
 | [Classical Music](scrapers/ClassicalMusic/) | Performers: composers, conductors, soloists, orchestras from Wikidata — Wikipedia text, portrait, dates, country, roles and (Open Opus) the composer's epoch as tags |
-| [Classical Concerts](scrapers/ClassicalConcerts/) | Scenes from ARTE (ARTE Concert), ORF ON, ARD Mediathek, ZDF, 3sat and BBC — title, programme, concert date, cover, broadcaster, and orchestra, conductor, soloists and composers as performers |
+| [Classical Concerts](scrapers/ClassicalConcerts/) | Scenes from ARTE (ARTE Concert), ORF ON, ARD Mediathek, ZDF, 3sat, BBC and medici.tv — title, programme, concert date, cover, broadcaster, and orchestra, conductor, soloists and composers as performers |
 
 ## Install
 

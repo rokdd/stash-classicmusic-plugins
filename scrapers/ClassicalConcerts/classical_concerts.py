@@ -32,6 +32,7 @@ Frankfurt, 24. November 2023"), else the broadcast date.
 import base64
 import html
 import json
+import os
 import re
 import sys
 import urllib.parse
@@ -368,6 +369,110 @@ def bbc(url):
     return scene(title, details, date, image, studio, composers + performers, [f"https://www.bbc.co.uk/programmes/{pid}"])
 
 
+# -- medici.tv ----------------------------------------------------------------------------------------
+#
+# medici.tv's own data for a programme (the same its site loads,
+# api.medici.tv/satie/edito/movie-file/<slug>/). Without a login it has the
+# title, subtitle (often the cast: "Thomas Adès (conductor) — With …"),
+# recording date, picture and duration; with one (a JSON saved from it, next
+# to the video) also the cast, composers, director, festival and venue.
+
+def medici_scene(data, url=None):
+    title = (data.get("title") or "").strip()
+    subtitle = (data.get("subtitle") or "").strip()
+    if subtitle and "(" not in subtitle:  # an event ("Lucerne Festival 2014"), not a cast list
+        title = f"{title} – {subtitle}"
+    details = plain(data.get("synopsis") or "")
+    if not details and "(" in subtitle:
+        details = subtitle
+    date = None
+    rec = str(data.get("recording_date") or "")
+    if re.match(r"\d{4}-\d{2}-\d{2}", rec):
+        date = rec[:10]
+    elif re.fullmatch(r"\d{4}", rec.strip()):
+        date = rec.strip()
+    date = date or iso_date(data.get("date_publish"))
+    image = data.get("hero_picture") or data.get("picture")
+    performers, director = [], None
+    for group in data.get("casting") or data.get("longCasting") or []:
+        for entry in group if isinstance(group, list) else [group]:
+            name = ((entry or {}).get("artist") or {}).get("name")
+            if name:
+                performers.append(name)
+    # The cast in the subtitle: "Calixto Bieito (stage director), Thomas Adès (conductor) — With Jacquelyn Stucker (Lucia), …"
+    for part in re.split(r"\s+[—–]\s+|,\s+", subtitle):
+        part = re.sub(r"^(with|mit|avec)\s+", "", part.strip(), flags=re.I)
+        m = re.match(r"^(.+?)\s*\(([^)]*)\)$", part)
+        if not m:
+            continue
+        name, role = m.group(1).strip(), m.group(2).lower()
+        if "director" in role or "regie" in role or "mise en scène" in role:
+            director = director or name
+        elif name_like(name) or ensemble_like(name):
+            performers.append(name)
+    composers = list(data.get("composers") or [])
+    for chapter in data.get("chapters") or []:
+        composers += ((chapter or {}).get("work") or {}).get("composers") or []
+    directors = [d.get("name") for d in data.get("directors") or [] if d.get("name")]
+    director = directors[0] if directors else director
+    tags = [e.get("name") for e in data.get("events") or [] if e.get("name")]
+    tags += [p.get("name") for p in data.get("places") or [] if p.get("name")]
+    page = url or (f"https://www.medici.tv{data['url']}" if data.get("url") else None)
+    return scene(title, details, date, image, "medici.tv", composers + performers, [page] if page else [], director, tags)
+
+
+def medici(url):
+    m = re.search(r"//(edu\.)?(?:www\.)?medici\.tv/[a-z]{2}/[a-z-]+/([a-z0-9-]+)", url)
+    if not m:
+        raise SystemExit(f"No medici.tv programme in {url}")
+    api = f"https://api.medici.tv/{'edu-' if m.group(1) else ''}satie/edito/movie-file/{m.group(2)}/"
+    origin = "https://edu.medici.tv" if m.group(1) else "https://www.medici.tv"
+    request = urllib.request.Request(api, headers={"User-Agent": USER_AGENT, "Accept": "application/json",
+                                                   "Origin": origin, "Referer": origin + "/", "Device-Type": "web"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 410:
+            raise SystemExit(f"medici.tv doesn't show {m.group(2)} any more (unpublished).")
+        raise
+    return medici_scene(data, url.split("?")[0])
+
+
+def looks_like_medici(data):
+    return isinstance(data, dict) and "slug" in data and ("casting" in data or "chapters" in data or "synopsis" in data)
+
+
+# -- a JSON file next to the video ---------------------------------------------------------------------
+#
+# Stash passes the scene's id, not its file: the file is looked up through
+# Stash's own API on this machine (STASH_URL, default http://localhost:9999;
+# STASH_API_KEY if Stash has a login).
+
+def scene_files(scene_id):
+    base = os.environ.get("STASH_URL", "http://localhost:9999").rstrip("/")
+    headers = {"Content-Type": "application/json"}
+    if os.environ.get("STASH_API_KEY"):
+        headers["ApiKey"] = os.environ["STASH_API_KEY"]
+    body = json.dumps({"query": "query($id: ID!) { findScene(id: $id) { files { path } } }", "variables": {"id": scene_id}})
+    request = urllib.request.Request(f"{base}/graphql", data=body.encode(), headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=15) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    return [f["path"] for f in ((data.get("data") or {}).get("findScene") or {}).get("files") or []]
+
+
+def json_beside(scene_id):
+    for video in scene_files(scene_id):
+        stem = os.path.splitext(video)[0]
+        for path in (stem + ".medici.json", stem + ".json", video + ".json"):
+            if os.path.isfile(path):
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if looks_like_medici(data):
+                    return medici_scene(data)
+    return None
+
+
 # -- Stash -------------------------------------------------------------------------------------------
 
 SOURCES = [
@@ -377,6 +482,7 @@ SOURCES = [
     ("3sat.de", lambda u: page_data(u, "3sat")),
     ("zdf.de", lambda u: page_data(u, "ZDF")),
     ("bbc.co.uk", bbc),
+    ("medici.tv", medici),
 ]
 
 
@@ -399,7 +505,17 @@ def main():
         if result:
             print(json.dumps(result))
             return
-    raise SystemExit("No URL of ARTE, ORF ON, ARD Mediathek, ZDF, 3sat or BBC on this scene.")
+    if mode == "fragment" and data.get("id"):
+        try:
+            result = json_beside(data["id"])
+        except Exception as exc:  # noqa: BLE001 — Stash not reachable from here: just no file
+            sys.stderr.write(f"Classical Concerts: couldn't look for a JSON file next to the video ({exc})\n")
+            result = None
+        if result:
+            print(json.dumps(result))
+            return
+    raise SystemExit("No URL of ARTE, ORF ON, ARD Mediathek, ZDF, 3sat, BBC or medici.tv on this scene, "
+                     "and no medici.tv JSON next to its video.")
 
 
 if __name__ == "__main__":
