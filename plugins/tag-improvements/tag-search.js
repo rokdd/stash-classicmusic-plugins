@@ -68,8 +68,27 @@
 
   let cache = null; // { at, tags, byId, resultTypename, search: Map(id → text) }
 
+  // The list is used for up to CACHE_MS, but once it's older than
+  // REFRESH_MS it's fetched again in the background — so tags changed
+  // elsewhere (another browser, a plugin task on the server) show up soon.
+  const REFRESH_MS = 30 * 1000;
+  let refreshing = null;
+
   async function loadTags(query, init) {
-    if (cache && Date.now() - cache.at < CACHE_MS) return cache;
+    if (cache && Date.now() - cache.at < CACHE_MS) {
+      if (Date.now() - cache.at > REFRESH_MS && !refreshing) {
+        refreshing = fetchTags(query, init)
+          .then((fresh) => { cache = fresh; })
+          .catch(() => {})
+          .then(() => { refreshing = null; });
+      }
+      return cache;
+    }
+    cache = await fetchTags(query, init);
+    return cache;
+  }
+
+  async function fetchTags(query, init) {
     const body = JSON.stringify({
       operationName: "FindTagsForSelect",
       query,
@@ -103,8 +122,7 @@
         rest: [t.description || "", ...parentNames].join(" ").toLowerCase(),
       };
     });
-    cache = { at: Date.now(), entries, resultTypename: found.__typename };
-    return cache;
+    return { at: Date.now(), entries, resultTypename: found.__typename };
   }
 
   // Every word somewhere in name, aliases, description or parent names; the
@@ -217,6 +235,7 @@
     root.classList.toggle(LARGE_CLASS, large);
 
     const LIST = '[class*="react-select__menu-list"]';
+    const OPTION = '[class*="react-select__option"]';
     const large_ = `.${LARGE_CLASS} .${MENU_CLASS}`;
     const style = document.createElement("style");
     style.textContent = [
@@ -224,7 +243,7 @@
       // (wherever Stash put the dropdown — above the field, it would grow
       // off the top of the screen). What's typed shows in its top bar.
       `${large_} { position: fixed !important; top: 8px !important; bottom: 8px !important; left: 50% !important;` +
-        " right: auto !important; transform: translateX(-50%); width: min(760px, 96vw) !important; margin: 0 !important;" +
+        " right: auto !important; transform: translateX(-50%); width: min(1100px, 96vw) !important; margin: 0 !important;" +
         " z-index: 2000 !important; display: flex !important; flex-direction: column;" +
         " box-shadow: 0 0 0 100vmax rgba(0,0,0,.45) !important; }",
       `${large_} ${LIST} { max-height: none !important; flex: 1 1 auto; min-height: 0; position: static !important; }`,
@@ -233,15 +252,20 @@
       `.${SWITCH_CLASS} .tag-search-query { flex: 1; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`,
       `.${SWITCH_CLASS} button { margin-left: auto; background: none; border: 0; padding: 0; color: inherit; opacity: .75; cursor: pointer; }`,
       `.${SWITCH_CLASS} button:hover { opacity: 1; text-decoration: underline; }`,
-      // Parent tags after the name, greyed out — always.
+      // Parent tags right after the name, greyed out — always. Stash makes
+      // the name a flex block; inline, the parents stay on its line.
+      `.${MENU_CLASS} ${OPTION} > .react-select-image-option { display: inline-flex !important; }`,
       ".tag-search-parents { margin-left: 6px; opacity: .6; font-size: .85em; }",
-      // Large: the image floats on the left, name and description beside it.
       ".tag-search-extra > .tag-search-image, .tag-search-extra > .tag-search-description { display: none; }",
-      `${large_} .tag-search-extra { display: flow-root !important; min-height: 56px; padding-top: 4px !important; padding-bottom: 4px !important; }`,
-      `${large_} .tag-search-extra > .tag-search-image { display: block; float: left; margin-right: 10px; height: 48px; width: auto;` +
-        " max-width: 96px; object-fit: contain; background: #fff; }",
-      `${large_} .tag-search-extra > .tag-search-description { display: -webkit-box; font-size: 0.8em; opacity: 0.75;` +
-        " white-space: normal; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }",
+      // Large: a grid of tiles — image on top, name, parents and description below.
+      `${large_} ${LIST} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));` +
+        " gap: 6px; padding: 6px !important; align-content: start; }",
+      `${large_} ${OPTION} { display: block !important; padding: 6px !important; border-radius: 4px; overflow: hidden;` +
+        " white-space: normal !important; word-break: break-word; }",
+      `${large_} .tag-search-extra > .tag-search-image { display: block; width: 100%; height: 90px; object-fit: contain;` +
+        " background: #fff; margin-bottom: 4px; }",
+      `${large_} .tag-search-extra > .tag-search-description { display: -webkit-box; margin-top: 2px; font-size: 0.75em;` +
+        " opacity: 0.75; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }",
     ].join("\n");
     document.head.appendChild(style);
 
@@ -272,6 +296,9 @@
     // where React put it. Options are reused for other tags as you type, so
     // it's redone when the name changes.
     const ownName = (option) => {
+      // Stash's own name element (next to it may be an alias in brackets).
+      const named = option.querySelector(".react-select-image-option > span:first-child");
+      if (named) return named.textContent.trim().toLowerCase();
       let text = "";
       option.childNodes.forEach((n) => {
         if (n.nodeType === 1 && /tag-search-|marker-symbols-parents/.test(n.className || "")) return;
@@ -282,10 +309,18 @@
     const decorate = () => {
       if (!cache) return;
       const byName = new Map(cache.entries.map((e) => [e.name, e.tag]));
+      const byAlias = new Map();
+      cache.entries.forEach((e) => (e.tag.aliases || []).forEach((a) => {
+        const key = a.toLowerCase();
+        if (!byAlias.has(key)) byAlias.set(key, e.tag);
+      }));
+      const tagFor = (name) =>
+        byName.get(name) || byAlias.get(name) || byName.get(name.replace(/\s*\([^()]*\)\s*$/, ""));
+      const generation = String(cache.at);
       document.querySelectorAll('[class*="react-select__menu-list"]').forEach((list) => {
         const options = list.querySelectorAll('[class*="react-select__option"]');
         // A tag dropdown: one whose options are tags.
-        const isTagMenu = Array.from(options).some((o) => byName.has(ownName(o)));
+        const isTagMenu = Array.from(options).some((o) => tagFor(ownName(o)));
         const menu = list.parentElement;
         if (!isTagMenu || !menu) return;
         menu.classList.add(MENU_CLASS); // React may reset its classes: re-added each time
@@ -311,12 +346,14 @@
         }
         options.forEach((option) => {
           const name = ownName(option);
-          if (option.dataset.tagSearchFor === name) return;
-          option.dataset.tagSearchFor = name;
+          // Redone when the option shows another tag, or the list was reloaded.
+          const key = `${name}|${generation}`;
+          if (option.dataset.tagSearchFor === key) return;
+          option.dataset.tagSearchFor = key;
           option.querySelectorAll(":scope > .tag-search-image, :scope > .tag-search-description, :scope > .tag-search-parents")
             .forEach((n) => n.remove());
           option.classList.remove("tag-search-extra");
-          const tag = byName.get(name);
+          const tag = tagFor(name);
           if (!tag) return;
           // Parent tags after the name (Marker Improvements may have added
           // them already in the marker form).
@@ -333,7 +370,6 @@
           if (hasImage) {
             const img = document.createElement("img");
             img.className = "tag-search-image";
-            img.loading = "lazy";
             img.src = tag.image_path;
             img.alt = "";
             option.insertBefore(img, option.firstChild);

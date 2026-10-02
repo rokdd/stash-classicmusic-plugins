@@ -73,9 +73,10 @@ out: "Solo (Violin)".
 
 At its top is a switch: **⤢ Larger, with images**. Then the dropdown
 becomes a panel the whole height of the window, in front of the page,
-with what you've typed at its top; it shows each tag's **image** and
-**description**, and closes as soon as you've picked a tag; **⤡ Smaller**
-switches back. Your browser remembers the choice for all tag
+with what you've typed at its top, and the tags as a compact **grid of
+tiles**: each tag's **image** on top, its name and parent tags, and the
+start of its **description**. It closes as soon as you've picked a tag;
+**⤡ Smaller** switches back. The arrow keys still move through the tags. Your browser remembers the choice for all tag
 dropdowns; the **Large tag dropdown** setting is how they start.
 
 ## StashDB descriptions
