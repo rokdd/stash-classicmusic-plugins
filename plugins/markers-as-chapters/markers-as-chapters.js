@@ -224,6 +224,41 @@
     }
   }
 
+  // What can be pasted — shown in the Plain text dialog, with the details
+  // in the README on GitHub.
+  const README_FORMATS = "https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters#what-you-can-paste";
+
+  function readmeLink(text) {
+    return el("a", { href: README_FORMATS, target: "_blank", rel: "noopener noreferrer", textContent: text || "More in the README ↗" });
+  }
+
+  function formatsHelp() {
+    const example = (label, sample, note) => el("li", { className: "mb-1" },
+      el("strong", { textContent: label }), note ? ` — ${note}` : "",
+      el("pre", { className: "mb-0 mt-1 p-1", textContent: sample,
+        style: { fontSize: "0.8em", background: "rgba(0,0,0,.25)", borderRadius: "3px", whiteSpace: "pre-wrap" } }));
+    return el("div", { className: "small mb-2" },
+      el("p", { className: "text-muted mb-1", textContent:
+        "Pick a file or paste the text, check and edit it, then scrape. The dialog then says how the text was read." }),
+      el("details", {},
+        el("summary", { textContent: "Which formats can I paste?", style: { cursor: "pointer" } }),
+        el("ul", { className: "mt-2 mb-1 pl-3" },
+          example("Times and titles", "0:00 I. Allegro con brio\n7:41 - 17:30 II. Andante con moto\n[1:02:03] Finale",
+            "one marker per line; a range gives the end too"),
+          example("Titles only", "I. Allegro con brio\nII. Andante con moto\nIII. Scherzo",
+            "placed at the pauses in the audio"),
+          example("A programme with durations", "Giuseppe Verdi\nDon Carlos – 'O don fatale'(5 mins)\nAida – Triumphal March(5 mins)",
+            "as the BBC lists them: placed by the durations and the pauses"),
+          example("A table", "Zeit\tKomponist\tWerk\n0:00\tJohann Strauss\tDonauwalzer",
+            "tabs, ; | or commas; start or duration, composer, title — a header row is optional"),
+          example("CUE sheet", "TRACK 01 AUDIO\n  TITLE \"Overture\"\n  INDEX 01 00:00:00", ""),
+          example("JSON", "{\"chapters\": [{\"tc_start\": 63, \"name\": \"Overture\"}]}",
+            "this plugin's own export, medici.tv, ffprobe, yt-dlp, Stash"),
+          example("Subtitles", "00:00:42,000 --> 00:00:47,000\nWir beginnen mit Franz von Suppè: Fatinitza-Marsch",
+            "SRT or WebVTT: announcements and title cards become markers")),
+        readmeLink()));
+  }
+
   // Text scrapers: paste the text, or pick a file (read in the browser, so
   // from this device), check and edit it, then scrape.
   function textDialog(scraper) {
@@ -250,11 +285,9 @@
       },
     });
     dialog.body.append(
-      el("p", { className: "small text-muted", textContent: scraper.description ||
-        "One marker per line with a time in it (e.g. a tracklist or a video description); the rest of the line is its title. " +
-        "Times like 1:23, 1:02:03, [12:34], 3m20s; a range like 1:23 - 4:56 gives the end too. A CUE sheet works as well. " +
-        "Titles only, without any times: they're taken as the pieces in order and placed at the pauses in the audio. " +
-        "Pick a file or paste the text, check it, then scrape." }),
+      scraper.description
+        ? el("p", { className: "small text-muted" }, scraper.description, " ", readmeLink())
+        : formatsHelp(),
       el("div", { className: "mb-2" }, file),
       area
     );

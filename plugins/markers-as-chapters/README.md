@@ -198,6 +198,88 @@ otherwise the **Primary tag for scraped markers** setting is used (empty:
 doesn't exist yet is created. Other tags are matched by name or alias;
 ones that don't exist are left out (and listed).
 
+## What you can paste
+
+**Scrape markers… → Plain text — paste text or pick a file…** reads all of
+these (or a file with them: .txt, .cue, .json, .srt, .vtt, .csv, .tsv). The
+dialog says afterwards how the text was read; if it guessed wrong, edit the
+text and scrape again.
+
+**Times and titles** — one marker per line, the rest of the line is its
+title. Times like `1:23`, `1:02:03`, `[12:34]`, `(5:10)`, `3m20s`; a range
+gives the end too, otherwise a marker ends where the next starts.
+
+```
+0:00 I. Allegro con brio
+7:41 - 17:30 II. Andante con moto
+[1:02:03] Finale
+```
+
+**Titles only** — the pieces in order, without times; they're placed at
+the pauses in the audio (the longest pauses split the video into that many
+pieces).
+
+```
+I. Allegro con brio
+II. Andante con moto
+III. Scherzo
+```
+
+**A programme with durations**, as the BBC lists it — a composer on a line
+of their own, then their works with their length; "Unknown" is no
+composer. Placed by the durations and the pauses in the audio.
+
+```
+Giuseppe Verdi
+Don Carlos – 'O don fatale'(5 mins)
+Aida – Triumphal March(5 mins)
+Unknown
+The National Anthem (arr. Britten)(3 mins)
+```
+
+**A table** — columns split by tabs, `;`, `|`, several spaces or commas
+(CSV with quotes too), e.g. copied from a website or a spreadsheet. A
+header row (Zeit/Time, Dauer/Duration, Komponist/Composer, Titel/Werk/Title,
+Interpret/Performer, Nr.) is optional — without one, the columns are
+recognised by what's in them.
+
+```
+Zeit	Komponist	Werk
+0:00	Johann Strauss	An der schönen blauen Donau
+9:12	Johann Strauss Vater	Radetzky-Marsch
+```
+
+**A CUE sheet** — one marker per track; `REM PRIMARY_TAG`, `REM TAGS` and
+`REM END` (as **Copy as text → CUE sheet** writes them) are read too.
+
+```
+TRACK 01 AUDIO
+  TITLE "Overture"
+  PERFORMER "Gioachino Rossini"
+  INDEX 01 01:03:00
+```
+
+**JSON** — this plugin's own export (**Copy as text → JSON**), medici.tv's
+chapters, ffprobe (`-show_chapters -of json`), yt-dlp's info file, Stash's
+marker data, or any list of objects with a start and a title.
+
+```json
+{"chapters": [{"tc_start": 63, "tc_end": 476,
+  "multiline_name": "Gioachino Rossini\nLa Scala di seta\nOverture",
+  "work": {"composers": ["Gioachino Rossini"]}}]}
+```
+
+**Subtitles** (SRT or WebVTT) — announcements and title cards become
+markers (see **Subtitles** above).
+
+```
+00:00:42,000 --> 00:00:47,000
+Wir beginnen mit Franz von Suppè: Fatinitza-Marsch.
+```
+
+In every format, composers (and soloists) named in the titles are filled
+in as tags, and text in the wrong encoding is set right.
+
 ## Text in the wrong encoding
 
 Old tools often write titles in Windows-1252 instead of UTF-8, which shows
