@@ -298,6 +298,13 @@ def scrape(gql, args, settings, env_extra):
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
     markers, notes = run_action(scraper, action, payload, env_extra)
     markers = normalise(markers)
+    if len(markers) > 1 and len({m["seconds"] for m in markers}) == 1:
+        # Every marker at the same time: the source had no real times.
+        titles = "; ".join(dict.fromkeys(m["title"] for m in markers if m["title"]))
+        markers = []
+        notes = (notes + " " if notes else "") + (
+            "All markers found start at the same time, so the source has no real times. "
+            + (f"Titles: {titles}. Paste them into Plain text to place them at the pauses in the audio." if titles else ""))
     try:
         matched = suggest_tags(gql, markers, settings)
     except Exception as exc:  # noqa: BLE001

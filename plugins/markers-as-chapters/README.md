@@ -37,7 +37,12 @@ adds them, and the page updates.
 Built in:
 
 - **Video file chapters** — chapters stored in the file (MKV, MP4 …), read
-  with Stash's ffprobe.
+  with Stash's ffprobe. Broken chapters are handled: titles like "nan",
+  "Init" or the file's own name are left out; when every chapter starts at
+  0:00, an MP4/M4V's chapter track is read directly (it may still have the
+  times), with titles decoded properly ("schönen", not "sch�nen"). With no
+  times anywhere, no markers are made — the dialog lists the titles to
+  paste into **Plain text**, which places them at the pauses.
 - **Online chapters (yt-dlp)** — the chapters of the video online (YouTube
   chapters, e.g. a concert's movements), from the scene's URLs or one you
   enter. Needs yt-dlp on the server (the **Path to yt-dlp** setting, else
