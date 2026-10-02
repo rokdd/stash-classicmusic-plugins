@@ -1931,6 +1931,18 @@ def start_in_background(plugin_input):
     )
 
 
+# The task names in advancedFileOperations.yml, for runs started from
+# Settings → Tasks (they have no task_description).
+def task_name(args):
+    mode = args.get("mode", "convert_library")
+    keep = str(args.get("keep_original", "true")).lower() == "true"
+    return {
+        "convert_library": f"Convert Library to H265 ({'keep' if keep else 'replace'} originals)",
+        "split_scene": "Split Scene at Markers",
+        "repair_scene": "Repair Corrupt Scene File",
+    }.get(mode, mode.replace("_", " ").capitalize())
+
+
 def main():
     plugin_input = read_plugin_input()
     import task_history
@@ -1942,14 +1954,22 @@ def main():
         error = exc
         raise
     finally:
-        # A background run tells the task history how it ended — Stash only
-        # saw the quick task that started it.
-        if BACKGROUND:
-            args = plugin_input.get("args") or {}
-            settings = StashClient(plugin_input.get("server_connection", {})).plugin_settings()
+        # Every longer run tells the task history how it ended: a background
+        # run, whose work Stash's task list never saw, and a normal one too —
+        # the Stash page that records tasks may not be open when a
+        # conversion ends hours later. (Kept once if a page recorded it too.)
+        args = plugin_input.get("args") or {}
+        mode = args.get("mode", "convert_library")
+        launcher = str(args.get("background", "false")).lower() == "true" and not BACKGROUND
+        quick = mode.startswith(("history_", "ytdlp_")) or mode == "torrent_check"
+        if BACKGROUND or not (launcher or quick):
+            try:
+                settings = StashClient(plugin_input.get("server_connection", {})).plugin_settings()
+            except Exception:  # noqa: BLE001
+                settings = {}
             task_history.record_background(
-                args.get("task_description") or args.get("mode") or "Task",
-                started, error or LAST_OUTCOME.get("error"), settings,
+                args.get("task_description") or task_name(args),
+                started, error or LAST_OUTCOME.get("error"), settings, background=BACKGROUND,
             )
 
 

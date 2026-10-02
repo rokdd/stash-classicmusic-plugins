@@ -97,10 +97,10 @@ its own.
 
 ## Tools on Settings → Tools
 
-Stash's own **Settings → Tools** page gets a **Scene Improvements**
-section with three tabs: **Torrent check**, **Download (yt-dlp)** and
-**Task history**. (The older address `/plugin/file-tools` still shows the
-same tools as a page of their own.)
+Stash's own **Settings → Tools** page gets three sections of its own,
+after Stash's tools: **Task history**, **Torrent check** and **Download
+(yt-dlp)**. (The older address `/plugin/file-tools` still shows the same
+tools as a page of their own, with tabs.)
 
 ### Torrent check
 
@@ -218,12 +218,16 @@ queued or running. This plugin records every task as it finishes and
 shows the history as **Task History right underneath the Job Queue on
 Settings → Tasks** — drawn just like the queue, one entry per task with
 its status icon, description, when it ended and how long it took, and
-the error for failed ones — and as the **Task history** tab on Settings → Tools. Filter
+the error for failed ones — and as the **Task history** section on Settings → Tools. Filter
 by status, remove single entries with their **×**, or clear it.
 
 - Tasks are recorded while any Stash page is open. Stash still remembers
   its last 10 finished tasks, so ones that finished while no page was open
   are picked up the next time one is — as long as they're among those 10.
+- This plugin's own longer tasks — converting, splitting, repairing, in
+  the background or not — record themselves when they end, with or
+  without a page open, so a conversion that finishes at night is in the
+  history too. A task recorded both ways is kept once.
 - The history is kept on the server (`task-history.json` in the plugin's
   folder), so every browser and device shows the same list; the newest
   500 tasks are kept.
@@ -233,7 +237,7 @@ by status, remove single entries with their **×**, or clear it.
   pattern for the whole description — e.g. `Scan*, Generate*, (automatic)`.
   Ignored tasks aren't recorded, and ones recorded before are hidden.
 - If a Stash version builds the Tasks page differently, the history just
-  doesn't show there; this tab always has it.
+  doesn't show there; Settings → Tools always has it.
 
 ## Splitting a scene at its markers
 

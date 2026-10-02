@@ -22,6 +22,7 @@ Stash numbers tasks from 1 again after a restart — and only the newest
 MAX_ENTRIES are kept. Standard library only.
 """
 
+import datetime
 import json
 import os
 import re
@@ -82,6 +83,34 @@ def _sort_time(entry):
     return entry.get("endTime") or entry.get("startTime") or entry.get("addTime") or ""
 
 
+def _plain_description(entry):
+    text = (entry.get("description") or "").lower()
+    text = re.sub(r"^running( [\w ]+?)? plugin task:\s*", "", text)
+    text = re.sub(r"\s*\((background|automatic)\)\s*$", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _when(entry):
+    text = entry.get("endTime") or entry.get("startTime") or entry.get("addTime") or ""
+    try:
+        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def same_run(a, b):
+    """The same task, recorded twice — by the plugin itself when it ended,
+    and by a Stash page that saw it in Stash's task list: the same
+    description (or one inside the other — Stash's adds "Running plugin
+    task:") and ended within 3 minutes."""
+    da, db = _plain_description(a), _plain_description(b)
+    if not da or not db:
+        return False
+    alike = da == db or (min(len(da), len(db)) >= 8 and (da in db or db in da))
+    ta, tb = _when(a), _when(b)
+    return alike and ta is not None and tb is not None and abs(ta - tb) <= 180
+
+
 def add(entries, rules=()):
     data = _load()
     history = data.get("entries") or []
@@ -90,6 +119,8 @@ def add(entries, rules=()):
     for raw in entries or []:
         entry = {k: raw.get(k) for k in FIELDS}
         if entry["id"] is None or _key(entry) in known or ignored(entry, rules):
+            continue
+        if any(same_run(entry, e) for e in history):
             continue
         known.add(_key(entry))
         history.append(entry)
@@ -108,14 +139,17 @@ def utc_now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def record_background(description, started, error=None, settings=None):
-    """A background run (see start_in_background) records its own end here:
-    Stash's task list only ever saw its quick start, not the work itself.
-    Kept like any finished task, so the ignore list applies too."""
+def record_background(description, started, error=None, settings=None, background=True):
+    """A run records its own end here — a background run (see
+    start_in_background), whose work Stash's task list never saw, and every
+    longer run too: a Stash page records tasks only while it's open, so a
+    conversion that ends at night would otherwise be missed. The same task
+    recorded by a page as well is kept once (see same_run). Kept like any
+    finished task, so the ignore list applies too."""
     entry = {
         # Unique per run: the process id alone could be reused later.
-        "id": f"bg-{os.getpid()}-{int(__import__('time').time() * 1000)}",
-        "description": f"{description} (background)",
+        "id": f"{'bg' if background else 'run'}-{os.getpid()}-{int(__import__('time').time() * 1000)}",
+        "description": f"{description} (background)" if background else description,
         "status": "FAILED" if error else "FINISHED",
         "addTime": started,
         "startTime": started,

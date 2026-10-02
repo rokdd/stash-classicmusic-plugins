@@ -316,51 +316,57 @@
 
   // -- on Settings → Tools ------------------------------------------------------------
   //
-  // Everything lives on Stash's own Tools page: a "Scene Improvements"
-  // section after Stash's own tool sections, built the same way (same kind
-  // of section, heading and card), holding the tools with their tabs. The
-  // Tools page isn't something plugins can extend, so the section is added
-  // to the page; if a Stash version builds that page differently, it just
-  // doesn't appear — the tools are still at /plugin/file-tools.
+  // On Stash's own Tools page, after Stash's own tool sections and built the
+  // same way (same kind of section, heading and card): one section per tool —
+  // Task history, then Torrent check and Download (yt-dlp) underneath. The
+  // Tools page isn't something plugins can extend, so the sections are added
+  // to the page; if a Stash version builds that page differently, they just
+  // don't appear — the tools are still at /plugin/file-tools.
 
-  const TOOLS_SECTION_ID = "afo-file-tools-section";
+  const TOOLS_SECTIONS = [
+    { id: "afo-tools-history", title: "Task history",
+      view: () => (window.AFOTaskHistory ? h(window.AFOTaskHistory.View) : h("p", null, "Task history isn't available.")) },
+    { id: "afo-tools-torrents", title: "Torrent check", view: () => h(TorrentCheck) },
+    { id: "afo-tools-download", title: "Download (yt-dlp)", view: () => h(Download) },
+  ];
 
   function placeOnToolsPage() {
-    if (document.getElementById(TOOLS_SECTION_ID)) return;
+    if (document.getElementById(TOOLS_SECTIONS[0].id)) return;
     // Stash keeps every settings tab in the page (only the open one shows),
     // so "the last section on the page" may belong to a hidden tab. The
     // Tools tab is found by its own links to Stash's tools instead, and the
-    // section goes after the last section in that tab.
+    // sections go after the last section in that tab.
     const toolLink = document.querySelector('a[href$="/sceneFilenameParser"], a[href$="/sceneDuplicateChecker"]');
     const pane = toolLink && (toolLink.closest(".tab-pane") || toolLink.closest(".setting-section")?.parentElement);
     if (!pane) return;
     const sections = Array.from(pane.querySelectorAll(".setting-section"));
-    const last = sections[sections.length - 1];
+    let last = sections[sections.length - 1];
     if (!last) return;
     const heading = last.querySelector("h1, h2, h3, h4, h5, h6");
-
-    const section = document.createElement(last.tagName.toLowerCase());
-    section.id = TOOLS_SECTION_ID;
-    section.className = last.className;
-    const title = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
-    if (heading) title.className = heading.className;
-    title.textContent = "Scene Improvements";
-    // Exactly the card of the tool sections above — same classes, so the
-    // same width, background and text colour — with some inner spacing like
-    // Stash's own tool rows. The tools are drawn inside that.
     const card = last.querySelector(".card");
-    const box = document.createElement("div");
-    box.className = card ? card.className : "card";
-    const inner = document.createElement("div");
-    inner.style.padding = "12px 16px";
-    box.appendChild(inner);
-    section.append(title, box);
-    last.after(section);
-
-    const view = h(FileToolsPage, { embedded: true });
     const ReactDOM = api.ReactDOM;
-    if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(inner).render(view);
-    else if (ReactDOM && ReactDOM.render) ReactDOM.render(view, inner);
+
+    TOOLS_SECTIONS.forEach(({ id, title, view }) => {
+      const section = document.createElement(last.tagName.toLowerCase());
+      section.id = id;
+      section.className = last.className;
+      const head = document.createElement(heading ? heading.tagName.toLowerCase() : "h1");
+      if (heading) head.className = heading.className;
+      head.textContent = title;
+      // Exactly the card of the tool sections above — same classes, so the
+      // same width, background and text colour — with some inner spacing
+      // like Stash's own tool rows. The tool is drawn inside that.
+      const box = document.createElement("div");
+      box.className = card ? card.className : "card";
+      const inner = document.createElement("div");
+      inner.style.padding = "12px 16px";
+      box.appendChild(inner);
+      section.append(head, box);
+      last.after(section);
+      last = section;
+      if (ReactDOM && ReactDOM.createRoot) ReactDOM.createRoot(inner).render(view());
+      else if (ReactDOM && ReactDOM.render) ReactDOM.render(view(), inner);
+    });
   }
 
   let toolsPending = false;
