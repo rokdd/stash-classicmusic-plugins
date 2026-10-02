@@ -129,6 +129,35 @@ or its hooks run alongside Tag Tree's. Your settings there need setting
 again under Tag Tree; the record of which descriptions it wrote is picked
 up automatically from its old folder, so your own texts stay protected.
 
+## Composer tags
+
+Markers can only carry tags, not performers. So every performer marked as
+a composer gets a tag of their own, which markers can carry (and which
+[Markers as Chapters](../markers-as-chapters/) fills in from chapter
+titles):
+
+1. Mark the performer: **Edit → Custom Fields**, field `composer`, value
+   e.g. `yes` (anything but no / false / 0). The field name is the
+   **Composer field** setting.
+2. On save, the performer's tag is created or updated, under the parent
+   tag **Composers** (the **Composer parent tag** setting; created if
+   needed):
+   - the performer's **name** — with the disambiguation in brackets if
+     another tag already has the name;
+   - their **aliases** (ones another tag already uses are left out — Stash
+     allows each name only once);
+   - their **image**;
+   - their **details** as description — unless you wrote the tag's
+     description yourself, which is kept.
+3. **Settings → Tasks → Sync composer tags** does this for every composer
+   at once — the first time, or after editing many performers.
+
+The tag remembers its performer (custom field `performer_id`), so renaming
+the performer renames the tag, and the old name stays as an alias. A tag
+that already has the performer's name is taken over, not duplicated.
+Nothing is ever deleted: a performer no longer marked as composer keeps
+the tag.
+
 ## Merging tags when scraping a scene
 
 When you scrape a scene from its **Edit** tab — **Scrape with…** a scraper

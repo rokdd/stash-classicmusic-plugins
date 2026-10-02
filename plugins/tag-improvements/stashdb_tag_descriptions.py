@@ -284,6 +284,20 @@ def main():
         return
 
     hook = args.get("hookContext")
+    if args.get("mode") in ("sync_composers", "composer_hook"):
+        # Composer tags (composer_tags.py): one performer from the hook, or all.
+        import composer_tags
+        performer_id = hook.get("id") if hook else None
+        try:
+            summary = composer_tags.run(stash, stash.plugin_settings(), log_info, log_progress, performer_id)
+        except Exception as exc:  # noqa: BLE001
+            write_plugin_output(error=f"Syncing composer tags failed: {exc}")
+            return
+        if summary:
+            log_info(summary)
+        write_plugin_output(output=summary or "Not a composer, or nothing changed.")
+        return
+
     if hook and hook.get("type") == "Tag.Update.Post" and "stash_ids" not in (hook.get("inputFields") or []):
         # Only an update that sets or changes the tag's StashDB ID matters.
         # This also skips the updates this plugin makes itself — otherwise

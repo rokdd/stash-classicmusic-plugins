@@ -1,6 +1,6 @@
 name: Tag Improvements
-description: "Tag tools for Stash: a collapsible tree of all tags on the Tags page (with images, descriptions and counts); tag descriptions copied from StashDB and kept up to date; and scraping a scene from its Edit tab adds the scraped tags to the existing ones instead of replacing them."
-version: 0.0.10
+description: "Tag tools for Stash: a collapsible tree of all tags on the Tags page (with images, descriptions and counts); tag descriptions copied from StashDB and kept up to date; scraping a scene from its Edit tab adds the scraped tags to the existing ones instead of replacing them; and a tag for every composer (performers with a composer custom field), kept in step."
+version: 0.0.11
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/tag-improvements
 exec:
   - python
@@ -20,11 +20,22 @@ hooks:
       - Tag.Update.Post
     defaultArgs:
       mode: hook
+  - name: Keep a composer's tag in step
+    description: When a performer is created or saved and is marked as a composer (custom field, see the Composer field setting), creates or updates their tag under the composer parent tag — name, aliases, image, description.
+    triggeredBy:
+      - Performer.Create.Post
+      - Performer.Update.Post
+    defaultArgs:
+      mode: composer_hook
 tasks:
   - name: Update tag descriptions from StashDB
     description: Fetches the description of every tag that has a StashDB ID. Empty descriptions are filled; ones this plugin wrote before are updated; ones you wrote yourself are kept unless "Overwrite" is on.
     defaultArgs:
       mode: sync_all
+  - name: Sync composer tags
+    description: Gives every performer marked as a composer (custom field, see the Composer field setting) a tag of their own under the composer parent tag, and brings existing ones up to date — name, aliases, image, description.
+    defaultArgs:
+      mode: sync_composers
 settings:
   plainTagSearch:
     displayName: Use Stash's plain tag search
@@ -50,3 +61,11 @@ settings:
     displayName: Overwrite descriptions you wrote yourself
     description: "Off: only empty descriptions, and ones this plugin wrote earlier, are replaced. On: every description is replaced with StashDB's."
     type: BOOLEAN
+  composerField:
+    displayName: Composer field
+    description: "The performer custom field that marks a composer (Edit performer → Custom Fields). Any value but no / false / 0 counts. Each composer gets a tag of their own, so markers can carry them. Empty: composer."
+    type: STRING
+  composerParentTag:
+    displayName: Composer parent tag
+    description: "The tag the composer tags go under — created if it doesn't exist. Empty: Composers."
+    type: STRING

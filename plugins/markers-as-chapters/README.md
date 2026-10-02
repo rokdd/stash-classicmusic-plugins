@@ -92,6 +92,25 @@ otherwise the **Primary tag for scraped markers** setting is used (empty:
 doesn't exist yet is created. Other tags are matched by name or alias;
 ones that don't exist are left out (and listed).
 
+## Composers and other tags from the titles
+
+Every scraper's markers get tags filled in from their titles: tags below
+the **Fill in tags under** parent tags (default `Composers` — the composer
+tags [Tag Improvements](../tag-improvements/) keeps for performers marked
+as composers) are found by
+
+- their whole name or an alias, as whole words, or
+- just the surname: "Beethoven: Symphony No. 5" → *Ludwig van Beethoven*.
+  Only when one tag has that surname — two Bachs: neither, unless the
+  title has more of the name. Spellings that differ only at the end count
+  too (*Rachmaninow* / *Rachmaninoff*, *Mussorgski* / *Mussorgsky*); for
+  others give the tag an alias.
+
+Upper/lower case and accents (Dvořák / Dvorak) don't matter. A name the
+scraper suggests (ARTE Concert's composers) is replaced by the matching
+tag. The review dialog says how many markers got tags this way; change
+them there as needed.
+
 ## Your own marker scrapers
 
 Put them in a folder on the server and enter it as **Marker scrapers
@@ -143,6 +162,8 @@ folder — Stash takes every `.yml` there for a plugin.
 - **Marker scrapers folder** — a folder with your own scrapers (above).
 - **Path to yt-dlp** — for the online chapters; empty: Scene
   Improvements' setting, else yt-dlp on the PATH.
+- **Fill in tags under** — parent tags whose tags are filled in from the
+  titles (above); empty: `Composers`, `-` switches it off.
 
 These were Marker Improvements' settings before this became a plugin of
 its own; values set there are still used until you set them here.

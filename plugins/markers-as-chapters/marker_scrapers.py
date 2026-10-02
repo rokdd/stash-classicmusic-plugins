@@ -295,8 +295,123 @@ def scrape(gql, args, settings, env_extra):
         if not action:
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
     markers, notes = run_action(scraper, action, payload, env_extra)
-    return {"scraper": scraper["name"], "markers": normalise(markers), "notes": notes,
+    markers = normalise(markers)
+    try:
+        matched = suggest_tags(gql, markers, settings)
+    except Exception as exc:  # noqa: BLE001
+        matched, notes = 0, (notes + " " if notes else "") + f"(Couldn't match tags by name: {exc})"
+    if matched:
+        notes = (notes + " " if notes else "") + \
+            f"{matched} marker{'' if matched == 1 else 's'} got tags from their titles (e.g. composers)."
+    return {"scraper": scraper["name"], "markers": markers, "notes": notes,
             "existing": scene.get("scene_markers") or []}
+
+
+# ---------------------------------------------------------------------------
+# Filling in tags from the titles (composers …)
+# ---------------------------------------------------------------------------
+#
+# The tags under the "Fill in tags under" setting (default: Composers — the
+# composer tags Tag Improvements keeps) are looked for in every marker's
+# title, and in the tag names a scraper suggests:
+#   - the tag's whole name or one of its aliases ("Ludwig van Beethoven",
+#     "Beethoven"), as whole words — always used;
+#   - or just a part: the last word of the name or of an alias, the surname
+#     ("Beethoven: Symphony No. 5" → Ludwig van Beethoven) — used when only
+#     one tag has that surname (two Bachs or Strausses: neither, unless the
+#     title has more of the name). Spellings that differ only in the last
+#     letters count too ("Rachmaninow" / "Rachmaninoff", "Mussorgski" /
+#     "Mussorgsky"); for others give the tag an alias.
+# Upper/lower case and accents are ignored. A scraper's suggested name that
+# matches is replaced by the tag's name.
+
+DEFAULT_SUGGEST_UNDER = "Composers"
+
+
+def _plain(text):
+    import unicodedata
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(c for c in text if not unicodedata.combining(c)).lower()
+    return " ".join(re.sub(r"[^\w]+", " ", text).split())
+
+
+def _similar(a, b):
+    """Same surname, maybe in another spelling of its last letters."""
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 6:
+        return False
+    common = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        common += 1
+    return common >= max(5, min(len(a), len(b)) - 2)
+
+
+def tags_under(gql, names):
+    """Tags (id, name, aliases) below the named parent tags, at any depth."""
+    found = []
+    for name in names:
+        parent = gql(
+            'query($n: String!) { findTags(tag_filter: { name: { value: $n, modifier: EQUALS } }, filter: { per_page: 1 }) { tags { id } } }',
+            {"n": name},
+        )["findTags"]["tags"]
+        if not parent:
+            continue
+        found += gql(
+            "query($ids: [ID!]) { findTags(tag_filter: { parents: { value: $ids, modifier: INCLUDES, depth: -1 } }, "
+            "filter: { per_page: -1 }) { tags { id name aliases } } }",
+            {"ids": [parent[0]["id"]]},
+        )["findTags"]["tags"]
+    return found
+
+
+class TagMatcher:
+    def __init__(self, tags):
+        self.tags = []
+        for t in tags:
+            phrases = [p for p in {_plain(x) for x in [t["name"], *(t.get("aliases") or [])]} if p]
+            surnames = {p.split()[-1] for p in phrases if len(p.split()[-1]) >= 4}
+            self.tags.append((t["name"], phrases, surnames))
+
+    def match(self, text):
+        words = _plain(text).split()
+        joined = f" {' '.join(words)} "
+        full = [name for name, phrases, _s in self.tags if any(f" {p} " in joined for p in phrases)]
+        # A surname alone counts when exactly one tag has it, and no tag
+        # matched by its whole name explains it already.
+        unique = []
+        for w in dict.fromkeys(words):
+            names = [name for name, _p, surnames in self.tags if any(_similar(w, s) for s in surnames)]
+            if len(names) == 1 and names[0] not in full:
+                unique.append(names[0])
+        return list(dict.fromkeys(full + unique))
+
+
+def suggest_tags(gql, markers, settings):
+    """Adds matching tags to the markers. Returns how many got one."""
+    raw = (settings.get("suggestTagsUnder") or "").strip() or DEFAULT_SUGGEST_UNDER
+    names = [n.strip() for n in raw.split(",") if n.strip() and n.strip() != "-"]
+    if not names or not markers:
+        return 0
+    tags = tags_under(gql, names)
+    if not tags:
+        return 0
+    matcher = TagMatcher(tags)
+    known = {_plain(t["name"]) for t in tags}
+    changed = 0
+    for m in markers:
+        before = list(m["tags"])
+        kept = []
+        for suggested in m["tags"]:
+            hits = [] if _plain(suggested) in known else matcher.match(suggested)
+            kept += hits or [suggested]
+        kept += matcher.match(m["title"])
+        m["tags"] = list(dict.fromkeys(kept))
+        if m["tags"] != before:
+            changed += 1
+    return changed
 
 
 # ---------------------------------------------------------------------------
