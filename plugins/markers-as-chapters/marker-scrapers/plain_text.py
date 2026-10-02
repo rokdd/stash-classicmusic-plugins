@@ -149,7 +149,8 @@ def main():
                 for m, t in zip(markers, tags):
                     m["tags"] = t
                 print(json.dumps({"markers": markers, "notes":
-                    f"{how} No times, so the rows were placed at the pauses in the audio. {notes}"}))
+                    f"{how} No times, so the rows were placed at the pauses in the audio. {notes}",
+                    "pieces": [{"title": t, "tags": g} for t, g in zip(titles, tags)]}))
                 return
             print(json.dumps({"markers": fill_ends(markers, duration), "notes": f"{how} {extra}".strip()}))
             return
@@ -161,7 +162,10 @@ def main():
         if titles:
             markers, notes = pauses.scrape_titles(scene, titles)
             print(json.dumps({"markers": markers,
-                              "notes": "No times in the text, so the lines were placed at the pauses in the audio. " + notes}))
+                              "notes": "No times in the text, so the lines were placed at the pauses in the audio. " + notes,
+                              # all titles in order, so the dialog can place them again
+                              # when a part is marked as not music
+                              "pieces": [{"title": t, "tags": []} for t in titles]}))
             return
     print(json.dumps({"markers": fill_ends(markers, duration), "notes": ""}))
 

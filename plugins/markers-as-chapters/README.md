@@ -34,7 +34,23 @@ The markers found open in a dialog: tick the ones to create, change
 titles, primary tag and tags, and **shift all times** (when the online
 video has a longer or shorter intro than your file). Markers already in
 the scene at that time are flagged and not ticked. **Create markers**
-adds them, and the page updates.
+adds them, and the page updates. Also in the dialog:
+
+- **A timeline** beside the table: the whole video from top to bottom,
+  every marker a block as long as it lasts (blue: to create, grey: not
+  ticked, orange: already a marker there, hatched: not music), the pauses
+  in the audio as thin lines. **Hovering** it shows that moment of the
+  video (Stash's seek bar thumbnails, or the video itself if there are
+  none) with its time; **clicking** a block shows its row.
+- **Take the tags' names out of the titles** (on by default): a marker
+  that got a tag — a composer — loses that name in its title: "Johann
+  Strauss Sohn – Im Krapfenwaldl" → "Im Krapfenwaldl". First names,
+  initials, van / von, Sohn / Vater / II and other spellings count.
+- **not music** per row — applause, a speech, an interview: no marker for
+  it. When the titles were placed at the pauses (titles without times),
+  all titles after it **move on** to the next pieces and the times are
+  worked out again from the pauses; the dialog says if titles are left
+  without a piece. **undo** takes it back.
 
 Built in:
 

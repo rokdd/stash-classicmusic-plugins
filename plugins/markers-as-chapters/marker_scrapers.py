@@ -248,8 +248,8 @@ def run_action(scraper, action, payload, env_extra):
     except ValueError as exc:
         raise RuntimeError(f"Scraper {scraper['name']} didn't print JSON: {exc}") from exc
     if isinstance(result, list):
-        return result, ""
-    return result.get("markers", []), str(result.get("notes") or "")
+        return result, "", None
+    return result.get("markers", []), str(result.get("notes") or ""), result.get("pieces")
 
 
 def normalise(markers):
@@ -298,7 +298,7 @@ def scrape(gql, args, settings, env_extra):
         action = scraper["fragment"]
         if not action:
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
-    markers, notes = run_action(scraper, action, payload, env_extra)
+    markers, notes, pieces = run_action(scraper, action, payload, env_extra)
     markers = normalise(markers)
     if len(markers) > 1 and len({m["seconds"] for m in markers}) == 1:
         # Every marker at the same time: the source had no real times.
@@ -314,7 +314,19 @@ def scrape(gql, args, settings, env_extra):
     if matched:
         notes = (notes + " " if notes else "") + \
             f"{matched} marker{'' if matched == 1 else 's'} got tags from their titles (e.g. composers)."
-    return {"scraper": scraper["name"], "markers": markers, "notes": notes,
+    if pieces:
+        # Titles placed at the pauses: every title in order (also ones that
+        # got no piece), with tags and stripped titles like the markers — the
+        # dialog places them again when a part is marked as not music.
+        pieces = normalise([{**p, "seconds": 0} for p in pieces])
+        try:
+            suggest_tags(gql, pieces, settings)
+        except Exception:  # noqa: BLE001
+            pass
+        pieces = [{k: p[k] for k in ("title", "title_stripped", "tags", "primary_tag") if k in p} for p in pieces]
+        for p in pieces:
+            p.setdefault("title_stripped", p["title"])
+    return {"scraper": scraper["name"], "markers": markers, "notes": notes, "pieces": pieces or None,
             "existing": scene.get("scene_markers") or []}
 
 
@@ -400,10 +412,82 @@ class TagMatcher:
         return list(dict.fromkeys(full + unique))
 
 
+# -- the tags' names taken out of the titles ---------------------------------
+#
+# "Johann Strauss Sohn – Im Krapfenwaldl" with the tag Johann Strauss II →
+# "Im Krapfenwaldl". A run of words that belong to the tag's name or
+# aliases (spellings that differ only at the end count: Sergej / Sergei),
+# with initials ("J.", "C.P.E."), particles (van, von, de …) and suffixes
+# (Sohn, Vater, II, jr. …) — and at least one real name word in it — is
+# taken out, then the separators left at the ends. A title that would be
+# empty is kept as it was. The review dialog has a switch for it.
+
+PARTICLES = {"van", "von", "de", "der", "den", "di", "da", "du", "le", "la", "y", "del", "dos", "das", "zu"}
+SUFFIXES = {"sohn", "vater", "ii", "iii", "iv", "jr", "sr", "jun", "sen", "junior", "senior", "the", "younger", "elder", "d", "j", "a", "ä"}
+EDGE_SEPARATORS = " \t-–—:;,/|·•"
+TRAILING_LINKS = re.compile(r"\s+(by|von|de|di|of|from|nach)\s*$", re.I)
+
+
+def _tag_words(names):
+    words = set()
+    for n in names:
+        words.update(w for w in _plain(n).split() if len(w) > 1)
+    return words
+
+
+def strip_names(title, tag_names):
+    """title without the names in tag_names (lists of name + aliases)."""
+    tokens = [(m.start(), m.end(), _plain(m.group())) for m in re.finditer(r"[^\W_]+", title)]
+    spans = []
+    for names in tag_names:
+        words = _tag_words(names)
+        strong = {w for w in words if len(w) >= 4 and w not in PARTICLES and w not in SUFFIXES}
+
+        def belongs(w):
+            return w in words or any(_similar(w, x) for x in words if len(x) >= 6) or w in PARTICLES or w in SUFFIXES or len(w) == 1
+
+        def is_strong(w):
+            return w in strong or any(_similar(w, x) for x in strong if len(x) >= 6)
+
+        i = 0
+        while i < len(tokens):
+            if not belongs(tokens[i][2]):
+                i += 1
+                continue
+            j = i
+            # a run: words next to each other, only spaces / dots between
+            while j + 1 < len(tokens) and belongs(tokens[j + 1][2]) and \
+                    re.fullmatch(r"[\s.]*", title[tokens[j][1]:tokens[j + 1][0]]):
+                j += 1
+            # Initials and particles only before a name: a run doesn't end
+            # with one ("Beethoven I. Allegro" keeps its "I.").
+            while j > i and (len(tokens[j][2]) == 1 or tokens[j][2] in PARTICLES):
+                j -= 1
+            if any(is_strong(t[2]) for t in tokens[i:j + 1]):
+                end = tokens[j][1]
+                if end < len(title) and title[end] == ".":
+                    end += 1
+                spans.append((tokens[i][0], end))
+            i = j + 1
+    if not spans:
+        return title
+    out = title
+    for a, b in sorted(spans, reverse=True):
+        out = out[:a] + " " + out[b:]
+    out = re.sub(r"\s+", " ", out)
+    out = re.sub(r"\s*([-–—:;,/|])\s*(?=[-–—:;,/|])", " ", out)  # separators left side by side
+    out = TRAILING_LINKS.sub("", out.strip(EDGE_SEPARATORS)).strip(EDGE_SEPARATORS).strip()
+    return out or title
+
+
 def suggest_tags(gql, markers, settings):
-    """Adds matching tags to the markers. Returns how many got one."""
+    """Adds matching tags to the markers, and to every marker a
+    "title_stripped": its title without its tags' names. Returns how many
+    got a tag."""
     raw = (settings.get("suggestTagsUnder") or "").strip() or DEFAULT_SUGGEST_UNDER
     names = [n.strip() for n in raw.split(",") if n.strip() and n.strip() != "-"]
+    for m in markers:
+        m["title_stripped"] = strip_names(m["title"], [[t] for t in m["tags"]])
     if not names or not markers:
         return 0
     tags = tags_under(gql, names)
@@ -422,6 +506,8 @@ def suggest_tags(gql, markers, settings):
         m["tags"] = list(dict.fromkeys(kept))
         if m["tags"] != before:
             changed += 1
+        aliases = {_plain(t["name"]): [t["name"], *(t.get("aliases") or [])] for t in tags}
+        m["title_stripped"] = strip_names(m["title"], [aliases.get(_plain(t), [t]) for t in m["tags"]])
     return changed
 
 
