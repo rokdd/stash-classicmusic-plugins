@@ -196,12 +196,18 @@ The **Skip the check against the audio** setting switches it off (e.g. on
 a slow server).
 
 **Tags that don't exist yet** — composers from the chapters, mostly — are
-listed when you click **Create markers**, each with a choice: **Composer**
-(the person the [Classical Music](../../scrapers/ClassicalMusic/) scraper
-finds for the name, preselected when it's a composer — created as a
-performer tagged Composer, and Tag Improvements makes the composer tag),
-**Plain tag**, or **Leave out**. **Continue** creates them, then the
-markers with all their tags; **Back** returns to the markers.
+listed when you click **Create markers**, each with what will happen:
+**Create composer** (the person the [Classical Music](../../scrapers/ClassicalMusic/)
+scraper finds on Wikidata for the name, preselected when it's a composer —
+created as a performer with portrait, dates and Wikipedia text, tagged
+Composer, and Tag Improvements makes the composer tag), **Create a plain
+tag**, or **Leave it out**. **Continue** works through them and shows every
+step (searching, creating the performer, waiting for the tag …); a tag that
+still doesn't exist afterwards is asked about again — try the composer
+again, make a plain tag or leave it out — so nothing is left out unless
+you chose so. Then the markers are created with all their tags, and the
+report lists the composers and tags created. **Back to the markers**
+returns to the table.
 
 **Primary tag**: every marker needs one. A scraper can name it per marker;
 otherwise the **Primary tag for scraped markers** setting is used (empty:

@@ -1383,13 +1383,14 @@
         try {
           // Tags that don't exist yet (composers from the chapters, mostly):
           // ask what to do with them first.
-          const ok = await resolveNewTags(dialog, picked);
-          if (!ok) {
+          const resolved = await resolveNewTags(dialog, picked);
+          if (!resolved.ok) {
             create.disabled = false;
             create.textContent = "Create markers";
             return;
           }
           const report = await createMarkers(picked);
+          if (resolved.notes.length) report.text += "\n\n" + resolved.notes.join("\n");
           dialog.body.replaceChildren(el("div", { className: report.failed.length ? "alert alert-warning" : "alert alert-success",
             style: { whiteSpace: "pre-wrap" }, textContent: report.text }));
           create.remove();
@@ -1443,80 +1444,155 @@
   }
 
   // Before the markers are created: every tag of theirs that doesn't exist
-  // yet gets a row — make it a composer (looked up with the Classical Music
-  // scraper; the performer is created, Tag Improvements makes its tag), a
-  // plain tag, or leave it out. Resolves true to go on, false if cancelled.
+  // yet gets a row — make it a composer (looked up on Wikidata with the
+  // Classical Music scraper and created as a performer; Tag Improvements
+  // then makes its tag), a plain tag, or leave it out. Every step is shown
+  // as it happens; a tag that still doesn't exist afterwards is asked about
+  // again — nothing is left out unless chosen. Resolves to { ok, notes }.
   async function resolveNewTags(dialog, markers) {
     const index = await tagIndex();
     const unknown = [...new Set(markers.flatMap((m) => m.tags || []))].filter((t) => t && !index.has(t.toLowerCase()));
-    if (!unknown.length) return true;
+    if (!unknown.length) return { ok: true, notes: [] };
     const scraperId = await performerScraperId().catch(() => null);
-    const rows = unknown.map((name) => {
+    const notes = [];
+
+    const panel = el("div", { className: "alert alert-secondary" });
+    const logList = el("ol", { className: "small mb-2 pl-3", style: { maxHeight: "12em", overflowY: "auto" } });
+    const log = (text, kind) => {
+      logList.append(el("li", { textContent: text, className: kind === "bad" ? "text-danger" : kind === "good" ? "text-success" : "" }));
+      logList.scrollTop = logList.scrollHeight;
+    };
+    const buttons = el("div", { className: "mt-2" });
+    dialog.body.prepend(panel);
+
+    const makeRow = (name, preferComposer, previous) => {
       const select = el("select", { className: "form-control form-control-sm" },
-        el("option", { value: "tag", textContent: "Plain tag" }),
-        el("option", { value: "skip", textContent: "Leave out" }));
-      const row = { name, select, found: [] };
-      if (scraperId) {
-        select.prepend(el("option", { value: "", textContent: "Looking for the composer …", disabled: true }));
+        el("option", { value: "tag", textContent: "Create a plain tag" }),
+        el("option", { value: "skip", textContent: "Leave it out" }));
+      const state = el("span", { className: "small text-muted" });
+      const row = { name, select, state, found: [] };
+      if (previous && previous.length) {
+        // asked again: the composers found before, to try once more
+        row.found = previous;
+        select.prepend(...previous.map((p, i) => el("option", { value: `c${i}`,
+          textContent: `Try again — create composer: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
+        select.value = "tag";
+      } else if (scraperId && preferComposer) {
+        select.prepend(el("option", { value: "", textContent: "Searching Wikidata …", disabled: true }));
+        state.textContent = `Searching Wikidata for “${name}” …`;
         searchPerformers(scraperId, name).then((found) => {
           row.found = found;
-          select.querySelector('option[value=""]').remove();
-          const options = found.map((p, i) => el("option", { value: `c${i}`,
-            textContent: `Composer: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` }));
-          select.prepend(...options);
+          const waiting = select.querySelector('option[value=""]');
+          if (waiting) waiting.remove();
+          select.prepend(...found.map((p, i) => el("option", { value: `c${i}`,
+            textContent: `Create composer: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
           const best = found.findIndex((p) => COMPOSER_WORDS.test(p.disambiguation || ""));
           select.value = best >= 0 ? `c${best}` : "tag";
-        }).catch(() => { const o = select.querySelector('option[value=""]'); if (o) o.remove(); select.value = "tag"; });
+          describe(row);
+        }).catch((err) => {
+          const waiting = select.querySelector('option[value=""]');
+          if (waiting) waiting.remove();
+          select.value = "tag";
+          state.textContent = `Wikidata search failed: ${err.message || err}`;
+        });
+      } else {
+        select.value = "tag";
       }
+      select.addEventListener("change", () => describe(row));
+      describe(row);
       return row;
-    });
-    const panel = el("div", { className: "alert alert-secondary" },
-      el("strong", { textContent: `${unknown.length} tag${unknown.length === 1 ? "" : "s"} don't exist yet` }),
-      el("div", { className: "small mb-2", textContent: scraperId
-        ? "Composers are created as performers (from Wikidata, tagged Composer) — Tag Improvements then makes their tags. Or make a plain tag, or leave it out."
-        : "Make each a plain tag, or leave it out. (With the Classical Music performer scraper installed, composers could be created as performers too.)" }),
-      el("table", { className: "table table-sm mb-2" }, el("tbody", {}, ...rows.map((r) =>
-        el("tr", {}, el("td", { style: { width: "35%" } }, el("strong", { textContent: r.name })), el("td", {}, r.select))))));
-    const status = el("div", { className: "small" });
-    const go = el("button", { type: "button", className: "btn btn-primary btn-sm mr-2", textContent: "Continue" });
-    const cancel = el("button", { type: "button", className: "btn btn-secondary btn-sm", textContent: "Back" });
-    panel.append(go, cancel, status);
-    dialog.body.prepend(panel);
-    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    const choice = await new Promise((resolve) => {
-      go.onclick = () => resolve(true);
-      cancel.onclick = () => resolve(false);
-    });
-    if (!choice) { panel.remove(); return false; }
-    go.disabled = cancel.disabled = true;
-    const composersParent = await tagIdFor("Composers", true).catch(() => null);
-    for (const r of rows) {
-      const v = r.select.value;
-      try {
-        if (v === "tag") {
-          status.textContent = `Creating the tag ${r.name} …`;
-          await tagIdFor(r.name, true);
-        } else if (v.startsWith("c")) {
-          status.textContent = `Creating the composer ${r.name} …`;
-          await createComposer(scraperId, r.found[Number(v.slice(1))], r.name);
-          // Tag Improvements makes the tag when the performer is saved (a
-          // hook on the server); if it doesn't come, the tag is made here.
-          let id = null;
-          for (let i = 0; i < 8 && !id; i++) {
-            await new Promise((res) => setTimeout(res, 1000));
-            id = await tagIdFor(r.name, false);
-          }
-          if (!id) {
-            await gql("mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }",
-              { input: { name: r.name, ...(composersParent ? { parent_ids: [composersParent] } : {}) } });
-          }
-        }
-      } catch (err) {
-        status.textContent = `${r.name}: ${err.message || err}`;
+    };
+    const describe = (row) => {
+      const v = row.select.value;
+      if (v.startsWith("c")) {
+        const p = row.found[Number(v.slice(1))];
+        row.state.textContent = `→ performer “${p.name}” is created from Wikidata (portrait, dates, Wikipedia text), tagged Composer; its composer tag follows.`;
+      } else if (v === "tag") {
+        row.state.textContent = `→ a tag “${row.name}” is created.`;
+      } else if (v === "skip") {
+        row.state.textContent = "→ the markers don't get this tag.";
       }
+    };
+
+    const ask = (rows, heading, intro) => new Promise((resolve) => {
+      const go = el("button", { type: "button", className: "btn btn-primary btn-sm mr-2", textContent: "Continue" });
+      const back = el("button", { type: "button", className: "btn btn-secondary btn-sm", textContent: "Back to the markers" });
+      go.onclick = () => resolve(true);
+      back.onclick = () => resolve(false);
+      buttons.replaceChildren(go, back);
+      panel.replaceChildren(
+        el("strong", { textContent: heading }),
+        el("div", { className: "small mb-2", textContent: intro }),
+        el("table", { className: "table table-sm mb-2" }, el("tbody", {}, ...rows.map((r) =>
+          el("tr", {}, el("td", { style: { width: "28%" } }, el("strong", { textContent: r.name })),
+            el("td", {}, r.select, r.state))))),
+        logList, buttons);
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+
+    const work = async (row) => {
+      const v = row.select.value;
+      if (v === "skip") {
+        log(`“${row.name}”: left out, as chosen.`);
+        notes.push(`Left out (chosen): ${row.name}`);
+        return true;
+      }
+      if (v === "tag") {
+        log(`Creating the tag “${row.name}” …`);
+        await tagIdFor(row.name, true);
+        log(`Tag “${row.name}” created.`, "good");
+        notes.push(`Tag created: ${row.name}`);
+        return true;
+      }
+      const picked = row.found[Number(v.slice(1))];
+      log(`Getting ${picked.name} from Wikidata and creating the performer …`);
+      const done = await createComposer(scraperId, picked, row.name);
+      log(done.existed ? `${done.name} was there already — tagged ${done.marker}.` : `Performer ${done.name} created, tagged ${done.marker}.`, "good");
+      log(`Waiting for the composer tag (Tag Improvements makes it) …`);
+      let id = null;
+      for (let i = 0; i < 10 && !id; i++) {
+        await new Promise((res) => setTimeout(res, 1000));
+        id = await tagIdFor(row.name, false);
+      }
+      if (!id) {
+        log(`No composer tag yet — creating “${row.name}” under Composers myself.`);
+        const parent = await tagIdFor("Composers", true).catch(() => null);
+        await gql("mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }",
+          { input: { name: row.name, ...(parent ? { parent_ids: [parent] } : {}) } });
+      }
+      log(`Composer tag for “${row.name}” ready.`, "good");
+      notes.push(`Composer created: ${done.name}${done.existed ? " (was there, now tagged)" : ""}`);
+      return true;
+    };
+
+    let rows = unknown.map((name) => makeRow(name, true));
+    let heading = `${unknown.length} tag${unknown.length === 1 ? "" : "s"} from the chapters don't exist yet`;
+    let intro = scraperId
+      ? "Composers are looked up on Wikidata (Classical Music scraper) and created as performers — with portrait, dates and Wikipedia text, tagged Composer — and Tag Improvements makes their composer tag. Check the person picked for each, or make a plain tag, or leave it out."
+      : "Make each a plain tag, or leave it out. (With the Classical Music performer scraper installed, composers could be looked up and created as performers.)";
+    for (;;) {
+      if (!(await ask(rows, heading, intro))) { panel.remove(); return { ok: false, notes }; }
+      buttons.replaceChildren(el("span", { className: "small text-muted", textContent: "Working …" }));
+      rows.forEach((r) => { r.select.disabled = true; });
+      for (const r of rows) {
+        try {
+          await work(r);
+        } catch (err) {
+          log(`“${r.name}”: ${err.message || err}`, "bad");
+        }
+      }
+      // Anything still without a tag (and not left out on purpose)? Ask again.
+      const fresh = await tagIndex();
+      const missing = rows.filter((r) => r.select.value !== "skip" && !fresh.has(r.name.toLowerCase()));
+      if (!missing.length) break;
+      rows = missing.map((r) => makeRow(r.name, false, r.found));
+      heading = `${missing.length} tag${missing.length === 1 ? "" : "s"} still missing`;
+      intro = "These didn't work out (see the steps below). Try the composer again, make a plain tag, or leave them out.";
     }
+    log("All tags ready — creating the markers.", "good");
+    await new Promise((res) => setTimeout(res, 600));
     panel.remove();
-    return true;
+    return { ok: true, notes };
   }
 
   async function createMarkers(markers) {
