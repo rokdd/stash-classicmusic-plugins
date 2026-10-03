@@ -23,6 +23,43 @@ Scrapers: Settings → Metadata Providers → Available Scrapers, source
 
 ## Use cases
 
+### I only have the video file — no URL, no programme. How do I get chapters?
+
+The file itself and what lies next to it often have them. In the Markers
+tab, **Scrape markers…** and try, in this order:
+
+1. **Video file chapters** — chapters inside the file (MKV, MP4; yt-dlp
+   downloads with `--embed-chapters`, DVD and Blu-ray rips, files cut
+   with chapters). Broken ones (all at 0:00, titles like "nan") are
+   repaired or left out.
+2. **Chapter file next to the video** — a CUE sheet, a medici.tv /
+   yt-dlp JSON, an ffmpeg chapters file or a text list in the same
+   folder. A CUE sheet of an album split into several files works too.
+3. **Subtitles** — a .srt / .vtt next to the video or a subtitle track
+   in the file: announcements and title cards become markers, in operas
+   each sung number.
+4. **Subtitles from OpenSubtitles** — checks the file's fingerprint;
+   subtitles made for exactly your release fit to the second (operas and
+   films more often than concerts). With an API key set this is checked
+   when you open the scene, and offered by itself.
+
+A scene without markers usually offers what it finds (a note at the
+bottom right) — you don't have to try each one.
+
+If none of these has anything, the **pauses in the audio** still show
+where pieces start. Find out what was played — the booklet, the
+festival's or concert hall's site, a search for the date and the
+performers — and paste the titles, one per line, into **Plain text**:
+without times they're placed at the longest pauses, as many pieces as
+titles. Not sure of the titles? Paste placeholders ("Piece A", "Piece B"
+…, as many as you hear) and rename the markers later; the review dialog
+shows the pauses on its timeline with a preview of the video, so you can
+see where each piece begins.
+
+Afterwards, **Scene → Edit → Scrape with… → Sidecar / local files** fills
+in the scene from the same files (NFO, medici.tv JSON, yt-dlp info,
+cover).
+
 ### I recorded a concert from ARTE / ORF / ARD / ZDF / 3sat / the BBC. How do I get everything in?
 
 1. **The scene**: on the scene's Edit tab, paste the broadcast's page into
