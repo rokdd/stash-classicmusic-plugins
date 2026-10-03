@@ -355,16 +355,19 @@ then **Apply**. Primary tag, times and other tags stay. For the whole
 library at once: **Settings → Tasks → Composers from marker titles (all
 scenes)** — every change is logged.
 
-**Import missing composers** (at the top of that dialog): names before the
-separator of titles that name no composer yet ("Karl Komzak Sohn -
-Badner Madln" → "Karl Komzak Sohn") are listed, each looked up with the
-[Classical Music](../../scrapers/ClassicalMusic/) scraper (searched
-without Sohn / Vater / II …) — pick the right person in its dropdown (a
-composer is preselected; "Sohn" prefers the junior, "Vater" the senior
-one). **Import selected** creates the performers, tagged Composer, with
-the name as the titles have it as an extra alias — so the composer tag
-Tag Improvements makes from it matches those titles exactly — and the
-proposals below are worked out again. The preview shows each title once,
+**Import missing artists** (at the top of that dialog): names before the
+separator of titles that name no artist in Stash yet ("Karl Komzak Sohn -
+Badner Madln" → "Karl Komzak Sohn") are listed, each looked up on
+Wikidata with the [Classical Music](../../scrapers/ClassicalMusic/) scraper
+(searched without Sohn / Vater / II …) — pick the right person in its
+dropdown (a composer is preselected; "Sohn" prefers the junior, "Vater"
+the senior one) and whether they're **a composer** (ticked when Wikidata
+says so). Each row says what will happen. **Import selected** creates the
+performers, with the name as the titles have it as an extra alias, shows
+for each how it went, and Tag Improvements makes their tags — under
+Composers if ticked, else where their roles put them (a pianist or soprano
+under Soloists); then the proposals below are worked out again, and a name
+whose import failed is listed again. The preview shows each title once,
 with just the parts that go struck through.
 
 ### New composer

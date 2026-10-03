@@ -681,11 +681,12 @@
     const missingSection = async (missing) => {
       const box = el("div", { className: "mb-4 p-2", style: { border: "1px solid rgba(128,128,128,.4)", borderRadius: "4px" } });
       const scraperId = await performerScraperId().catch(() => null);
-      box.append(el("strong", { textContent: "Import missing composers" }),
+      box.append(el("strong", { textContent: "Import missing artists" }),
         el("p", { className: "small text-muted mb-2", textContent:
-          "Names in the titles that aren't composers yet. Pick the right person for each — the performer is created " +
-          "(tagged Composer, with the name as the titles have it as an alias), Tag Improvements makes the composer tag, " +
-          "and the titles below are worked out again." }));
+          "Names in the titles that aren't artists in Stash yet. Pick the right person for each on Wikidata — the performer " +
+          "is created (portrait, dates, Wikipedia text, and the name as the titles have it as an alias), and Tag Improvements " +
+          "makes their tag: under Composers if ticked as a composer, else where their roles put them (e.g. Soloists). " +
+          "Then the titles below are worked out again." }));
       if (!scraperId) {
         box.append(el("div", { className: "alert alert-warning mb-0", textContent:
           "The Classical Music performer scraper isn't installed (Settings → Metadata Providers → Available Scrapers)." }));
@@ -695,12 +696,25 @@
       const tbody = el("tbody");
       for (const item of missing) {
         const check = el("input", { type: "checkbox", checked: true });
-        const select = el("select", { className: "form-control form-control-sm" }, el("option", { textContent: "Searching …" }));
+        const select = el("select", { className: "form-control form-control-sm" }, el("option", { textContent: "Searching Wikidata …" }));
+        const composerBox = el("input", { type: "checkbox", checked: false });
+        const state = el("div", { className: "small text-muted" });
         tbody.append(el("tr", {}, el("td", {}, check),
           el("td", {}, el("strong", { textContent: item.name }),
             el("div", { className: "small text-muted", textContent: `${item.count} marker${item.count === 1 ? "" : "s"}` })),
-          el("td", { style: { width: "60%" } }, select)));
-        const row = { item, check, select, found: [] };
+          el("td", { style: { width: "62%" } },
+            el("div", { className: "d-flex align-items-center" }, select,
+              el("label", { className: "small mb-0 ml-2", style: { whiteSpace: "nowrap" } }, composerBox, " is a composer")),
+            state)));
+        const row = { item, check, select, composerBox, state, found: [] };
+        const describe = () => {
+          const p = row.found[Number(select.value)];
+          state.textContent = !check.checked || !p ? "→ not imported."
+            : composerBox.checked ? `→ ${p.name} is created, tagged Composer — tag under Composers.`
+              : `→ ${p.name} is created — tag where the roles put it (e.g. Soloists).`;
+        };
+        [check, select, composerBox].forEach((x) => x.addEventListener("change", describe));
+        row.describe = describe;
         rows.push(row);
         searchPerformers(scraperId, item.query).then((found) => {
           row.found = found;
@@ -713,10 +727,13 @@
           let best = generation ? found.findIndex((p) => isComposer(p) && generation.test(`${p.name} ${p.disambiguation || ""}`)) : -1;
           if (best < 0) best = found.findIndex(isComposer);
           select.value = found.length ? String(best >= 0 ? best : 0) : "";
+          composerBox.checked = best >= 0;
           if (!found.length) check.checked = false;
+          describe();
         }).catch((err) => {
           select.replaceChildren(el("option", { value: "", textContent: `Search failed: ${err.message || err}` }));
           check.checked = false;
+          describe();
         });
       }
       const status = el("div", { className: "small mt-2" });
@@ -727,17 +744,23 @@
           importButton.disabled = true;
           const done = [];
           for (const r of chosen) {
-            status.textContent = `Importing ${r.item.name} …`;
+            const p = r.found[Number(r.select.value)];
+            r.state.className = "small";
+            r.state.textContent = `Getting ${p.name} from Wikidata and creating the performer …`;
             try {
-              const res = await createComposer(scraperId, r.found[Number(r.select.value)], r.item.name);
+              const res = await createComposer(scraperId, p, r.item.name, r.composerBox.checked);
               done.push(res.name);
+              r.state.className = "small text-success";
+              r.state.textContent = res.existed ? `✓ ${res.name} was there already${r.composerBox.checked ? " — now tagged Composer" : ""}.`
+                : `✓ ${res.name} created${r.composerBox.checked ? ", tagged Composer" : ""}.`;
             } catch (err) {
-              status.textContent = `${r.item.name}: ${err.message || err}`;
+              r.state.className = "small text-danger";
+              r.state.textContent = `✗ ${err.message || err}`;
             }
           }
-          // Tag Improvements makes the composer tags as the performers are
-          // saved (a hook, run by the server): give it a moment, then look again.
-          status.textContent = `Imported ${done.join(", ")} — waiting for the composer tags …`;
+          // Tag Improvements makes the tags as the performers are saved (a
+          // hook, run by the server): give it a moment, then look again.
+          status.textContent = done.length ? `Imported ${done.join(", ")} — waiting for their tags …` : "Nothing imported.";
           for (let i = 0; i < 8; i++) {
             await new Promise((r) => setTimeout(r, 1000));
             const again = await runOperation({ mode: "marker_composers", scene_id: sceneId() }).catch(() => null);
