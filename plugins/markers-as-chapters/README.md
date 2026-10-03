@@ -107,13 +107,24 @@ Built in:
   is the card's text or the announcement's last sentence without its
   lead-in ("Und nun der Radetzky-Marsch von Johann Strauss Vater" →
   "Radetzky-Marsch" + the composer tag). ♪ / "(Musik)" start music,
-  "[Applaus]" ends it; "U/T" and the like are ignored. Many concerts have
+  "[Applaus]" ends it; "U/T" and the like are ignored. A long group of
+  sung text (an opera's number: more than 8 entries or a minute) gets a
+  marker where it begins, titled with its first line ("Libiamo, ne' lieti
+  calici …"). Many concerts have
   no subtitles at all; the dialog says where it looked.
 - **Subtitles from OpenSubtitles** — subtitles from opensubtitles.com,
   turned into markers like **Subtitles** does. Found by the file's
   fingerprint (exact, when your file is the release the subtitles were
-  made for — an opera DVD, say), else by the scene's title; the preferred
-  language and the most downloaded first. Needs an **OpenSubtitles API
+  made for — an opera DVD, say), else by the scene's title. Of several,
+  the one with the scene's year comes first, then the one sharing the most
+  words with the scene's title and file name (in its title and release
+  name: "Salzburg 2006 DVDRip"), then the preferred language, then the
+  most downloaded; the dialog names the next ones. Not the right
+  production? **Subtitles from OpenSubtitles — search with your own
+  words…** in the menu ("la traviata salzburg 2005"). When you open a
+  scene without markers, the plugin checks by the fingerprint whether
+  there are subtitles made for exactly this file and offers them (a search
+  only — it costs none of your downloads). Needs an **OpenSubtitles API
   key** (free at opensubtitles.com, under API consumers) and, to download,
   your **OpenSubtitles username** and **password** (about 20 downloads a
   day with a free account) — in the plugin's settings, with **OpenSubtitles

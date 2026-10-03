@@ -43,6 +43,7 @@ from encoding_fix import decode_bytes, fix_text
 GROUP_GAP = 20.0  # seconds between entries that still belong together
 SHORT = (2, 12.0)  # entries, seconds: a title card or a sentence
 MIN_PIECE = 30.0  # seconds
+SUNG = (8, 60.0)  # entries, seconds: a group longer than this is sung text (an opera's number)
 MUSIC = re.compile(r"♪|♫|[(\[*]\s*(musik|music|gesang|singing|orchester|orchestra)[^)\]*]*[)\]*]", re.I)
 APPLAUSE = re.compile(r"[(\[*]\s*(applaus|beifall|applause|jubel)[^)\]*]*[)\]*]", re.I)
 TECHNICAL = re.compile(r"^(u\s*/\s*t|ut|untertitel.*|subtitles?.*|copyright.*|\(c\).*|©.*|www\..*|sous-titr.*)$", re.I)
@@ -193,8 +194,33 @@ def _os_request(url, key, method="GET", body=None, token=None):
         raise RuntimeError(f"OpenSubtitles: {detail or exc}") from None
 
 
-def opensubtitles(scene):
-    """(subtitles text, where they're from) or (None, why not)."""
+def _words(text):
+    return {w for w in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(w) > 2}
+
+
+def _year(scene):
+    m = re.match(r"(\d{4})", str(scene.get("date") or ""))
+    return int(m.group(1)) if m else None
+
+
+def exact_match(scene):
+    """OpenSubtitles' subtitles made for exactly this file (by its
+    fingerprint) — a search only, no download. [] if there are none."""
+    key = os.environ.get("OS_API_KEY", "").strip()
+    files = scene.get("files") or []
+    if not key or not files or not os.path.isfile(files[0]["path"]):
+        return []
+    h = moviehash(files[0]["path"])
+    if not h:
+        return []
+    languages = ",".join(sorted(l.strip().lower() for l in (os.environ.get("OS_LANGUAGES") or "de,en").split(",") if l.strip()))
+    found = _os_request(f"{OS_API}/subtitles?" + urllib.parse.urlencode({"languages": languages, "moviehash": h}), key).get("data") or []
+    return [s for s in found if (s.get("attributes") or {}).get("moviehash_match")]
+
+
+def opensubtitles(scene, query_words=None):
+    """(subtitles text, where they're from) or (None, why not). query_words:
+    search words of the user's own ("la traviata salzburg 2005")."""
     key = os.environ.get("OS_API_KEY", "").strip()
     if not key:
         return None, ("no OpenSubtitles API key in the settings (Markers as Chapters → OpenSubtitles API key; "
@@ -203,27 +229,44 @@ def opensubtitles(scene):
     order = [l.strip().lower() for l in (os.environ.get("OS_LANGUAGES") or "de,en").split(",") if l.strip()]
     files = scene.get("files") or []
     found, how = [], ""
-    if files and os.path.isfile(files[0]["path"]):
-        h = moviehash(files[0]["path"])
-        if h:
-            found = _os_request(f"{OS_API}/subtitles?" + urllib.parse.urlencode({"languages": languages, "moviehash": h}), key).get("data") or []
-            found = [s for s in found if (s.get("attributes") or {}).get("moviehash_match")] or found
-            how = "the file's fingerprint"
+    if not query_words:
+        found = exact_match(scene)
+        how = "the file's fingerprint — made for exactly this file" if found else ""
+    query = (query_words or "").strip()
     if not found:
-        query = re.sub(r"\.[a-z0-9]{2,4}$", "", scene.get("title") or "", flags=re.I)
-        query = re.sub(r"[._]+", " ", query).strip()
+        if not query:
+            query = re.sub(r"\.[a-z0-9]{2,4}$", "", scene.get("title") or "", flags=re.I)
+            query = re.sub(r"[._]+", " ", query).strip()
         if query:
             found = _os_request(f"{OS_API}/subtitles?" + urllib.parse.urlencode({"languages": languages, "query": query.lower()}), key).get("data") or []
-            how = f"the title “{query}”"
+            how = f"the words “{query}”"
     if not found:
         return None, f"OpenSubtitles has nothing for this scene (searched by {how or 'its file and title'})"
+
+    # Which one: made for this file first; then the scene's year; then the
+    # most words shared with the scene's title / file name / own search
+    # words (in the title and the release name: "Salzburg[2006]DVDRip");
+    # then the preferred language; then the most downloaded.
+    wanted = _words(query) | _words(scene.get("title"))
+    for f in files:
+        wanted |= _words(os.path.basename(f.get("path") or ""))
+    year = _year(scene)
 
     def rank(s):
         a = s.get("attributes") or {}
         lang = (a.get("language") or "").lower()
-        return (0 if a.get("moviehash_match") else 1, order.index(lang) if lang in order else len(order),
-                -(a.get("download_count") or 0))
-    best = sorted(found, key=rank)[0]["attributes"]
+        fd = a.get("feature_details") or {}
+        their = _words(fd.get("title")) | _words(a.get("release")) | _words(str(fd.get("year") or ""))
+        year_fit = 0 if year and (fd.get("year") == year or str(year) in (a.get("release") or "")) else 1
+        return (0 if a.get("moviehash_match") else 1, year_fit, -len(wanted & their),
+                order.index(lang) if lang in order else len(order), -(a.get("download_count") or 0))
+    ranked = sorted(found, key=rank)
+    best = ranked[0]["attributes"]
+
+    def label(a):
+        fd = a.get("feature_details") or {}
+        return f"“{fd.get('title') or '?'}” {fd.get('year') or ''} ({a.get('language')}, {(a.get('release') or '')[:50]})".replace("  ", " ")
+    others = [label(s["attributes"]) for s in ranked[1:3]]
     file_id = ((best.get("files") or [{}])[0]).get("file_id")
     if not file_id:
         return None, "OpenSubtitles found subtitles, but without a file to download"
@@ -239,12 +282,22 @@ def opensubtitles(scene):
         return None, f"OpenSubtitles didn't give a download ({link.get('message') or 'no link'})"
     with urllib.request.urlopen(urllib.request.Request(link["link"], headers={"User-Agent": OS_AGENT}), timeout=60) as response:
         text = decode_bytes(response.read())
-    title = (best.get("feature_details") or {}).get("title") or best.get("release") or "?"
-    left = f", {link.get('remaining')} downloads left today" if link.get("remaining") is not None else ""
-    return text, f"OpenSubtitles — “{title}” ({best.get('language')}, found by {how}{left})"
+    left = f"; {link.get('remaining')} downloads left today" if link.get("remaining") is not None else ""
+    alt = (". Not the right one? Next: " + "; ".join(others) + " — search with your own words") if others and "fingerprint" not in how else ""
+    return text, f"OpenSubtitles {label(best)}, found by {how}{left}{alt}"
 
 
 # -- from subtitles to markers ------------------------------------------------------------
+
+def incipit(text):
+    """The first line of a sung number, as opera numbers are known by it
+    ("Libiamo ne' lieti calici") — up to the first sentence end, at most 80
+    characters, cut at a word."""
+    first = re.split(r"(?<=[.!?…])\s|\s[-–]\s", text.strip(" -–"))[0].strip()
+    if len(first) > 80:
+        first = first[:80].rsplit(" ", 1)[0] + " …"
+    return first
+
 
 def announced(text):
     """What an announcement announces: its last sentence, without the
@@ -281,17 +334,21 @@ def markers_from(cues, duration=None):
     for g in groups:
         music = [c for c in g if MUSIC.search(c[2])]
         words = [w for w in (words_of(c[2]) for c in g) if w]
-        title = re.sub(r"\s+", " ", " ".join(words))[:140].strip()
+        title = re.sub(r"\s+", " ", " ".join(words)).strip()
         span = g[-1][1] - g[0][0]
-        if not words and not music:
+        if words and (len(g) > SUNG[0] or span > SUNG[1]):
+            # Sung (or spoken over music) text — an opera's number: the
+            # marker where it begins, titled with its first line.
+            starts.append((g[0][0], incipit(words[0]), "sung"))
+        elif not words and not music:
             breaks.append(g[0][0])  # applause alone: the music before it ends here
         elif music and not words:
             starts.append((music[0][0], "", "music"))  # just ♪: music from here
         elif len(g) <= SHORT[0] and span <= SHORT[1] and not ANNOUNCE.search(title):
-            starts.append((g[0][0], title.strip(" ."), "card"))  # a title card: the piece starts here
+            starts.append((g[0][0], title.strip(" .")[:140], "card"))  # a title card: the piece starts here
         else:
             after = next((c[0] for c in g if MUSIC.search(c[2]) and c[0] > g[0][0]), None)
-            starts.append((after if after is not None else g[-1][1], announced(title), "after"))
+            starts.append((after if after is not None else g[-1][1], announced(title)[:140].strip(), "after"))
     markers = []
     for i, (t, title, kind) in enumerate(starts):
         nxt = starts[i + 1][0] if i + 1 < len(starts) else (duration or None)
@@ -301,9 +358,11 @@ def markers_from(cues, duration=None):
             continue
         markers.append({"seconds": round(t, 2), "end_seconds": round(end, 2) if end else None,
                         "title": title or f"Part {len(markers) + 1}", "kind": kind})
-    cards = sum(1 for m in markers if m.pop("kind") == "card")
+    kinds = [m.pop("kind") for m in markers]
+    cards, sung = kinds.count("card"), kinds.count("sung")
     notes = (f"{len(cues)} subtitle entries in {len(groups)} groups: {len(markers)} marker{'' if len(markers) == 1 else 's'} — "
-             f"{cards} where a short text (a title card) shows, the others after an announcement or at a music marking. "
+             + (f"{sung} where sung text begins (titled with its first line), " if sung else "")
+             + f"{cards} where a short text (a title card) shows, the others after an announcement or at a music marking. "
              "The titles are the subtitles' text — shorten them, and check the starts against the audio.")
     return markers, notes
 
@@ -315,7 +374,7 @@ def main():
     duration = max([f.get("duration") or 0 for f in files] or [0]) or None
     if sys.argv[1:2] == ["opensubtitles"]:
         try:
-            text, source = opensubtitles(scene)
+            text, source = opensubtitles(scene, payload.get("text"))
         except Exception as exc:  # noqa: BLE001 — the reason, in the dialog
             text, source = None, str(exc)
         if not text:

@@ -116,8 +116,18 @@ ends) and can be pasted back with Plain text.
 Sometimes: **Subtitles** reads a .srt / .vtt next to the video, the video's
 own subtitle track, or the broadcaster's (yt-dlp); **Subtitles from
 OpenSubtitles** looks them up on opensubtitles.com (API key and account in
-the settings). Announcements and title cards become markers. Concerts
-often have none — operas and films more often.
+the settings). Announcements and title cards become markers, in operas
+each sung number (titled with its first line). Concerts often have none —
+operas and films more often.
+
+### Can OpenSubtitles find the subtitles for my file?
+
+Yes, by the file's fingerprint (size and a checksum of its start and
+end): subtitles made for exactly your release fit to the second. With an
+API key set, a scene without markers is checked when you open it and the
+subtitles are offered — the check costs no downloads. Otherwise the title
+is searched; when it picks the wrong production, use **search with your
+own words…** with the year or the place.
 
 ---
 

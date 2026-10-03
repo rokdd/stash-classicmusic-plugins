@@ -1,8 +1,18 @@
-# Subtitles from opensubtitles.com (needs an API key, and to download a free
-# account — see the plugin's settings), turned into markers like the
-# Subtitles scraper does: announcements and title cards.
+# Subtitles from opensubtitles.com (needs an API key — see the plugin's
+# settings), turned into markers like the Subtitles scraper does. By the
+# file's fingerprint (made for exactly this file), else by the scene's
+# title — or by search words of your own.
 name: Subtitles from OpenSubtitles
+textLabel: search with your own words…
+description: "Search words for opensubtitles.com — title, year, place, production (e.g. la traviata salzburg 2005). The best match is taken; the dialog names the next ones."
 markerByFragment:
+  action: script
+  timeout: 120
+  script:
+    - python
+    - subtitles.py
+    - opensubtitles
+markerByText:
   action: script
   timeout: 120
   script:

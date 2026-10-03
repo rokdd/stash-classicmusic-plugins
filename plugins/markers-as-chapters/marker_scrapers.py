@@ -198,6 +198,7 @@ def load_scrapers(settings):
                     "by_url": by_url,
                     "by_text": config.get("markerByText"),
                     "fragment_in_menu": bool(config.get("fragmentInMenu")),
+                    "text_label": config.get("textLabel") or "",
                 }
     return scrapers
 
@@ -214,7 +215,7 @@ def list_scrapers(settings):
     return [
         {"id": s["id"], "name": s["name"], "fragment": bool(s["fragment"]), "urls": url_patterns(s),
          "text": bool(s["by_text"]), "description": s["description"],
-         "fragment_in_menu": s.get("fragment_in_menu", False)}
+         "fragment_in_menu": s.get("fragment_in_menu", False), "text_label": s.get("text_label", "")}
         for s in sorted(load_scrapers(settings).values(), key=lambda s: s["name"].lower())
     ]
 
@@ -777,6 +778,20 @@ def available(gql, args, settings, env_extra):
         markers = normalise(markers)
         if len(markers) >= 2 and len({m["seconds"] for m in markers}) > 1:
             found.append({"scraper": sid, "name": scraper["name"], "count": len(markers), "notes": notes})
+    # Subtitles made for exactly this file on OpenSubtitles (a search by its
+    # fingerprint — no download), when an API key is set.
+    if env_extra.get("OS_API_KEY") and "opensubtitles" in scrapers:
+        try:
+            os.environ.update(env_extra)
+            sys.path.insert(0, BUILT_IN_DIR)
+            import subtitles
+            exact = subtitles.exact_match(scene)
+        except Exception:  # noqa: BLE001
+            exact = []
+        if exact:
+            langs = sorted({(s.get("attributes") or {}).get("language") or "?" for s in exact})
+            found.append({"scraper": "opensubtitles", "name": scrapers["opensubtitles"]["name"], "count": None,
+                          "label": f"subtitles made for exactly this file ({', '.join(langs)})", "notes": ""})
     return {"found": found}
 
 

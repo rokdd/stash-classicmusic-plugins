@@ -180,7 +180,7 @@
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
     scrapers.filter((s) => s.fragment && (!(s.urls || []).length || s.fragment_in_menu))
       .forEach((s) => items.push(item(s.name, () => scrape(s, null))));
-    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — paste text or pick a file…`, () => textDialog(s))));
+    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — ${s.text_label || "paste text or pick a file…"}`, () => textDialog(s))));
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     items.push(item("Composers from the titles…", () => composersDialog()));
     items.push(item("New composer…", () => newComposerDialog()));
@@ -1746,7 +1746,7 @@
       el("div", { className: "small text-muted mb-2", textContent:
         "It has no markers yet. Import them as markers? You'll see them first — nothing is saved until you create them." }),
       ...found.map((f) => el("div", { className: "d-flex align-items-center mb-1", style: { gap: "8px" } },
-        el("span", { className: "small", style: { flex: "1 1 auto" }, textContent: `${f.name} — ${f.count} chapters` }),
+        el("span", { className: "small", style: { flex: "1 1 auto" }, textContent: `${f.name} — ${f.count ? `${f.count} chapters` : f.label || "found"}` }),
         el("button", { type: "button", className: "btn btn-primary btn-sm", textContent: "Import…",
           onclick: () => { removeOffer(); scrape({ id: f.scraper, name: f.name }, null); } }))),
       el("div", { className: "text-right mt-2" },
