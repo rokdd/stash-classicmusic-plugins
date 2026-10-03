@@ -20,6 +20,10 @@ And scrapers:
 | [Classical Concerts](scrapers/ClassicalConcerts/) | Scenes from ARTE (ARTE Concert), ORF ON, ARD Mediathek, ZDF, 3sat, BBC and medici.tv — title, programme, concert date, cover, broadcaster, and orchestra, conductor, soloists and composers as performers |
 | [Sidecar / local files](scrapers/Sidecar/) | Scenes from the files next to the video: a medici.tv JSON, a Kodi / Jellyfin NFO, yt-dlp's .info.json and a cover image |
 
+**How do they work together?** The [FAQ](FAQ.md) goes through typical
+use cases (a recorded concert, a medici.tv download, composers in marker
+titles …) and problems, step by step.
+
 ## Install
 
 1. In Stash, open **Settings → Plugins → Available Plugins** and click
