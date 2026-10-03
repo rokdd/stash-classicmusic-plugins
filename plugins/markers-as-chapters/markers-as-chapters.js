@@ -832,15 +832,17 @@
   // scraper (or tags an existing performer): returns { id, name, existed }.
   // extraAlias: a spelling to add (the name as the marker titles have it),
   // so the composer tag made from it matches them exactly.
-  async function createComposer(scraperId, picked, extraAlias) {
+  async function createComposer(scraperId, picked, extraAlias, asComposer = true) {
     const full = (await gql(
       "query($s: ScraperSourceInput!, $i: ScrapeSinglePerformerInput!) { scrapeSinglePerformer(source: $s, input: $i) { " +
       "name aliases urls birthdate death_date gender country details images tags { name stored_id } } }",
       { s: { scraper_id: scraperId }, i: { performer_input: { name: picked.name, urls: picked.urls || [] } } }
     )).scrapeSinglePerformer[0];
     if (!full) throw new Error(`The scraper returned nothing for ${picked.name}.`);
-    const marker = await composerTagName();
-    const markerId = await tagIdFor(marker, true);
+    // Not a composer (a soloist, a conductor …): no Composer tag — the tags
+    // Wikidata gives (Pianist, Soprano …) decide where Tag Improvements files it.
+    const marker = asComposer ? await composerTagName() : null;
+    const markerId = asComposer ? await tagIdFor(marker, true) : null;
     // Already there? Stash compares names regardless of case and accents —
     // look the same way, so it isn't created twice.
     const plainName = (t) => (t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
@@ -849,14 +851,14 @@
       { n: full.name.split(/\s+/).pop() })).findPerformers.performers;
     const existing = candidates.find((p) => plainName(p.name) === plainName(full.name)) || null;
     if (existing) {
-      const ids = [...new Set([...existing.tags.map((t) => String(t.id)), markerId])];
+      const ids = [...new Set([...existing.tags.map((t) => String(t.id)), ...(markerId ? [markerId] : [])])];
       const aliases = extraAlias && extraAlias !== existing.name && !(existing.alias_list || []).includes(extraAlias)
         ? [...(existing.alias_list || []), extraAlias] : null;
       await gql("mutation($input: PerformerUpdateInput!) { performerUpdate(input: $input) { id } }",
         { input: { id: existing.id, tag_ids: ids, ...(aliases ? { alias_list: aliases } : {}) } });
       return { id: existing.id, name: existing.name, existed: true, marker };
     }
-    const tagIds = [markerId];
+    const tagIds = markerId ? [markerId] : [];
     for (const t of full.tags || []) {
       const id = t.stored_id ? String(t.stored_id) : await tagIdFor(t.name, true);
       if (id && !tagIds.includes(id)) tagIds.push(id);
@@ -1470,12 +1472,15 @@
         el("option", { value: "tag", textContent: "Create a plain tag" }),
         el("option", { value: "skip", textContent: "Leave it out" }));
       const state = el("span", { className: "small text-muted" });
-      const row = { name, select, state, found: [] };
+      const composerBox = el("input", { type: "checkbox", checked: true });
+      const composerLabel = el("label", { className: "small mb-0 ml-1 mr-2", style: { whiteSpace: "nowrap" } }, composerBox, " is a composer");
+      const row = { name, select, state, found: [], composerBox, composerLabel };
+      composerBox.addEventListener("change", () => describe(row));
       if (previous && previous.length) {
         // asked again: the composers found before, to try once more
         row.found = previous;
         select.prepend(...previous.map((p, i) => el("option", { value: `c${i}`,
-          textContent: `Try again — create composer: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
+          textContent: `Try again — performer from Wikidata: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
         select.value = "tag";
       } else if (scraperId && preferComposer) {
         select.prepend(el("option", { value: "", textContent: "Searching Wikidata …", disabled: true }));
@@ -1485,9 +1490,10 @@
           const waiting = select.querySelector('option[value=""]');
           if (waiting) waiting.remove();
           select.prepend(...found.map((p, i) => el("option", { value: `c${i}`,
-            textContent: `Create composer: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
+            textContent: `Create performer from Wikidata: ${p.name}${p.disambiguation ? ` — ${p.disambiguation}` : ""}` })));
           const best = found.findIndex((p) => COMPOSER_WORDS.test(p.disambiguation || ""));
-          select.value = best >= 0 ? `c${best}` : "tag";
+          select.value = best >= 0 ? `c${best}` : found.length ? "c0" : "tag";
+          composerBox.checked = best >= 0;
           describe(row);
         }).catch((err) => {
           const waiting = select.querySelector('option[value=""]');
@@ -1504,9 +1510,12 @@
     };
     const describe = (row) => {
       const v = row.select.value;
+      row.composerLabel.style.display = v.startsWith("c") ? "" : "none";
       if (v.startsWith("c")) {
         const p = row.found[Number(v.slice(1))];
-        row.state.textContent = `→ performer “${p.name}” is created from Wikidata (portrait, dates, Wikipedia text), tagged Composer; its composer tag follows.`;
+        row.state.textContent = row.composerBox.checked
+          ? `→ performer “${p.name}” is created from Wikidata (portrait, dates, Wikipedia text), tagged Composer; its tag under Composers follows.`
+          : `→ performer “${p.name}” is created from Wikidata (portrait, dates, Wikipedia text); its tag follows where its roles put it (e.g. Soloists).`;
       } else if (v === "tag") {
         row.state.textContent = `→ a tag “${row.name}” is created.`;
       } else if (v === "skip") {
@@ -1525,7 +1534,7 @@
         el("div", { className: "small mb-2", textContent: intro }),
         el("table", { className: "table table-sm mb-2" }, el("tbody", {}, ...rows.map((r) =>
           el("tr", {}, el("td", { style: { width: "28%" } }, el("strong", { textContent: r.name })),
-            el("td", {}, r.select, r.state))))),
+            el("td", {}, el("div", { className: "d-flex align-items-center" }, r.select, r.composerLabel), r.state))))),
         logList, buttons);
       panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
@@ -1545,35 +1554,39 @@
         return true;
       }
       const picked = row.found[Number(v.slice(1))];
+      const asComposer = row.composerBox.checked;
       log(`Getting ${picked.name} from Wikidata and creating the performer …`);
-      const done = await createComposer(scraperId, picked, row.name);
-      log(done.existed ? `${done.name} was there already — tagged ${done.marker}.` : `Performer ${done.name} created, tagged ${done.marker}.`, "good");
-      log(`Waiting for the composer tag (Tag Improvements makes it) …`);
+      const done = await createComposer(scraperId, picked, row.name, asComposer);
+      log(done.existed
+        ? `${done.name} was there already${asComposer ? ` — tagged ${done.marker}` : ""}.`
+        : `Performer ${done.name} created${asComposer ? `, tagged ${done.marker}` : ""}.`, "good");
+      log(`Waiting for its tag (Tag Improvements makes it) …`);
       let id = null;
       for (let i = 0; i < 10 && !id; i++) {
         await new Promise((res) => setTimeout(res, 1000));
         id = await tagIdFor(row.name, false);
       }
       if (!id) {
-        log(`No composer tag yet — creating “${row.name}” under Composers myself.`);
-        const parent = await tagIdFor("Composers", true).catch(() => null);
+        log(asComposer ? `No tag yet — creating “${row.name}” under Composers myself.`
+          : `No tag yet (no role of Tag Improvements fits) — creating the tag “${row.name}” myself.`);
+        const parent = asComposer ? await tagIdFor("Composers", true).catch(() => null) : null;
         await gql("mutation($input: TagCreateInput!) { tagCreate(input: $input) { id } }",
           { input: { name: row.name, ...(parent ? { parent_ids: [parent] } : {}) } });
       }
-      log(`Composer tag for “${row.name}” ready.`, "good");
-      notes.push(`Composer created: ${done.name}${done.existed ? " (was there, now tagged)" : ""}`);
+      log(`Tag for “${row.name}” ready.`, "good");
+      notes.push(`${asComposer ? "Composer" : "Performer"} created: ${done.name}${done.existed ? " (was there already)" : ""}`);
       return true;
     };
 
     let rows = unknown.map((name) => makeRow(name, true));
     let heading = `${unknown.length} tag${unknown.length === 1 ? "" : "s"} from the chapters don't exist yet`;
     let intro = scraperId
-      ? "Composers are looked up on Wikidata (Classical Music scraper) and created as performers — with portrait, dates and Wikipedia text, tagged Composer — and Tag Improvements makes their composer tag. Check the person picked for each, or make a plain tag, or leave it out."
+      ? "Names are looked up on Wikidata (Classical Music scraper) and created as performers — with portrait, dates and Wikipedia text — and Tag Improvements makes their tag: under Composers if ticked as a composer, else where their roles put them (a pianist, a soprano … under Soloists). Check the person picked for each, or make a plain tag, or leave it out."
       : "Make each a plain tag, or leave it out. (With the Classical Music performer scraper installed, composers could be looked up and created as performers.)";
     for (;;) {
       if (!(await ask(rows, heading, intro))) { panel.remove(); return { ok: false, notes }; }
       buttons.replaceChildren(el("span", { className: "small text-muted", textContent: "Working …" }));
-      rows.forEach((r) => { r.select.disabled = true; });
+      rows.forEach((r) => { r.select.disabled = true; r.composerBox.disabled = true; });
       for (const r of rows) {
         try {
           await work(r);

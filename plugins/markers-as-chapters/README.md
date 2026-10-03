@@ -197,11 +197,13 @@ a slow server).
 
 **Tags that don't exist yet** — composers from the chapters, mostly — are
 listed when you click **Create markers**, each with what will happen:
-**Create composer** (the person the [Classical Music](../../scrapers/ClassicalMusic/)
-scraper finds on Wikidata for the name, preselected when it's a composer —
-created as a performer with portrait, dates and Wikipedia text, tagged
-Composer, and Tag Improvements makes the composer tag), **Create a plain
-tag**, or **Leave it out**. **Continue** works through them and shows every
+**Create performer from Wikidata** (the person the
+[Classical Music](../../scrapers/ClassicalMusic/) scraper finds for the
+name — created with portrait, dates and Wikipedia text; with **is a
+composer** ticked — preselected when Wikidata calls them one — tagged
+Composer, so Tag Improvements files their tag under Composers; unticked,
+their roles decide: a pianist or soprano goes under Soloists), **Create a
+plain tag**, or **Leave it out**. **Continue** works through them and shows every
 step (searching, creating the performer, waiting for the tag …); a tag that
 still doesn't exist afterwards is asked about again — try the composer
 again, make a plain tag or leave it out — so nothing is left out unless
