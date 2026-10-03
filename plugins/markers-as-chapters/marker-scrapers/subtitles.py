@@ -31,9 +31,12 @@ import glob
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
+import urllib.parse
+import urllib.request
 
 from encoding_fix import decode_bytes, fix_text
 
@@ -142,6 +145,105 @@ def online(url):
     return None, None
 
 
+# -- OpenSubtitles ---------------------------------------------------------------------------
+#
+# opensubtitles.com's API (the old .org one is closed): needs an API key —
+# free, at opensubtitles.com under "API consumers" — and, to download, the
+# account's username and password (a free account allows about 20 downloads
+# a day). From the plugin's settings, handed over as OS_API_KEY, OS_USERNAME,
+# OS_PASSWORD, OS_LANGUAGES. Searched by the file's fingerprint (exact: the
+# same release someone made the subtitles for), else by the scene's title.
+
+OS_API = "https://api.opensubtitles.com/api/v1"
+OS_AGENT = "StashMarkersAsChapters v1.0"
+
+
+def moviehash(path):
+    """OpenSubtitles' fingerprint of a file: its size plus the 64-bit words
+    of its first and last 64 KB, summed."""
+    size = os.path.getsize(path)
+    if size < 131072:
+        return None
+    total = size
+    with open(path, "rb") as f:
+        for offset in (0, size - 65536):
+            f.seek(offset)
+            chunk = f.read(65536)
+            for (word,) in struct.iter_unpack("<Q", chunk):
+                total = (total + word) & 0xFFFFFFFFFFFFFFFF
+    return f"{total:016x}"
+
+
+def _os_request(url, key, method="GET", body=None, token=None):
+    headers = {"Api-Key": key, "User-Agent": OS_AGENT, "Accept": "application/json"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("message")
+        except Exception:  # noqa: BLE001
+            detail = None
+        raise RuntimeError(f"OpenSubtitles: {detail or exc}") from None
+
+
+def opensubtitles(scene):
+    """(subtitles text, where they're from) or (None, why not)."""
+    key = os.environ.get("OS_API_KEY", "").strip()
+    if not key:
+        return None, ("no OpenSubtitles API key in the settings (Markers as Chapters → OpenSubtitles API key; "
+                      "free at opensubtitles.com under API consumers)")
+    languages = ",".join(sorted(l.strip().lower() for l in (os.environ.get("OS_LANGUAGES") or "de,en").split(",") if l.strip()))
+    order = [l.strip().lower() for l in (os.environ.get("OS_LANGUAGES") or "de,en").split(",") if l.strip()]
+    files = scene.get("files") or []
+    found, how = [], ""
+    if files and os.path.isfile(files[0]["path"]):
+        h = moviehash(files[0]["path"])
+        if h:
+            found = _os_request(f"{OS_API}/subtitles?" + urllib.parse.urlencode({"languages": languages, "moviehash": h}), key).get("data") or []
+            found = [s for s in found if (s.get("attributes") or {}).get("moviehash_match")] or found
+            how = "the file's fingerprint"
+    if not found:
+        query = re.sub(r"\.[a-z0-9]{2,4}$", "", scene.get("title") or "", flags=re.I)
+        query = re.sub(r"[._]+", " ", query).strip()
+        if query:
+            found = _os_request(f"{OS_API}/subtitles?" + urllib.parse.urlencode({"languages": languages, "query": query.lower()}), key).get("data") or []
+            how = f"the title “{query}”"
+    if not found:
+        return None, f"OpenSubtitles has nothing for this scene (searched by {how or 'its file and title'})"
+
+    def rank(s):
+        a = s.get("attributes") or {}
+        lang = (a.get("language") or "").lower()
+        return (0 if a.get("moviehash_match") else 1, order.index(lang) if lang in order else len(order),
+                -(a.get("download_count") or 0))
+    best = sorted(found, key=rank)[0]["attributes"]
+    file_id = ((best.get("files") or [{}])[0]).get("file_id")
+    if not file_id:
+        return None, "OpenSubtitles found subtitles, but without a file to download"
+    token, base = None, OS_API
+    if os.environ.get("OS_USERNAME") and os.environ.get("OS_PASSWORD"):
+        login = _os_request(f"{OS_API}/login", key, "POST",
+                            {"username": os.environ["OS_USERNAME"], "password": os.environ["OS_PASSWORD"]})
+        token = login.get("token")
+        if login.get("base_url"):
+            base = f"https://{login['base_url']}/api/v1"
+    link = _os_request(f"{base}/download", key, "POST", {"file_id": file_id, "sub_format": "srt"}, token)
+    if not link.get("link"):
+        return None, f"OpenSubtitles didn't give a download ({link.get('message') or 'no link'})"
+    with urllib.request.urlopen(urllib.request.Request(link["link"], headers={"User-Agent": OS_AGENT}), timeout=60) as response:
+        text = decode_bytes(response.read())
+    title = (best.get("feature_details") or {}).get("title") or best.get("release") or "?"
+    left = f", {link.get('remaining')} downloads left today" if link.get("remaining") is not None else ""
+    return text, f"OpenSubtitles — “{title}” ({best.get('language')}, found by {how}{left})"
+
+
 # -- from subtitles to markers ------------------------------------------------------------
 
 def announced(text):
@@ -211,6 +313,18 @@ def main():
     scene = payload.get("scene") or {}
     files = scene.get("files") or []
     duration = max([f.get("duration") or 0 for f in files] or [0]) or None
+    if sys.argv[1:2] == ["opensubtitles"]:
+        try:
+            text, source = opensubtitles(scene)
+        except Exception as exc:  # noqa: BLE001 — the reason, in the dialog
+            text, source = None, str(exc)
+        if not text:
+            print(json.dumps({"markers": [], "notes": f"No subtitles: {source}."}))
+            return
+        cues = parse(text)
+        markers, notes = markers_from(cues, duration)
+        print(json.dumps({"markers": markers, "notes": f"From {source}: {notes}"}))
+        return
     text, source = payload.get("text") or "", "the pasted text"
     if not looks_like_subtitles(text):
         text = ""

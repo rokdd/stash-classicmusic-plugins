@@ -109,6 +109,17 @@ Built in:
   "Radetzky-Marsch" + the composer tag). ♪ / "(Musik)" start music,
   "[Applaus]" ends it; "U/T" and the like are ignored. Many concerts have
   no subtitles at all; the dialog says where it looked.
+- **Subtitles from OpenSubtitles** — subtitles from opensubtitles.com,
+  turned into markers like **Subtitles** does. Found by the file's
+  fingerprint (exact, when your file is the release the subtitles were
+  made for — an opera DVD, say), else by the scene's title; the preferred
+  language and the most downloaded first. Needs an **OpenSubtitles API
+  key** (free at opensubtitles.com, under API consumers) and, to download,
+  your **OpenSubtitles username** and **password** (about 20 downloads a
+  day with a free account) — in the plugin's settings, with **OpenSubtitles
+  languages** (default `de,en`). Live concerts are rarely there; operas and
+  films are. The dialog says which subtitles were used and how many
+  downloads are left today.
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every
   line with a time in it becomes a marker, the rest of the line its title;

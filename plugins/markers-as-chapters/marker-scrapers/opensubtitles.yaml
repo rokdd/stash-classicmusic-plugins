@@ -1,0 +1,11 @@
+# Subtitles from opensubtitles.com (needs an API key, and to download a free
+# account — see the plugin's settings), turned into markers like the
+# Subtitles scraper does: announcements and title cards.
+name: Subtitles from OpenSubtitles
+markerByFragment:
+  action: script
+  timeout: 120
+  script:
+    - python
+    - subtitles.py
+    - opensubtitles

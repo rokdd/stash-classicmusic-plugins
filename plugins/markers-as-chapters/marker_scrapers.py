@@ -829,6 +829,11 @@ def tool_paths(gql):
         "STASH_FFMPEG": general.get("ffmpegPath") or "ffmpeg",
         "STASH_FFPROBE": general.get("ffprobePath") or "ffprobe",
         "STASH_YTDLP": ytdlp,
+        # the Subtitles from OpenSubtitles scraper
+        "OS_API_KEY": str(settings.get("openSubtitlesApiKey") or ""),
+        "OS_USERNAME": str(settings.get("openSubtitlesUser") or ""),
+        "OS_PASSWORD": str(settings.get("openSubtitlesPassword") or ""),
+        "OS_LANGUAGES": str(settings.get("openSubtitlesLanguages") or "de,en"),
     }
 
 
