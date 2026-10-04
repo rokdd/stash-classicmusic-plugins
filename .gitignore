@@ -17,6 +17,7 @@ plugins/advanced-file-operations/task-history.json
 .audio-cache/
 .frames-cache/
 .progress/
+.marker-files.json
 
 # Python bytecode
 __pycache__/

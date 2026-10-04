@@ -915,6 +915,24 @@ def main():
             output = available(gql, args, settings, env_extra)
         elif mode == "marker_progress":
             output = scrape_progress(args)
+        elif mode in ("marker_files", "marker_align", "marker_record", "marker_hook", "marker_remember_all"):
+            os.environ.update(env_extra)
+            import marker_files
+            if mode == "marker_files":
+                output = marker_files.files_of(gql, args.get("scene_id"))
+            elif mode == "marker_align":
+                ids = [i for i in str(args.get("marker_ids") or "").split(",") if i]
+                output = marker_files.align(gql, args.get("scene_id"), args.get("from_file"), ids or None)
+            elif mode == "marker_record":
+                ids = [i for i in str(args.get("marker_ids") or "").split(",") if i]
+                seconds = [float(x) for x in str(args.get("seconds") or "").split(",") if x]
+                marker_files.record({i: (args.get("file_id"), s) for i, s in zip(ids, seconds)})
+                output = {"recorded": len(ids)}
+            elif mode == "marker_hook":
+                marker_files.hook(gql, args.get("hookContext") or {})
+                output = None
+            else:
+                output = marker_files.remember_all(gql, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))
         elif mode == "marker_composers":
             output = marker_composers(gql, args, settings)
             if not args.get("scene_id") and "applied" in output:

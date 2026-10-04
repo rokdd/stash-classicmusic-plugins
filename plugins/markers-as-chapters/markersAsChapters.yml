@@ -1,6 +1,6 @@
 name: Markers as Chapters
 description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert; ORF ON), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
-version: 0.0.40
+version: 0.0.41
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -15,6 +15,19 @@ tasks:
     defaultArgs:
       mode: marker_composers
       apply: "true"
+  - name: Remember each marker's file
+    description: "For every scene with one file: its markers were made on that file. Run it once — before merging scenes or adding files — so that afterwards Markers as Chapters knows which markers belong to which file and can line them up with the primary file. New markers are remembered by themselves."
+    defaultArgs:
+      mode: marker_remember_all
+hooks:
+  - name: Remember a marker's file
+    description: When a marker is created or its time changed, remember the scene's primary file as the file it was set on — so after merging scenes or changing the primary file its time can be lined up with the new primary file.
+    triggeredBy:
+      - SceneMarker.Create.Post
+      - SceneMarker.Update.Post
+      - SceneMarker.Destroy.Post
+    defaultArgs:
+      mode: marker_hook
 settings:
   scrapedMarkerTag:
     displayName: Primary tag for scraped markers

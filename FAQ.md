@@ -172,6 +172,18 @@ a marker already exists say "already a marker here — tick to update it";
 ticked, that marker gets the new title and tags instead of a second marker
 being made.
 
+### I merged two scenes (or changed the primary file) and the markers are off.
+
+The markers kept the times of the file they were set on. **Scrape
+markers… → Markers and the scene's files…** compares that file's audio
+with the primary file's and moves each marker to the same moment there —
+also when one version has an intro more, a cut in between, or plays 4 %
+faster (PAL). Markers of the same piece from both scenes are offered for
+deleting. A scene where this is needed shows a note by itself — as long
+as Markers as Chapters knows which file the markers were set on: run
+**Settings → Tasks → Remember each marker's file** once before merging;
+new markers are remembered by themselves.
+
 ### I want the chapters elsewhere — in the video file, a CUE sheet, a spreadsheet.
 
 Scrape markers… → **Copy the scene's markers as text…** (or **Copy as

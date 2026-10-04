@@ -237,6 +237,7 @@
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     items.push(item("Composers from the titles…", () => composersDialog()));
     items.push(item("New composer…", () => newComposerDialog()));
+    items.push(item("Markers and the scene's files…", () => filesDialog()));
     if (byUrl.length) {
       // A URL a scraper for that very site handles isn't offered to the
       // catch-all ones (a pattern like "http") too.
@@ -1948,6 +1949,188 @@
   // When a scene page opens (and after a save, above) — nothing in between,
   // so Stash isn't asked again and again while it's busy (generating
   // previews for new markers, say).
+  // -- markers and the scene's files ----------------------------------------------------------
+  //
+  // A marker's time belongs to the file it was set on (marker_files.py keeps
+  // which one). After merging scenes or changing the primary file, markers
+  // set on another file of a different length are off: a note offers to
+  // line them up with the primary file by comparing the two files' audio.
+
+  const FILES_NOTE_ID = "mac-files-note";
+  const FILES_DISMISSED_KEY = "markersAsChapters.filesNoteDismissed";
+
+  function filesNoteDismissed(key) {
+    try { return JSON.parse(window.localStorage.getItem(FILES_DISMISSED_KEY) || "[]").includes(key); } catch (e) { return false; }
+  }
+  function dismissFilesNote(key) {
+    try {
+      const list = JSON.parse(window.localStorage.getItem(FILES_DISMISSED_KEY) || "[]");
+      list.push(key);
+      window.localStorage.setItem(FILES_DISMISSED_KEY, JSON.stringify(list.slice(-300)));
+    } catch (e) { /* not remembered then */ }
+  }
+
+  async function checkFiles() {
+    const id = sceneId();
+    const old = document.getElementById(FILES_NOTE_ID);
+    if (old) old.remove();
+    if (!id) return;
+    let scene;
+    try {
+      scene = (await gql("query($id: ID!) { findScene(id: $id) { files { id } scene_markers { id } } }", { id })).findScene;
+    } catch (e) { return; }
+    if (!scene || (scene.files || []).length < 2 || !(scene.scene_markers || []).length) return;
+    let info;
+    try { info = await runOperation({ mode: "marker_files", scene_id: id }); } catch (e) { return; }
+    if (!info || !info.off || sceneId() !== id) return;
+    const key = `${id}|${info.files[0].id}|${info.off}`;
+    if (filesNoteDismissed(key)) return;
+    const primary = info.files[0];
+    const box = el("div", { id: FILES_NOTE_ID, className: "card p-3",
+      style: { position: "fixed", right: "16px", bottom: "16px", zIndex: 1500, maxWidth: "400px", boxShadow: "0 6px 24px rgba(0,0,0,.5)" } },
+      el("strong", { textContent: "Markers from another file" }),
+      el("div", { className: "small text-muted mb-2", textContent:
+        `${info.off} marker${info.off === 1 ? " was" : "s were"} set on another file of this scene, of a different length — ` +
+        `the primary file is ${primary.basename} (${formatTime(primary.duration)}). Their times may be off here.` }),
+      el("div", { className: "d-flex", style: { gap: "8px" } },
+        el("button", { type: "button", className: "btn btn-primary btn-sm", textContent: "Line them up…",
+          onclick: () => { box.remove(); filesDialog(); } }),
+        el("button", { type: "button", className: "btn btn-link btn-sm", textContent: "Not now",
+          onclick: () => { dismissFilesNote(key); box.remove(); } })));
+    document.body.appendChild(box);
+  }
+
+  async function filesDialog() {
+    const dialog = openDialog("Markers and the scene's files");
+    dialog.body.append(el("p", { textContent: "Loading…" }));
+    let info;
+    try {
+      info = await runOperation({ mode: "marker_files", scene_id: sceneId() });
+    } catch (err) {
+      dialog.body.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+      return;
+    }
+    const primary = info.files[0];
+    const name = (fileId) => { const f = info.files.find((x) => String(x.id) === String(fileId)); return f ? f.basename : "?"; };
+    const rows = info.files.map((f) => el("tr", {},
+      el("td", { textContent: f.primary ? "primary" : "" }),
+      el("td", { textContent: f.basename, style: { wordBreak: "break-all" } }),
+      el("td", { textContent: formatTime(f.duration) }),
+      el("td", { textContent: `${f.markers} marker${f.markers === 1 ? "" : "s"}` })));
+    const others = info.files.filter((f) => !f.primary);
+    const pick = el("select", { className: "form-control form-control-sm d-inline-block", style: { width: "auto", maxWidth: "100%" } },
+      ...others.map((f) => el("option", { value: f.id, textContent: `${f.basename} (${formatTime(f.duration)}, ${f.markers} marker${f.markers === 1 ? "" : "s"})` })));
+    const withUnknown = el("input", { type: "checkbox", checked: false });
+    const result = el("div", { className: "mt-3" });
+    const compare = el("button", { type: "button", className: "btn btn-primary btn-sm ml-2", textContent: "Compare the audio",
+      onclick: () => lineUp(dialog, info, pick.value, withUnknown.checked, result) });
+    if (others.length) {
+      const best = others.slice().sort((a, b) => b.markers - a.markers)[0];
+      pick.value = best.id;
+    }
+    dialog.body.replaceChildren(
+      el("p", { className: "small text-muted", textContent:
+        "A marker's time belongs to the file it was set on. When scenes are merged, Stash moves all their markers to one scene " +
+        "with their times unchanged; when the primary file changes, the markers stay as they are. Markers set on a file of " +
+        "another length (another cut, an intro more or less, PAL speed) can be lined up with the primary file here — " +
+        "by comparing the two files' audio." }),
+      el("table", { className: "table table-sm" }, el("tbody", {}, ...rows)),
+      info.unknown ? el("p", { className: "small", textContent:
+        `${info.unknown} marker${info.unknown === 1 ? "'s" : "s'"} file isn't known (set before Markers as Chapters remembered it — ` +
+        "run the task \"Remember each marker's file\" once, before merging)." }) : "",
+      others.length
+        ? el("div", {}, "Markers set on ", pick, compare,
+            info.unknown ? el("label", { className: "small ml-3" }, withUnknown, ` also the ${info.unknown} whose file isn't known`) : "")
+        : el("p", { textContent: "The scene has one file: nothing to line up." }),
+      result);
+  }
+
+  async function lineUp(dialog, info, fromFile, withUnknown, result) {
+    const ids = withUnknown
+      ? info.markers.filter((m) => String(m.file) === String(fromFile) || !m.file).map((m) => m.id)
+      : [];
+    result.replaceChildren(el("p", { textContent: "Comparing the audio of the two files … (reading a file's audio the first time takes a while)" }));
+    let r;
+    try {
+      r = await runOperation({ mode: "marker_align", scene_id: sceneId(), from_file: fromFile, marker_ids: ids.join(",") });
+    } catch (err) {
+      result.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
+      return;
+    }
+    if (!r.markers.length) {
+      result.replaceChildren(el("p", { textContent: "No markers known to be set on that file." }));
+      return;
+    }
+    const pct = Math.round((r.speed - 1) * 1000) / 10;
+    const same = r.likeness >= 0.6;
+    const summary = same
+      ? `The same recording (alike: ${Math.round(r.likeness * 100)} %): ${r.from.basename} is ` +
+        `${r.offset === 0 ? "in step with" : `${Math.abs(r.offset)} s ${r.offset < 0 ? "ahead of" : "behind"}`} the primary file` +
+        (pct ? `, and plays ${Math.abs(pct)} % ${pct > 0 ? "faster" : "slower"} (PAL / film speed)` : "") +
+        ". Each marker was compared in the two minutes around it, so cuts in between are followed."
+      : `The two files don't sound alike (${Math.round(r.likeness * 100)} %) — perhaps not the same recording. Check before applying.`;
+    // markers already on the primary file near where one would go: the same
+    // piece twice after merging
+    const onPrimary = info.markers.filter((m) => String(m.file) === String(info.files[0].id));
+    const similar = (a, b) => {
+      const w = (t) => new Set(String(t).toLowerCase().split(/\W+/).filter((x) => x.length > 2));
+      const x = w(a), y = w(b);
+      return !x.size || !y.size ? false : [...x].filter((v) => y.has(v)).length / Math.min(x.size, y.size) >= 0.6;
+    };
+    const rows = r.markers.map((m) => {
+      const twin = onPrimary.find((p) => Math.abs(p.seconds - m.new_seconds) <= 5 && similar(p.title, m.title));
+      const move = el("input", { type: "checkbox", checked: !twin && !m.outside });
+      const drop = el("input", { type: "checkbox", checked: !!twin });
+      const shift = Math.round((m.new_seconds - m.seconds) * 10) / 10;
+      return { m, move, drop, twin, tr: el("tr", {},
+        el("td", {}, move),
+        el("td", { textContent: m.title || "(no title)" }),
+        el("td", { textContent: formatTime(m.seconds) }),
+        el("td", { textContent: `${formatTime(m.new_seconds)}${m.new_end_seconds != null ? ` – ${formatTime(m.new_end_seconds)}` : ""}` }),
+        el("td", { textContent: `${shift > 0 ? "+" : ""}${shift} s` }),
+        el("td", { className: "small" },
+          m.outside ? "not in the primary file (cut away?) " : "",
+          m.likeness < 0.6 ? "not alike around it — moved by the whole's offset " : "",
+          twin ? el("label", {}, drop, ` already a marker here (“${twin.title}”) — delete this one`) : "")) };
+    });
+    const apply = el("button", { type: "button", className: "btn btn-primary", textContent: "Apply",
+      onclick: async () => {
+        apply.disabled = true;
+        const moved = [];
+        let deleted = 0;
+        const problems = [];
+        for (const row of rows) {
+          try {
+            if (row.twin && row.drop.checked) {
+              await gql("mutation($id: ID!) { sceneMarkerDestroy(id: $id) }", { id: row.m.id });
+              deleted += 1;
+            } else if (row.move.checked) {
+              await gql("mutation($input: SceneMarkerUpdateInput!) { sceneMarkerUpdate(input: $input) { id } }",
+                { input: { id: row.m.id, seconds: row.m.new_seconds, end_seconds: row.m.new_end_seconds } });
+              moved.push(row.m);
+            }
+          } catch (err) {
+            problems.push(`${row.m.title}: ${err.message || err}`);
+          }
+        }
+        if (moved.length) {
+          await runOperation({ mode: "marker_record", file_id: r.to.id, marker_ids: moved.map((m) => m.id).join(","),
+            seconds: moved.map((m) => m.new_seconds).join(",") }).catch(() => null);
+        }
+        result.replaceChildren(el("div", { className: problems.length ? "alert alert-warning" : "alert alert-success", style: { whiteSpace: "pre-wrap" },
+          textContent: `${moved.length} marker${moved.length === 1 ? "" : "s"} moved to the primary file, ${deleted} deleted.` +
+            (problems.length ? `\nNot done:\n${problems.join("\n")}` : "") + "\nThe page reloads." }));
+        setTimeout(() => window.location.reload(), 1500);
+      } });
+    result.replaceChildren(
+      el("p", { className: same ? "" : "text-warning", textContent: summary }),
+      el("table", { className: "table table-sm" },
+        el("thead", {}, el("tr", {}, el("th", {}), el("th", { textContent: "Marker" }), el("th", { textContent: `On ${r.from.basename}` }),
+          el("th", { textContent: "On the primary file" }), el("th", { textContent: "Shift" }), el("th", {}))),
+        el("tbody", {}, ...rows.map((x) => x.tr))),
+      apply);
+  }
+
   let lastScene = null;
   setInterval(() => {
     const id = sceneId();
@@ -1955,5 +2138,6 @@
     lastScene = id;
     removeOffer();
     if (id) setTimeout(checkForChapters, 1500);
+    if (id) setTimeout(checkFiles, 2500);
   }, 2000);
 })();
