@@ -178,7 +178,9 @@ The markers kept the times of the file they were set on. **Scrape
 markers… → Markers and the scene's files…** compares that file's audio
 with the primary file's and moves each marker to the same moment there —
 also when one version has an intro more, a cut in between, or plays 4 %
-faster (PAL). Markers of the same piece from both scenes are offered for
+faster (PAL). **Compare the picture** looks for every marker by its first
+seconds of picture instead — it follows any cut in between, also when the
+sound differs. Markers of the same piece from both scenes are offered for
 deleting. A scene where this is needed shows a note by itself — as long
 as Markers as Chapters knows which file the markers were set on: run
 **Settings → Tasks → Remember each marker's file** once before merging;

@@ -2025,7 +2025,12 @@
     const withUnknown = el("input", { type: "checkbox", checked: false });
     const result = el("div", { className: "mt-3" });
     const compare = el("button", { type: "button", className: "btn btn-primary btn-sm ml-2", textContent: "Compare the audio",
-      onclick: () => lineUp(dialog, info, pick.value, withUnknown.checked, result) });
+      title: "Quick: the two files' loudness, as a whole and around each marker. Needs the same sound in both.",
+      onclick: () => lineUp(dialog, info, pick.value, withUnknown.checked, result, "audio") });
+    const comparePicture = el("button", { type: "button", className: "btn btn-secondary btn-sm ml-2", textContent: "Compare the picture",
+      title: "Every marker looked for in the primary file by its first seconds of picture — follows every cut, also with " +
+        "other sound (another language, commentary). Slower: some seconds per marker.",
+      onclick: () => lineUp(dialog, info, pick.value, withUnknown.checked, result, "picture") });
     if (others.length) {
       const best = others.slice().sort((a, b) => b.markers - a.markers)[0];
       pick.value = best.id;
@@ -2041,20 +2046,22 @@
         `${info.unknown} marker${info.unknown === 1 ? "'s" : "s'"} file isn't known (set before Markers as Chapters remembered it — ` +
         "run the task \"Remember each marker's file\" once, before merging)." }) : "",
       others.length
-        ? el("div", {}, "Markers set on ", pick, compare,
+        ? el("div", {}, "Markers set on ", pick, compare, comparePicture,
             info.unknown ? el("label", { className: "small ml-3" }, withUnknown, ` also the ${info.unknown} whose file isn't known`) : "")
         : el("p", { textContent: "The scene has one file: nothing to line up." }),
       result);
   }
 
-  async function lineUp(dialog, info, fromFile, withUnknown, result) {
+  async function lineUp(dialog, info, fromFile, withUnknown, result, method) {
     const ids = withUnknown
       ? info.markers.filter((m) => String(m.file) === String(fromFile) || !m.file).map((m) => m.id)
       : [];
-    result.replaceChildren(el("p", { textContent: "Comparing the audio of the two files … (reading a file's audio the first time takes a while)" }));
+    result.replaceChildren(el("p", { textContent: method === "picture"
+      ? "Looking for every marker's picture in the primary file … (some seconds per marker)"
+      : "Comparing the audio of the two files … (reading a file's audio the first time takes a while)" }));
     let r;
     try {
-      r = await runOperation({ mode: "marker_align", scene_id: sceneId(), from_file: fromFile, marker_ids: ids.join(",") });
+      r = await runOperation({ mode: "marker_align", scene_id: sceneId(), from_file: fromFile, marker_ids: ids.join(","), method });
     } catch (err) {
       result.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
       return;
@@ -2065,7 +2072,13 @@
     }
     const pct = Math.round((r.speed - 1) * 1000) / 10;
     const same = r.likeness >= 0.6;
-    const summary = same
+    const found = r.markers.filter((m) => !m.outside).length;
+    const summary = method === "picture"
+      ? `Found ${found} of ${r.markers.length} marker${r.markers.length === 1 ? "" : "s"} by their picture in the primary file` +
+        (pct ? ` — it plays ${Math.abs(pct)} % ${pct > 0 ? "slower" : "faster"} (PAL / film speed)` : "") +
+        ". Each one was looked for itself, so a shift that changes in between (a cut) is followed. " +
+        "Those not found are left unticked."
+      : same
       ? `The same recording (alike: ${Math.round(r.likeness * 100)} %): ${r.from.basename} is ` +
         (r.offset === 0 ? "in step with the primary file"
           : `in step with the primary file, but everything comes ${Math.abs(r.offset)} s ${r.offset < 0 ? "earlier" : "later"} there`) +
@@ -2082,7 +2095,7 @@
     };
     const rows = r.markers.map((m) => {
       const twin = onPrimary.find((p) => Math.abs(p.seconds - m.new_seconds) <= 5 && similar(p.title, m.title));
-      const move = el("input", { type: "checkbox", checked: !twin && !m.outside });
+      const move = el("input", { type: "checkbox", checked: !twin && !m.outside && (method !== "picture" || m.likeness >= 0.6) });
       const drop = el("input", { type: "checkbox", checked: !!twin });
       const shift = Math.round((m.new_seconds - m.seconds) * 10) / 10;
       return { m, move, drop, twin, tr: el("tr", {},
@@ -2092,8 +2105,8 @@
         el("td", { textContent: `${formatTime(m.new_seconds)}${m.new_end_seconds != null ? ` – ${formatTime(m.new_end_seconds)}` : ""}` }),
         el("td", { textContent: `${shift > 0 ? "+" : ""}${shift} s`, style: { whiteSpace: "nowrap" } }),
         el("td", { className: "small" },
-          m.outside ? "not in the primary file (cut away?) " : "",
-          m.likeness < 0.6 ? "not alike around it — moved by the whole's offset " : "",
+          m.outside ? (method === "picture" ? "its picture isn't in the primary file (cut away?) " : "not in the primary file (cut away?) ") : "",
+          !m.outside && m.likeness < 0.6 ? (method === "picture" ? "picture hardly alike — check it " : "not alike around it — moved by the whole's offset ") : "",
           twin ? el("label", {}, drop, ` already a marker here (“${twin.title}”) — delete this one`) : "")) };
     });
     const apply = el("button", { type: "button", className: "btn btn-primary", textContent: "Apply",

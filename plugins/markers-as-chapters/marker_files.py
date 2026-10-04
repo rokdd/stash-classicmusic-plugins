@@ -23,6 +23,7 @@ So:
 
 import json
 import os
+import subprocess
 import sys
 import threading
 
@@ -231,7 +232,131 @@ def whole(a, b):
     return speed, offset, likeness
 
 
-def align(gql, scene_id, from_file, marker_ids=None):
+# -- by the picture ------------------------------------------------------------------------------------------
+#
+# The frame at a marker in the file it was set on, looked for in the primary
+# file: tiny grey pictures (64 × 36), each made comparable (its mean taken
+# off, its contrast evened out), the one with the least difference wins.
+# Two markers give the speed; then every marker is looked for itself,
+# starting from the shift of the one before — so a shift that changes
+# somewhere in between (a cut) is followed.
+
+FRAME_W, FRAME_H = 64, 36
+REACH = 300  # seconds searched around the first marker (an intro more or less)
+CHAIN = 45  # seconds searched around where each marker should be (by the one before) …
+POOR = 0.15  # … and further (REACH) when the best frames differ more than this (the same: under 0.08)
+SEQUENCE = 8  # frames compared, every half second (4 seconds): movement tells still shots apart
+MIN_APART = 60  # the second marker at least this far from the first
+
+
+def grey_frames(path, start, length, fps):
+    """[(time, normalised pixels)] from `start` for `length` seconds."""
+    ffmpeg = os.environ.get("STASH_FFMPEG") or "ffmpeg"
+    start = max(0.0, start)
+    proc = subprocess.run([ffmpeg, "-v", "error", "-skip_frame", "noref", "-ss", f"{start:.3f}", "-i", path,
+                           "-t", f"{length:.3f}", "-an", "-sn", "-vf",
+                           f"fps={fps},scale={FRAME_W}:{FRAME_H},format=gray", "-f", "rawvideo", "-"],
+                          capture_output=True)
+    size = FRAME_W * FRAME_H
+    data = proc.stdout
+    return [(start + i / fps, normalise(data[i * size:(i + 1) * size])) for i in range(len(data) // size)]
+
+
+def normalise(pixels):
+    n = len(pixels)
+    mean = sum(pixels) / n
+    spread = (sum((p - mean) ** 2 for p in pixels) / n) ** 0.5 or 1.0
+    return [(p - mean) / spread for p in pixels]
+
+
+def difference(a, b):
+    return sum(abs(x - y) for x, y in zip(a, b)) / len(a)
+
+
+def sequence(path, at):
+    """The frames at `at`, every half second for SEQUENCE of them."""
+    return [f for _, f in grey_frames(path, at, SEQUENCE * 0.5, 2)][:SEQUENCE]
+
+
+def sequence_difference(seq, frames, i, step):
+    """How far `seq` is from frames[i], frames[i + step], … (inf if they run out)."""
+    total = 0.0
+    for k, f in enumerate(seq):
+        j = i + k * step
+        if j >= len(frames):
+            return float("inf")
+        total += difference(f, frames[j][1])
+    return total / len(seq)
+
+
+def find_sequence(seq, path, centre, reach, speed=1.0):
+    """(time in `path` where `seq` begins best within centre ± reach,
+    difference): in half-second steps, then frame by frame (25 a second)."""
+    span = SEQUENCE * 0.5 * speed
+    coarse = grey_frames(path, centre - reach, 2 * reach + span, 2)
+    if not coarse or not seq:
+        return None, None
+    step = max(1, round(speed))  # half-second frames: the sequence's step there
+    best = min(range(len(coarse)), key=lambda i: sequence_difference(seq, coarse, i, step))
+    t = coarse[best][0]
+    fine = grey_frames(path, t - 0.6, 1.2 + span, 25)
+    if not fine:
+        return round(t, 2), round(sequence_difference(seq, coarse, best, step), 3)
+    fine_step = round(0.5 * speed * 25)
+    starts = [i for i, (ft, _) in enumerate(fine) if ft <= t + 0.6]
+    i = min(starts, key=lambda i: sequence_difference(seq, fine, i, fine_step))
+    return round(fine[i][0], 2), round(sequence_difference(seq, fine, i, fine_step), 3)
+
+
+def by_picture(source, primary, markers):
+    """(speed, offset, [(marker, new seconds, new end, difference)]) — every
+    marker of `source` looked for in `primary` by the frames of its first
+    seconds; starting where the one before suggests (so cuts in between
+    are followed), further around when nothing fits there."""
+    ordered = sorted(markers, key=lambda m: m["seconds"])
+    found, shift = [], 0.0
+    for n, m in enumerate(ordered):
+        seq = sequence(source["path"], m["seconds"])
+        new = diff = None
+        if seq:
+            reach = REACH if not any(d is not None and d <= POOR for _, _, d in found) else CHAIN
+            new, diff = find_sequence(seq, primary["path"], m["seconds"] + shift, reach)
+            if reach == CHAIN and (diff is None or diff > POOR):
+                wide, wide_diff = find_sequence(seq, primary["path"], m["seconds"] + shift, REACH)
+                if wide_diff is not None and (diff is None or wide_diff < diff):
+                    new, diff = wide, wide_diff
+        if new is not None and diff is not None and diff <= POOR:
+            shift = new - m["seconds"]  # the next one starts from here
+        found.append((m, new, diff))
+    # the speed, from the markers found well: PAL / film, or the same
+    good = [(m["seconds"], new) for m, new, d in found if new is not None and d is not None and d <= POOR]
+    slopes = sorted((b2 - b1) / (a2 - a1) for (a1, b1), (a2, b2) in zip(good, good[1:]) if a2 - a1 >= 30)
+    measured = slopes[len(slopes) // 2] if slopes else 1.0
+    speed = min(SPEEDS, key=lambda s: abs(s - measured))
+    if abs(speed - measured) > 0.01:
+        speed = 1.0
+    offset = (good[0][1] - good[0][0] * speed) if good else 0.0
+    starts = {round(m["seconds"], 1): new for m, new, d in found if new is not None and d is not None and d <= POOR}
+    placed = []
+    for m, new, diff in found:
+        if new is None:
+            new = round(m["seconds"] * speed + offset, 2)
+        own = new - m["seconds"] * speed
+        end, new_end = m.get("end_seconds"), None
+        if end is not None:
+            # an end where another marker starts: there; else its own last
+            # seconds looked for (a cut may lie in between)
+            new_end = next((v for k, v in starts.items() if abs(k - end) <= 1), None)
+            if new_end is None:
+                seq = sequence(source["path"], max(0.0, end - SEQUENCE * 0.5))
+                at, d = find_sequence(seq, primary["path"], end * speed + own - SEQUENCE * 0.5, CHAIN, speed) if seq else (None, None)
+                new_end = round(at + SEQUENCE * 0.5 * speed, 2) if at is not None and d is not None and d <= POOR \
+                    else round(end * speed + own, 2)
+        placed.append((m, new, new_end, diff))
+    return speed, offset, placed
+
+
+def align(gql, scene_id, from_file, marker_ids=None, method="audio"):
     """Proposals: the markers made on `from_file` (or `marker_ids`) moved to
     where the same moment is in the primary file."""
     scene = gql(SCENE, {"id": scene_id}).get("findScene") or {}
@@ -242,6 +367,8 @@ def align(gql, scene_id, from_file, marker_ids=None):
     primary = files[0]
     if str(source["id"]) == str(primary["id"]):
         raise SystemExit("That's the primary file already.")
+    if method == "picture":
+        return align_by_picture(scene, source, primary, marker_ids)
     a, b = envelope(source["path"]), envelope(primary["path"])
     if not a or not b:
         raise SystemExit("One of the files has no audio to compare.")
@@ -282,6 +409,31 @@ def align(gql, scene_id, from_file, marker_ids=None):
                     "new_seconds": new, "new_end_seconds": new_end, "likeness": local,
                     "outside": outside})
     return {"speed": round(speed, 5), "offset": round(offset, 2), "likeness": round(likeness, 3),
+            "from": {"id": source["id"], "basename": source["basename"], "duration": source.get("duration")},
+            "to": {"id": primary["id"], "basename": primary["basename"], "duration": primary.get("duration")},
+            "markers": out}
+
+
+def align_by_picture(scene, source, primary, marker_ids):
+    data = load()
+    wanted = {str(i) for i in marker_ids} if marker_ids else None
+    markers = [m for m in scene.get("scene_markers") or []
+               if (str(m["id"]) in wanted if wanted is not None
+                   else (data.get(str(m["id"])) or {}).get("file") == str(source["id"]))]
+    if not markers:
+        return {"markers": []}
+    speed, offset, placed = by_picture(source, primary, markers)
+    end_of = primary.get("duration") or float("inf")
+    out = []
+    for m, new, new_end, diff in placed:
+        out.append({"id": m["id"], "title": m.get("title") or "", "seconds": m["seconds"], "end_seconds": m.get("end_seconds"),
+                    "new_seconds": min(max(0.0, new), end_of), "new_end_seconds": min(new_end, end_of) if new_end is not None else None,
+                    # alike: a difference of 0 is the same picture; 0.4 and more hardly alike
+                    # alike: 0 the same pictures, from POOR on not alike
+                    "likeness": round(max(0.0, 1 - diff / (2 * POOR)), 2) if diff is not None else 0.0,
+                    "outside": new < 0 or new > end_of or diff is None or diff > POOR})
+    likeness = sum(x["likeness"] for x in out) / len(out)
+    return {"method": "picture", "speed": round(speed, 5), "offset": round(offset, 2), "likeness": round(likeness, 3),
             "from": {"id": source["id"], "basename": source["basename"], "duration": source.get("duration")},
             "to": {"id": primary["id"], "basename": primary["basename"], "duration": primary.get("duration")},
             "markers": out}

@@ -922,7 +922,8 @@ def main():
                 output = marker_files.files_of(gql, args.get("scene_id"))
             elif mode == "marker_align":
                 ids = [i for i in str(args.get("marker_ids") or "").split(",") if i]
-                output = marker_files.align(gql, args.get("scene_id"), args.get("from_file"), ids or None)
+                output = marker_files.align(gql, args.get("scene_id"), args.get("from_file"), ids or None,
+                                            args.get("method") or "audio")
             elif mode == "marker_record":
                 ids = [i for i in str(args.get("marker_ids") or "").split(",") if i]
                 seconds = [float(x) for x in str(args.get("seconds") or "").split(",") if x]

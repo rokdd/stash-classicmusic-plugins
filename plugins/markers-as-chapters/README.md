@@ -464,6 +464,15 @@ the other file are then off.
   doesn't have are left unticked. After a merge, a marker that lands where
   the same piece already has one is offered for deleting instead.
   **Apply** moves them and remembers the primary file for them.
+- **Compare the picture** instead: every marker is looked for itself in
+  the primary file by its first four seconds of picture (eight tiny
+  frames, so movement tells a still shot apart) — starting where the
+  marker before suggests, within 45 seconds, further around if nothing
+  fits there. So a shift that changes anywhere in between (an advert cut,
+  a piece missing) is followed, and it works when the sound differs
+  (another language, commentary). The speed (PAL / film) is worked out
+  from all markers found; an end is placed with the next marker's start
+  or looked for itself. Slower than the audio: some seconds per marker.
 
 ## Copying markers as text
 
