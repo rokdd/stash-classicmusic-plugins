@@ -24,6 +24,7 @@ The plain text scraper uses this too (scrape_titles), for a list of
 titles without times."""
 
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -73,7 +74,9 @@ def cached_loudness(path, ffmpeg):
     """loudness(), remembered per file (by path, size and time changed), so
     scraping the same scene again doesn't read the audio again."""
     st = os.stat(path)
-    key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime}|{WINDOW}".encode()).hexdigest()
+    # the file and how it's measured: a change to loudness() measures again
+    logic = hashlib.sha1(inspect.getsource(loudness).encode()).hexdigest()[:12]
+    key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime}|{WINDOW}|{logic}".encode()).hexdigest()
     cache = os.path.join(CACHE_DIR, key + ".json")
     try:
         with open(cache, encoding="utf-8") as f:

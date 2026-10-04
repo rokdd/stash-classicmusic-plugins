@@ -21,6 +21,7 @@ What was read is remembered per file (in .frames-cache).
 
 import difflib
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -186,6 +187,16 @@ def similar(a, b):
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= 0.8
 
 
+def logic():
+    """A fingerprint of how the picture is read — the code and the settings
+    that decide it. When it changes, what was read before isn't used (the
+    cache depends on the analysis, not only on the file)."""
+    import pauses
+    parts = [inspect.getsource(f) for f in (windows_for, frames, read_text, pauses.find_pauses, pauses.loudness)]
+    parts.append(repr((STEP, MAX_WIDTH, MIN_CONF, PAUSE, WEAK_PAUSE, BEFORE, AFTER, MAX_WINDOWS, pauses.WINDOW)))
+    return hashlib.sha1("".join(parts).encode()).hexdigest()[:12]
+
+
 def cached(path, key_extra, make):
     st = os.stat(path)
     key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime}|{key_extra}".encode()).hexdigest()
@@ -234,7 +245,7 @@ def texts(path, duration):
         finally:
             shutil.rmtree(folder, ignore_errors=True)
         return out
-    read = cached(path, f"read|{STEP}|{MAX_WIDTH}|{MIN_CONF}|{windows}|{langs}", read_all)
+    read = cached(path, f"read|{logic()}|{windows}|{langs}", read_all)
 
     # a logo, a channel's name: in most of the frames
     counts = {}
