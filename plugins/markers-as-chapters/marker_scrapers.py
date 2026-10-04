@@ -751,32 +751,49 @@ def marker_composers(gql, args, settings):
 # ARTE / ORF ON through the scene's URLs — are tried, and those that find two
 # or more chapters (with different starts) are reported. Nothing is created.
 
+#
+# With "all" (the Scrape markers… menu, also for scenes with markers), the
+# subtitles next to / in the video are tried too, and every scraper tried
+# is reported in "checked" — {id: {"count", "why"}} — so the menu can turn
+# off those that find nothing, and say why.
+
 QUICK_SCRAPERS = ("chapter_files", "video_chapters", "arte", "orf")
+MENU_SCRAPERS = QUICK_SCRAPERS + ("subtitles",)
 QUICK_TIMEOUT = 60
 
 
 def available(gql, args, settings, env_extra):
     scene = scene_for_scraper(gql, args.get("scene_id"))
     if not scene:
-        return {"found": []}
-    if scene.get("scene_markers"):
+        return {"found": [], "checked": {}}
+    everything = bool(args.get("all"))
+    if scene.get("scene_markers") and not everything:
         return {"found": [], "has_markers": True}
     scrapers = load_scrapers(settings)
     urls = scene.get("urls") or []
-    found = []
-    for sid in QUICK_SCRAPERS:
+    found, checked = [], {}
+    for sid in (MENU_SCRAPERS if everything else QUICK_SCRAPERS):
         scraper = scrapers.get(sid)
         if not scraper or not scraper["fragment"]:
             continue
-        if scraper["by_url"] and not any(any(p in u for p in url_patterns(scraper)) for u in urls):
+        if scraper["by_url"] and not scraper["fragment_in_menu"] and not any(any(p in u for p in url_patterns(scraper)) for u in urls):
+            checked[sid] = {"count": 0, "why": "the scene has no URL of this site"}
             continue  # a scraper for websites, and the scene has none of its URLs
         action = dict(scraper["fragment"], timeout=min(int(scraper["fragment"].get("timeout") or QUICK_TIMEOUT), QUICK_TIMEOUT))
         try:
-            markers, notes, _pieces = run_action(scraper, action, {"scene": scene}, env_extra)
-        except Exception:  # noqa: BLE001 — nothing there, or it can't tell: not offered
+            markers, notes, _pieces = run_action(scraper, action, {"scene": scene, "quick": True}, env_extra)
+        except RuntimeError as exc:
+            # A scraper that says why it found nothing ("No chapter file next
+            # to the video …") is turned off with that; one that crashed isn't.
+            why = str(exc).split(" failed: ", 1)[-1].strip()
+            if " failed: " in str(exc) and why and "Traceback" not in why:
+                checked[sid] = {"count": 0, "why": why[-300:]}
+            continue
+        except Exception:  # noqa: BLE001 — timed out or can't tell: not offered, not turned off
             continue
         markers = normalise(markers)
-        if len(markers) >= 2 and len({m["seconds"] for m in markers}) > 1:
+        checked[sid] = {"count": len(markers), "why": "" if markers else (notes or f"{scraper['name']}: nothing found")}
+        if sid in QUICK_SCRAPERS and len(markers) >= 2 and len({m["seconds"] for m in markers}) > 1:
             found.append({"scraper": sid, "name": scraper["name"], "count": len(markers), "notes": notes})
     # Subtitles made for exactly this file on OpenSubtitles (a search by its
     # fingerprint — no download), when an API key is set.
@@ -792,7 +809,12 @@ def available(gql, args, settings, env_extra):
             langs = sorted({(s.get("attributes") or {}).get("language") or "?" for s in exact})
             found.append({"scraper": "opensubtitles", "name": scrapers["opensubtitles"]["name"], "count": None,
                           "label": f"subtitles made for exactly this file ({', '.join(langs)})", "notes": ""})
-    return {"found": found}
+            checked["opensubtitles"] = {"count": None, "why": "", "label": f"made for this file ({', '.join(langs)})"}
+    elif "opensubtitles" in scrapers:
+        checked["opensubtitles"] = {"count": 0, "why": "no API key in the plugin's settings", "setup": True}
+    if scene.get("scene_markers"):
+        found = []  # not offered for a scene with markers — the menu only
+    return {"found": found, "checked": checked}
 
 
 # ---------------------------------------------------------------------------

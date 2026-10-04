@@ -131,6 +131,14 @@ Built in:
   languages** (default `de,en`). Live concerts are rarely there; operas and
   films are. The dialog says which subtitles were used and how many
   downloads are left today.
+- **Turned off when there's nothing:** when the menu opens, the scene is
+  checked in the background — a chapter file next to the video, chapters
+  and subtitles in it, ARTE / ORF ON through its URLs, the OpenSubtitles
+  key. Entries that would find nothing are greyed out with the reason
+  ("No chapter file next to the video …"), those that found something say
+  how many markers; a scrape that comes back empty turns its entry off
+  too. **↻ Check again** at the bottom forgets it (after adding a file,
+  say).
 - **Plain text** — paste text or pick a file (it's read in your browser,
   so from the device you're on), check and edit it, then **Scrape**. Every
   line with a time in it becomes a marker, the rest of the line its title;

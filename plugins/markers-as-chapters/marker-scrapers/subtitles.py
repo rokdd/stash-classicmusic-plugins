@@ -400,16 +400,17 @@ def main():
                 if text:
                     source = "the video file's subtitle track"
                     break
-            if not text:
+            if not text and not payload.get("quick"):  # the menu's check: not online (slow)
                 for url in scene.get("urls") or []:
                     text, name = online(url)
                     if text:
                         source = f"{name} from {url}"
                         break
     if not text:
+        online_too = "" if payload.get("quick") else ", and none online for the scene's URLs"
         print(json.dumps({"markers": [], "notes":
             "No subtitles found — none next to the video (.srt / .vtt / .ass), none in it (picture subtitles can't be "
-            "read), and none online for the scene's URLs. Concerts often have none at all."}))
+            f"read){online_too}. Concerts often have none at all."}))
         return
     cues = parse(text)
     if not cues:

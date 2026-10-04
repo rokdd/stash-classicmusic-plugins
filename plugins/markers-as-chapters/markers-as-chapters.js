@@ -142,6 +142,46 @@
     if (menu && !menu.contains(e.target) && e.target.id !== BUTTON_ID) closeMenu();
   });
 
+  // Which scrapers find nothing for a scene: checked in the background when
+  // the menu opens (marker_available with "all": the files next to and in
+  // the video, ARTE / ORF ON through the scene's URLs, OpenSubtitles' key),
+  // and learnt from every scrape that came back empty. Those are turned off
+  // in the menu, with the reason; "Check again" forgets it all.
+  const menuChecks = new Map(); // "<scene>|<urls>" → Promise of {id: {count, why, label, setup}}
+  const foundNothing = new Map(); // "<scene>|<scraper>|<url>" → why
+
+  function nothingKey(scraperId, url) {
+    return `${sceneId()}|${scraperId}|${url || ""}`;
+  }
+
+  function menuCheck(urls) {
+    const key = `${sceneId()}|${urls.join(" ")}`;
+    if (!menuChecks.has(key)) {
+      menuChecks.set(key, runOperation({ mode: "marker_available", scene_id: sceneId(), all: true })
+        .then((r) => (r && r.checked) || {})
+        .catch(() => ({})));
+    }
+    return menuChecks.get(key);
+  }
+
+  // Turn a menu entry off (greyed, not clickable, the reason below it) or
+  // add what was found to it.
+  function markItem(button, state) {
+    if (!button || !state) return;
+    const note = button.querySelector(".mac-why") || el("div", { className: "mac-why small text-muted",
+      style: { whiteSpace: "normal", maxWidth: "360px", fontSize: "0.8em" } });
+    if (state.off) {
+      button.disabled = true;
+      button.classList.add("disabled");
+      button.style.opacity = "0.55";
+      button.title = state.why || "";
+      note.textContent = `${state.setup ? "Not set up" : "Nothing for this scene"} — ${String(state.why || "nothing found").replace(/\s+/g, " ").slice(0, 160)}`;
+    } else {
+      note.textContent = state.label;
+    }
+    if (!note.isConnected) button.appendChild(note);
+  }
+
   function urlMatches(scraper, url) {
     return (scraper.urls || []).some((p) => p && url.includes(p));
   }
@@ -171,16 +211,21 @@
       menu.replaceChildren(el("span", { className: "dropdown-item-text text-danger", textContent: String(err.message || err) }));
       return;
     }
-    const item = (label, run) =>
-      el("button", { type: "button", className: "dropdown-item", textContent: label, onclick: () => { closeMenu(); run(); } });
+    const entries = []; // [button, scraper id, url, kind]
+    const item = (label, run, scraperId, url, kind) => {
+      const button = el("button", { type: "button", className: "dropdown-item", onclick: () => { closeMenu(); run(); } },
+        el("span", { textContent: label }));
+      if (scraperId) entries.push([button, scraperId, url || "", kind]);
+      return button;
+    };
     const items = [];
     // On top: what works on the scene itself (its file) and on text. A
     // scraper for websites goes below the line only — scraping "the scene"
     // with it just means scraping the scene's URL, listed there.
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
     scrapers.filter((s) => s.fragment && (!(s.urls || []).length || s.fragment_in_menu))
-      .forEach((s) => items.push(item(s.name, () => scrape(s, null))));
-    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — ${s.text_label || "paste text or pick a file…"}`, () => textDialog(s))));
+      .forEach((s) => items.push(item(s.name, () => scrape(s, null), s.id, "", "scene")));
+    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — ${s.text_label || "paste text or pick a file…"}`, () => textDialog(s), s.id, "", "text")));
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     items.push(item("Composers from the titles…", () => composersDialog()));
     items.push(item("New composer…", () => newComposerDialog()));
@@ -195,7 +240,7 @@
         urls.filter((u) => specific(s, u) || (urlMatches(s, u) && !handledSpecifically(u))).forEach((u) => {
           let host = u;
           try { host = new URL(u).host.replace(/^www\./, ""); } catch (e) { /* keep it whole */ }
-          items.push(item(`${s.name} — ${host}`, () => scrape(s, u)));
+          items.push(item(`${s.name} — ${host}`, () => scrape(s, u), s.id, u, "url"));
         });
         items.push(item(`${s.name} — other URL…`, () => {
           const u = window.prompt(`URL to scrape markers from with ${s.name}:`);
@@ -206,7 +251,29 @@
     if (!items.length) {
       items.push(el("span", { className: "dropdown-item-text text-muted", textContent: "No marker scrapers found." }));
     }
-    menu.replaceChildren(...items);
+    const checking = el("span", { className: "dropdown-item-text small text-muted", textContent: "Checking what this scene has…" });
+    const again = el("button", { type: "button", className: "dropdown-item small text-muted", textContent: "↻ Check again",
+      onclick: (e) => {
+        e.stopPropagation();
+        [...menuChecks.keys()].filter((k) => k.startsWith(`${sceneId()}|`)).forEach((k) => menuChecks.delete(k));
+        [...foundNothing.keys()].filter((k) => k.startsWith(`${sceneId()}|`)).forEach((k) => foundNothing.delete(k));
+        closeMenu();
+        openMenu(button);
+      } });
+    menu.replaceChildren(...items, el("div", { className: "dropdown-divider" }), checking);
+    const apply = (checked) => {
+      entries.forEach(([b, id, u, kind]) => {
+        const learnt = foundNothing.get(nothingKey(id, u));
+        const c = checked[id];
+        if (learnt !== undefined) markItem(b, { off: true, why: learnt });
+        else if (c && kind === "scene" && c.count === 0) markItem(b, { off: true, why: c.why });
+        else if (c && c.setup) markItem(b, { off: true, setup: true, why: c.why }); // OpenSubtitles without a key: by words neither
+        else if (c && kind === "scene" && (c.count || c.label)) markItem(b, { label: c.label || `${c.count} marker${c.count === 1 ? "" : "s"} found` });
+      });
+    };
+    apply({}); // what earlier scrapes found out, at once
+    apply(await menuCheck(urls));
+    if (checking.isConnected) checking.replaceWith(again);
   }
 
   // -- scraping and the review dialog --------------------------------------------------
@@ -330,11 +397,18 @@
       settings = { ...(plugins[OLD_PLUGIN_ID] || {}), ...(plugins[PLUGIN_ID] || {}) };
     } catch (err) {
       clearInterval(timer);
-      dialog.body.replaceChildren(el("div", { className: "alert alert-danger", style: { whiteSpace: "pre-wrap" }, textContent: String(err.message || err) }));
+      const message = String(err.message || err);
+      // A scraper that said why it found nothing is turned off in the menu
+      // for this scene; one that crashed or timed out isn't.
+      if (!text && / failed: /.test(message) && !/Traceback|timed out|TimeoutExpired/.test(message)) {
+        foundNothing.set(nothingKey(scraper.id, url), message.split(" failed: ").pop().trim());
+      }
+      dialog.body.replaceChildren(el("div", { className: "alert alert-danger", style: { whiteSpace: "pre-wrap" }, textContent: message }));
       return;
     }
     clearInterval(timer);
     if (!result.markers.length) {
+      if (!text) foundNothing.set(nothingKey(scraper.id, url), result.notes || "nothing found"); // off in the menu now
       dialog.body.replaceChildren(el("p", { textContent: result.notes || "No markers found." }));
       return;
     }
