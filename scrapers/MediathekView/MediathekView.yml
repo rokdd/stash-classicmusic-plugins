@@ -1,0 +1,23 @@
+name: MediathekView (ARD, ZDF, 3sat, ARTE, ORF, SRF … and the archive since 2015)
+# Broadcasts of the German-language public media libraries as MediathekView
+# lists them: what's online now (MediathekViewWeb's search), and from its
+# archive the broadcasts long gone. Title, description, broadcast date,
+# station, the Mediathek page.
+sceneByName:
+  action: script
+  script:
+    - python
+    - mediathekview.py
+    - name
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - mediathekview.py
+    - query
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - mediathekview.py
+    - fragment

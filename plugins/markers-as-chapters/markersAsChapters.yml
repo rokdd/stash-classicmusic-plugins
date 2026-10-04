@@ -1,6 +1,6 @@
 name: Markers as Chapters
 description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert; ORF ON), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
-version: 0.0.39
+version: 0.0.40
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -51,6 +51,26 @@ settings:
   openSubtitlesLanguages:
     displayName: OpenSubtitles languages
     description: "Languages to look for, in order of preference, as two-letter codes separated by commas. Empty: de,en."
+    type: STRING
+  tmdbApiKey:
+    displayName: TMDB API key
+    description: "For the TMDB scene scraper (a scraper of this repository, not of this plugin): the API key or API Read Access Token from themoviedb.org → Settings → API. Scrapers have no settings of their own in Stash, so it's kept here."
+    type: STRING
+  tmdbLanguage:
+    displayName: TMDB language
+    description: "For the TMDB scraper: e.g. de-DE, en-US. Empty: de-DE."
+    type: STRING
+  tvdbApiKey:
+    displayName: TVDB API key
+    description: "For the TVDB scene scraper (a scraper of this repository): the API key from thetvdb.com → Dashboard → API keys."
+    type: STRING
+  tvdbPin:
+    displayName: TVDB subscriber PIN
+    description: "For the TVDB scraper: only for a user-supported API key — your TVDB subscriber PIN."
+    type: STRING
+  tvdbLanguage:
+    displayName: TVDB language
+    description: "For the TVDB scraper: three letters, e.g. deu, eng. Empty: deu."
     type: STRING
   tesseractPath:
     displayName: tesseract

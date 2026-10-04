@@ -14,6 +14,8 @@ plugin or scraper does what; the details are in their READMEs.
 | [Classical Music](scrapers/ClassicalMusic/) (performer scraper) | composers, soloists, conductors, orchestras from Wikidata |
 | [Classical Concerts](scrapers/ClassicalConcerts/) (scene scraper) | a concert's page at ARTE, ORF ON, ARD, ZDF, 3sat, BBC, medici.tv |
 | [Sidecar / local files](scrapers/Sidecar/) (scene scraper) | the files next to the video: medici.tv JSON, NFO, yt-dlp info, cover |
+| [MediathekView](scrapers/MediathekView/) (scene scraper) | German-language public broadcasts — online now and, from the archive, since 2015 |
+| [TMDB](scrapers/TMDB/), [TVDB](scrapers/TVDB/) (scene scrapers) | films, productions on disc, series episodes (API keys) |
 
 Plugins: Settings → Plugins, source `https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml`.
 Scrapers: Settings → Metadata Providers → Available Scrapers, source
@@ -89,6 +91,20 @@ cover).
    its chapters by itself (a note at the bottom right).
 4. **Check the times**: the review dialog compares every marker with the
    pauses in the audio; **move** / **shift** fix markers that are a little off.
+
+### I recorded a concert years ago and the broadcaster's page is gone. Where do I get title, date and description?
+
+**Scrape with… → MediathekView**. It looks at what's online now and in
+MediathekView's archive, which has every day's list of broadcasts since
+March 2015 (ARD and its stations, ZDF, 3sat, ARTE, ORF, SRF …). It
+searches by the scene's title or file name, and finds the right day by
+the scene's date, a date in the name, or the file's date — recordings
+are usually saved the day they aired; the file's length decides between
+broadcasts of the same name. If the Mediathek page it gives is still
+there, **Classical Concerts** can then scrape the performers from it.
+
+For concert films and productions sold on disc, **TMDB** and **TVDB**
+(API keys in Markers as Chapters' settings).
 
 ### I downloaded a concert from medici.tv and saved its JSON. What now?
 

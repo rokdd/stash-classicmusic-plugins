@@ -1,0 +1,31 @@
+name: TVDB (TheTVDB)
+# Series episodes and films from thetvdb.com — concert series, recurring
+# broadcasts, documentaries. Needs an API key: Markers as Chapters' setting
+# "TVDB API key", config.json next to the script, or TVDB_API_KEY.
+sceneByURL:
+  - action: script
+    url:
+      - thetvdb.com/series/
+      - thetvdb.com/movies/
+    script:
+      - python
+      - tvdb.py
+      - url
+sceneByName:
+  action: script
+  script:
+    - python
+    - tvdb.py
+    - name
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - tvdb.py
+    - query
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - tvdb.py
+    - fragment

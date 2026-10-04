@@ -19,6 +19,9 @@ And scrapers:
 | [Classical Music](scrapers/ClassicalMusic/) | Performers: composers, conductors, soloists, orchestras from Wikidata — Wikipedia text, portrait, dates, country, roles and (Open Opus) the composer's epoch as tags |
 | [Classical Concerts](scrapers/ClassicalConcerts/) | Scenes from ARTE (ARTE Concert), ORF ON, ARD Mediathek, ZDF, 3sat, BBC and medici.tv — title, programme, concert date, cover, broadcaster, and orchestra, conductor, soloists and composers as performers |
 | [Sidecar / local files](scrapers/Sidecar/) | Scenes from the files next to the video: a medici.tv JSON, a Kodi / Jellyfin NFO, yt-dlp's .info.json and a cover image |
+| [MediathekView](scrapers/MediathekView/) | Scenes from the German-language public media libraries (ARD, ZDF, 3sat, ARTE, ORF, SRF …) — what's online now, and from MediathekView's archive every broadcast since 2015; no key needed |
+| [TMDB](scrapers/TMDB/) | Scenes from The Movie Database — concert films, opera and ballet productions, documentaries, series episodes (API key) |
+| [TVDB](scrapers/TVDB/) | Scenes from TheTVDB — series episodes, recurring broadcasts, films (API key) |
 
 **How do they work together?** The [FAQ](FAQ.md) goes through typical
 use cases (a recorded concert, a medici.tv download, composers in marker
