@@ -47,6 +47,10 @@ MIN_RISE = 3.0  # … and this many times more than the picture's median cell
 MAX_HOT = 0.35  # more cells than this: a still camera shot, not text
 MIN_CELLS = 3  # fewer: a speck
 MAX_BOX = 0.5  # text over more of the picture than this: a still camera shot
+PAUSE = (2.0, 20.0)  # pauses looked after: at least this long (s), this much quieter (dB) …
+WEAK_PAUSE = (1.0, 15.0)  # … or, if there are none such, these
+BEFORE, AFTER = 5, 45  # seconds looked at before a pause's end and after it
+MAX_WINDOWS = 80  # pauses looked after at most (the longest)
 MAX_READ = 1500  # texts read at most
 LOGO_SHARE = 0.2  # text seen for more than this share of the video: a logo, left out
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".frames-cache")
@@ -91,6 +95,45 @@ def languages(binary):
     return "+".join(have), [l for l in wanted if l not in installed]
 
 
+def running(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def wait_for_other_run(progress_file):
+    """One scan per scene at a time: when another one is still running
+    (asked again after a lost connection, say), wait for it — what it read
+    is remembered, so this one is quick then. The lock file, or None."""
+    if not progress_file:
+        return None
+    lock = progress_file[:-5] + ".lock"
+    os.makedirs(PROGRESS_DIR, exist_ok=True)
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return lock
+        except FileExistsError:
+            try:
+                with open(lock, encoding="utf-8") as f:
+                    pid = int(f.read().strip() or 0)
+            except (OSError, ValueError):
+                pid = 0
+            if not running(pid):
+                try:
+                    os.remove(lock)  # left by a run that ended without tidying up
+                except OSError:
+                    pass
+                continue
+            time.sleep(5)
+        except OSError:
+            return None
+
+
 def ones(n):
     return n.bit_count() if hasattr(n, "bit_count") else bin(n).count("1")  # Python < 3.10
 
@@ -105,20 +148,75 @@ def size(path):
     return stream["width"], stream["height"]
 
 
-def scan(path, duration=None):
-    """{"cells": [[new standing edges per cell] per second], "size": [w, h],
-    "grid": [columns, rows], "cell_bits": bits in a cell}.
+def windows_for(path, duration):
+    """[(start, length)] to look at, and how they were chosen. Captions
+    come when a piece begins: the start of the video and the 45 seconds
+    after each pause in the audio (from 5 seconds before its end). Without
+    pauses (no audio, music throughout): the whole video."""
+    try:
+        import pauses
+        levels = pauses.cached_loudness(path, os.environ.get("STASH_FFMPEG") or "ffmpeg")
+    except BaseException:  # noqa: BLE001 — no audio: the whole video
+        levels = []
+    found = (pauses.find_pauses(levels, *PAUSE) or pauses.find_pauses(levels, *WEAK_PAUSE)) if levels else []
+    end = duration or (levels[-1][0] if levels else 0)
+    if not found or not end:
+        return [(0.0, float(end or 0) or None)], "the whole video"
+    if len(found) > MAX_WINDOWS:
+        found = sorted(sorted(found, key=lambda p: p[0] - p[1])[:MAX_WINDOWS])
+    spans = [(0.0, AFTER)] + [(max(0.0, b - BEFORE), b + AFTER) for a, b in found]
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, min(b, end)])
+    return ([(round(a, 1), round(b - a, 1)) for a, b in merged if b - a > 3],
+            f"the start and the {AFTER} seconds after each of {len(found)} pauses in the audio")
 
-    The picture, scaled down, as edges; per cell of a grid, the edges that
-    stand (in this second's frame and the next one's) and are new (not in
-    most of the frames 10 and 20 seconds before and after) are counted — a
-    still stage or a logo is there all the time and drops out."""
+
+def edges(path, start, length, width, height):
+    """The window's frames, one a second, as 1-bit edge pictures (ints)."""
     ffmpeg = os.environ.get("STASH_FFMPEG") or "ffmpeg"
+    stride = (width + 7) // 8
+    frame = stride * height
+    where = ["-ss", f"{start:.2f}"] if start else []
+    span = ["-t", f"{length:.2f}"] if length else []
+    # Only every second's frame is needed: frames nothing refers to are
+    # skipped, the loop filter too (about twice as fast, the edges still fine).
+    proc = subprocess.Popen([ffmpeg, "-nostats", "-v", "error", "-threads", "0", "-skip_frame", "noref",
+                             "-skip_loop_filter", "all", *where, "-i", path, *span, "-an", "-sn", "-dn",
+                             "-vf", f"fps=1,scale={width}:{height},format=gray,{EDGES},format=monob",
+                             "-f", "rawvideo", "-"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    frames = []
+    while True:
+        data = proc.stdout.read(frame)
+        if len(data) < frame:
+            break
+        frames.append(int.from_bytes(data, "big"))
+        _scanned["done"] += 1
+        progress("scan", _scanned["done"], _scanned["total"])
+    err = proc.stderr.read().decode(errors="replace")
+    if proc.wait() != 0 and not frames:
+        raise SystemExit(f"ffmpeg couldn't read the video: {err.strip()[-400:]}")
+    return frames
+
+
+_scanned = {"done": 0, "total": None}
+
+
+def scan(path, windows):
+    """{"windows": [{"start", "cells": [[new standing edges per cell] per
+    second]}], "size": [w, h], "grid": [columns, rows], "cell_bits"}.
+
+    Per window: the picture, scaled down, as edges; per cell of a grid, the
+    edges that stand (in this second's frame and the next one's) and are
+    new (not in most of the frames 10 and 20 seconds before and after) are
+    counted — a still stage or a logo is there all the time and drops out."""
     w, h = size(path)
     height = max(ROWS, round(WIDTH * h / w / ROWS) * ROWS)
     stride = (WIDTH + 7) // 8
-    frame = stride * height
-    total = frame * 8
+    total = stride * height * 8
     cw, ch = WIDTH // COLS, height // ROWS
     masks = []
     for r in range(ROWS):
@@ -128,45 +226,43 @@ def scan(path, duration=None):
             for y in range(r * ch, (r + 1) * ch):
                 m |= ((1 << (x1 - x0)) - 1) << (total - (y * stride * 8 + x1))
             masks.append(m)
-    proc = subprocess.Popen([ffmpeg, "-nostats", "-v", "error", "-threads", "0", "-i", path, "-an", "-sn", "-dn",
-                             "-vf", f"fps=1,scale={WIDTH}:{height},format=gray,{EDGES},format=monob",
-                             "-f", "rawvideo", "-"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    frames = []
-    total = int(duration or 0) or None
-    while True:
-        data = proc.stdout.read(frame)
-        if len(data) < frame:
-            break
-        frames.append(int.from_bytes(data, "big"))
-        progress("scan", len(frames), total)
-    err = proc.stderr.read().decode(errors="replace")
-    if proc.wait() != 0 and not frames:
-        raise SystemExit(f"ffmpeg couldn't read the video: {err.strip()[-400:]}")
-    cells = []
-    for t in range(len(frames)):
-        progress("compare", t, len(frames))
-        if t + 1 >= len(frames):
-            cells.append([0] * len(masks))
-            continue
-        standing = frames[t] & frames[t + 1]
-        far = [frames[u] for u in (t - 20, t - 10, t + 11, t + 21) if 0 <= u < len(frames)]
-        usual = far[0] if len(far) == 1 else 0  # in at least two of them
-        for i in range(len(far)):
-            for j in range(i + 1, len(far)):
-                usual |= far[i] & far[j]
-        new = standing & ~usual
-        cells.append([ones(new & m) for m in masks] if new else [0] * len(masks))
-    return {"cells": cells, "size": [w, h], "grid": [COLS, ROWS], "cell_bits": cw * ch}
+    _scanned["total"] = int(sum(length for _, length in windows if length)) or None
+    out = []
+    for start, length in windows:
+        frames = edges(path, start, length, WIDTH, height)
+        cells = []
+        for t in range(len(frames)):
+            if t + 1 >= len(frames):
+                cells.append([0] * len(masks))
+                continue
+            standing = frames[t] & frames[t + 1]
+            far = [frames[u] for u in (t - 20, t - 10, t + 11, t + 21) if 0 <= u < len(frames)]
+            usual = far[0] if len(far) == 1 else 0  # in at least two of them
+            for i in range(len(far)):
+                for j in range(i + 1, len(far)):
+                    usual |= far[i] & far[j]
+            new = standing & ~usual
+            cells.append([ones(new & m) for m in masks] if new else [0] * len(masks))
+        out.append({"start": start, "cells": cells})
+    return {"windows": out, "size": [w, h], "grid": [COLS, ROWS], "cell_bits": cw * ch}
 
 
 def stretches(scanned):
     """[(first second, last second, (col0, row0, col1, row1), strength)]
     where text stood: a few cells with many more new standing edges than
     the rest of the picture (a still camera shot has them everywhere)."""
+    found = []
+    for window in scanned["windows"]:
+        found += [(a + window["start"], b + window["start"], box, strength)
+                  for a, b, box, strength in _stretches(window["cells"], scanned)]
+    return found
+
+
+def _stretches(all_cells, scanned):
     cols, rows = scanned["grid"]
     least = MIN_SHARE * scanned["cell_bits"]
     seconds = []
-    for values in scanned["cells"]:
+    for values in all_cells:
         floor = statistics.median(values) if values else 0
         hot = {i for i, v in enumerate(values) if v > max(least, MIN_RISE * floor)}
         seconds.append(hot if 0 < len(hot) <= MAX_HOT * len(values) else set())
@@ -190,7 +286,7 @@ def stretches(scanned):
         box = (min(cs), min(rs), max(cs) + 1, max(rs) + 1)
         if (box[2] - box[0]) * (box[3] - box[1]) > MAX_BOX * cols * rows:
             continue  # most of the picture: a still camera shot
-        strength = sum(sum(scanned["cells"][x][i] for i in cells) for x in span)
+        strength = sum(sum(all_cells[x][i] for i in cells) for x in span)
         found.append((span[0], span[-1] + 1, box, strength))
     return found
 
@@ -265,9 +361,10 @@ def texts(path, duration):
                          "apt install tesseract-ocr tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr "
                          "tesseract-ocr-data-deu; or set its path in the plugin's settings.")
     langs, missing = languages(binary)
-    scanned = cached(path, f"scan|{WIDTH}|{COLS}x{ROWS}|{EDGES}", lambda: scan(path, duration))
+    windows, chosen = windows_for(path, duration)
+    scanned = cached(path, f"scan|{WIDTH}|{COLS}x{ROWS}|{EDGES}|{windows}", lambda: scan(path, windows))
     found = stretches(scanned)
-    seconds = len(scanned["cells"])
+    seconds = sum(len(win["cells"]) for win in scanned["windows"])
     skipped = 0
     if len(found) > MAX_READ:
         skipped = len(found) - MAX_READ
@@ -281,7 +378,7 @@ def texts(path, duration):
             if text:
                 out.append([list(box), a, b, text])
         return out
-    read = cached(path, f"read|{WIDTH}|{COLS}x{ROWS}|{EDGES}|{MIN_SHARE}|{MIN_RISE}|{MAX_HOT}|{langs}", read_all)
+    read = cached(path, f"read|{WIDTH}|{COLS}x{ROWS}|{EDGES}|{windows}|{MIN_SHARE}|{MIN_RISE}|{MAX_HOT}|{langs}", read_all)
 
     # one text shown a little longer (read twice in a row): once
     merged = []
@@ -300,7 +397,7 @@ def texts(path, duration):
     logos = {k for k, s in shown.items() if s > LOGO_SHARE * total}
     cues = sorted((float(a), float(b), text) for box, a, b, text in merged
                   if re.sub(r"\W+", "", text.lower()) not in logos)
-    notes = (f"Scanned {seconds // 60} min of video (a frame a second), found {len(found)} place"
+    notes = (f"Looked at {chosen} — {seconds // 60} min of video, a frame a second — found {len(found)} place"
              f"{'' if len(found) == 1 else 's'} with text standing in the picture and could read {len(cues)} "
              f"(tesseract, {langs})")
     if logos:
@@ -322,10 +419,16 @@ def main():
     if scene.get("id"):
         name = re.sub(r"\W", "", str(scene["id"]))
         _progress["file"] = os.path.join(PROGRESS_DIR, name + ".json")
+    lock = wait_for_other_run(_progress["file"])
     try:
         cues, notes = texts(files[0]["path"], duration)
     finally:
         progress("done", 1, 1, final=True)
+        if lock:
+            try:
+                os.remove(lock)
+            except OSError:
+                pass
     if not cues:
         print(json.dumps({"markers": [], "notes": f"No text found in the picture. {notes}"}))
         return

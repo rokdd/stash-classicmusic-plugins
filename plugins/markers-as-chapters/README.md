@@ -134,8 +134,10 @@ Built in:
 - **Text in the picture (OCR)** — reads what's written in the video
   itself: the captions broadcasters show when a piece begins ("Sergej
   Rachmaninow / Klavierkonzert Nr. 3 op. 30 / I. Allegro ma non tanto" at
-  the lower left), title cards, credits, burned-in subtitles. It goes
-  through the video a frame a second and looks for text that appears,
+  the lower left), title cards, credits, burned-in subtitles. It looks
+  where pieces begin — the start of the video and the 45 seconds after
+  each pause in the audio (the whole video only when there are no
+  pauses) — a frame a second, for text that appears,
   stays a few seconds and goes — a still stage or the channel's logo is
   there all the time and doesn't count, nor does a still camera shot
   (still everywhere, not in one patch). Only those places are read, with

@@ -386,8 +386,9 @@
       const s = Math.round((Date.now() - began) / 1000);
       status.textContent = `${url ? `Scraping ${url}` : "Scraping"} … ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
       if (s >= 8 && scraper.id === "frames_ocr") {
-        hint.textContent = "Still working. It goes through the whole video, a frame a second, and reads each text it finds — " +
-          "for a long concert that can take several minutes the first time (it's remembered for the next time). Closing this dialog doesn't stop it.";
+        hint.textContent = "Still working. It looks at the picture where pieces begin — the start and the 45 seconds after " +
+          "each pause in the audio — a frame a second, and reads each text it finds. For a long concert that can take several " +
+          "minutes the first time (it's remembered for the next time). Closing this dialog doesn't stop it.";
       } else if (s >= 8) {
         hint.textContent = "Still working. Finding the pauses in the audio reads the whole soundtrack — for a long concert " +
           "that can take a few minutes the first time (it's remembered for the next time). Closing this dialog doesn't stop it.";
@@ -406,7 +407,7 @@
       barBox.style.display = pct == null ? "none" : "";
       bar.style.width = `${pct || 0}%`;
       barText.textContent = p.phase === "scan"
-        ? `Going through the video: ${formatTime(p.done)}${p.total ? ` of ${formatTime(p.total)} (${pct} %)` : ""}`
+        ? `Looking at the picture (where pieces begin): ${formatTime(p.done)}${p.total ? ` of ${formatTime(p.total)} (${pct} %)` : ""}`
         : p.phase === "compare" ? `Looking for text in the picture … ${pct} %`
         : p.phase === "read" ? `Reading the texts found: ${p.done} of ${p.total}`
         : "";
