@@ -38,7 +38,8 @@ MAX_UNNAMED = 60
 # The check looks for shorter, shallower pauses too: a marker starting at
 # one is a good sign even when it's a short breath between movements.
 CHECK_LEVEL = (1.0, 15.0)
-CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".audio-cache")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import storage  # noqa: E402 — where the readings are kept
 CACHE_KEEP = 200  # files
 
 
@@ -77,7 +78,8 @@ def cached_loudness(path, ffmpeg):
     # the file and how it's measured: a change to loudness() measures again
     logic = hashlib.sha1(inspect.getsource(loudness).encode()).hexdigest()[:12]
     key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime}|{WINDOW}|{logic}".encode()).hexdigest()
-    cache = os.path.join(CACHE_DIR, key + ".json")
+    cache_dir = storage.folder("audio")
+    cache = os.path.join(cache_dir, key + ".json")
     try:
         with open(cache, encoding="utf-8") as f:
             return [tuple(x) for x in json.load(f)]
@@ -85,10 +87,9 @@ def cached_loudness(path, ffmpeg):
         pass
     levels = loudness(path, ffmpeg)
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
         with open(cache, "w", encoding="utf-8") as f:
             json.dump([[round(t, 2), round(db, 1)] for t, db in levels], f)
-        old = sorted((os.path.join(CACHE_DIR, n) for n in os.listdir(CACHE_DIR)), key=os.path.getmtime)
+        old = sorted((os.path.join(cache_dir, n) for n in os.listdir(cache_dir)), key=os.path.getmtime)
         for stale in old[:-CACHE_KEEP]:
             os.remove(stale)
     except OSError:

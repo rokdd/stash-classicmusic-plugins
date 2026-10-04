@@ -831,13 +831,12 @@ def available(gql, args, settings, env_extra):
 
 # How far a long scraper is (Text in the picture writes it): read by the
 # dialog every few seconds while it waits.
-PROGRESS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".progress")
-
-
 def scrape_progress(args):
+    sys.path.insert(0, BUILT_IN_DIR)
+    import storage
     name = re.sub(r"\W", "", str(args.get("scene_id") or ""))
     try:
-        with open(os.path.join(PROGRESS_DIR, f"{name}.json"), encoding="utf-8") as f:
+        with open(os.path.join(storage.folder("progress"), f"{name}.json"), encoding="utf-8") as f:
             return json.load(f)
     except (OSError, ValueError):
         return None
@@ -881,12 +880,15 @@ def tool_paths(gql):
         or ((plugins.get("advancedFileOperations") or {}).get("ytdlpPath") or "").strip() \
         or "yt-dlp"
     try:
-        general = gql("query { configuration { general { ffmpegPath ffprobePath } } }")["configuration"]["general"]
+        general = gql("query { configuration { general { ffmpegPath ffprobePath generatedPath } } }")["configuration"]["general"]
     except Exception:  # noqa: BLE001
         general = {}
     return settings, {
         "STASH_FFMPEG": general.get("ffmpegPath") or "ffmpeg",
         "STASH_FFPROBE": general.get("ffprobePath") or "ffprobe",
+        # the analyses go to Stash's generated folder; made absolute here — the
+        # plugin runs in Stash's working directory, the scrapers in their own
+        "STASH_GENERATED": os.path.abspath(general["generatedPath"]) if general.get("generatedPath") else "",
         "STASH_YTDLP": ytdlp,
         # the Subtitles from OpenSubtitles scraper
         "OS_API_KEY": str(settings.get("openSubtitlesApiKey") or ""),
@@ -914,6 +916,7 @@ def main():
         elif mode == "marker_available":
             output = available(gql, args, settings, env_extra)
         elif mode == "marker_progress":
+            os.environ.update(env_extra)
             output = scrape_progress(args)
         elif mode in ("marker_files", "marker_align", "marker_record", "marker_hook", "marker_remember_all"):
             os.environ.update(env_extra)

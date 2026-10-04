@@ -16,7 +16,8 @@ Kept simple:
 Needs tesseract on the Stash server (Debian: apt install tesseract-ocr
 tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr
 tesseract-ocr-data-deu) — the plugin setting "tesseract", else on the PATH.
-What was read is remembered per file (in .frames-cache).
+What was read is remembered per file (in Stash's generated folder,
+markers-as-chapters/frames).
 """
 
 import difflib
@@ -28,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,10 +42,11 @@ PAUSE = (2.0, 20.0)  # pauses looked after: at least this long (s), this much qu
 WEAK_PAUSE = (1.0, 15.0)  # … or, if there are none such, these
 BEFORE, AFTER = 5, 45  # seconds looked at before a pause's end and after it
 MAX_WINDOWS = 80  # pauses looked after at most (the longest)
-CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".frames-cache")
+import storage  # noqa: E402 — where the analyses are kept (Stash's generated folder)
+CACHE_DIR = storage.folder("frames")
 CACHE_KEEP = 100
-# How far it is, for the dialog: <plugin>/.progress/<scene id>.json
-PROGRESS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".progress")
+# How far it is, for the dialog: <generated>/markers-as-chapters/progress/<scene id>.json
+PROGRESS_DIR = storage.folder("progress")
 _progress = {"file": None, "last": 0.0}
 
 
@@ -232,8 +235,7 @@ def texts(path, duration):
 
     def read_all():
         out, done = [], 0
-        folder = os.path.join(CACHE_DIR, f"frames-{os.getpid()}")
-        os.makedirs(folder, exist_ok=True)
+        folder = tempfile.mkdtemp(prefix="markers-as-chapters-frames-")
         try:
             for start, length in windows:
                 for at, png in frames(path, start, length, folder):

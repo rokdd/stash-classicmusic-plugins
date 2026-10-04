@@ -144,7 +144,7 @@ Built in:
   few texts: a marker each, where it shows, its lines joined with " – "
   (untick credits and place names); many (an opera with burned-in
   subtitles): read like subtitles. The dialog shows how far it is; what
-  was read is remembered (`.frames-cache`), and asked again while it's
+  was read is remembered (in Stash's generated folder), and asked again while it's
   still working (after a lost connection), it waits for that run instead
   of starting another. Needs tesseract — Debian / Ubuntu: `apt install
   tesseract-ocr tesseract-ocr-deu`; Stash's Docker image: `apk add
@@ -544,6 +544,21 @@ Only `seconds` is required. The environment variables `STASH_FFPROBE` and
 `STASH_YTDLP` name the ffprobe and yt-dlp to use. Only `action: script`
 is supported. Use `.yaml` (not `.yml`) for scrapers inside Stash's plugins
 folder — Stash takes every `.yml` there for a plugin.
+
+## Where the analyses are kept
+
+In Stash's **generated** folder (Settings → System → Application Paths),
+under `markers-as-chapters/`: `audio` (the loudness of each video's
+audio — for the pauses and for lining up files), `frames` (what was read
+in the picture), `progress` (how far a long scraper is). They're only
+remembered work — delete them any time, they're made again when needed.
+Each is tied to the file (path, size, date) and to how it was analysed, so
+a changed file or a new version of the analysis is analysed afresh. If the
+generated folder can't be written to, the plugin's own folder is used.
+
+Which file each marker was set on is kept in the plugin's folder
+(`.marker-files.json`) — that's not generated: it can't be made again.
+Updating the plugin leaves it alone.
 
 ## Settings
 
