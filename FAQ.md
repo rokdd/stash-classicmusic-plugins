@@ -23,10 +23,11 @@ Scrapers: Settings → Metadata Providers → Available Scrapers, source
 
 ## Use cases
 
-### I only have the video file — no URL, no programme. How do I get chapters?
+### I only have the video file — no URL, no programme, no other source. How do I get markers?
 
 The file itself and what lies next to it often have them. In the Markers
-tab, **Scrape markers…** and try, in this order:
+tab, **Scrape markers…** — entries that find nothing for this scene are
+greyed out with the reason, so you see at once what's left. In this order:
 
 1. **Video file chapters** — chapters inside the file (MKV, MP4; yt-dlp
    downloads with `--embed-chapters`, DVD and Blu-ray rips, files cut
@@ -35,18 +36,27 @@ tab, **Scrape markers…** and try, in this order:
 2. **Chapter file next to the video** — a CUE sheet, a medici.tv /
    yt-dlp JSON, an ffmpeg chapters file or a text list in the same
    folder. A CUE sheet of an album split into several files works too.
-3. **Subtitles** — a .srt / .vtt next to the video or a subtitle track
-   in the file: announcements and title cards become markers, in operas
-   each sung number.
-4. **Subtitles from OpenSubtitles** — checks the file's fingerprint;
-   subtitles made for exactly your release fit to the second (operas and
-   films more often than concerts). With an API key set this is checked
-   when you open the scene, and offered by itself.
+3. **Subtitles** — a .srt / .vtt next to the video, a subtitle track in
+   the file, or the broadcaster's online (yt-dlp). Announcements and title
+   cards become markers, in operas each sung number (titled with its
+   first line). Concerts often have none — operas and films more often.
+4. **Subtitles from OpenSubtitles** — looked up by the file's fingerprint
+   (size and a checksum of its start and end): subtitles made for exactly
+   your release fit to the second. With an API key set (plugin settings)
+   a scene without markers is checked when you open it and the subtitles
+   are offered — the check costs no downloads. Otherwise the title is
+   searched; when it picks the wrong production, use **search with your
+   own words…** with the year or the place.
 5. **Text in the picture (OCR)** — broadcasters show the work when it
    begins ("Sergej Rachmaninow / Klavierkonzert Nr. 3 / I. Allegro ma non
-   tanto"); this finds those captions in the video and reads them (needs
-   tesseract on the Stash server). Also title cards and burned-in
-   subtitles.
+   tanto" at the lower left). This finds text that shows for a few
+   seconds — captions, title cards, credits, burned-in subtitles — and
+   reads it; each caption becomes a marker where it shows (untick credits
+   and place names). Captions often come a little after the music starts:
+   the review dialog's check against the audio suggests the right start.
+   Needs tesseract on the Stash server (`apt install tesseract-ocr
+   tesseract-ocr-deu`, or in Stash's Docker image `apk add tesseract-ocr
+   tesseract-ocr-data-deu`).
 
 A scene without markers usually offers what it finds (a note at the
 bottom right) — you don't have to try each one.
@@ -152,34 +162,6 @@ Scrape markers… → **Copy the scene's markers as text…** (or **Copy as
 text…** in the review dialog): tracklist, with end times, table, CUE sheet,
 ffmpeg chapters, JSON. CUE and JSON keep everything (primary tag, tags,
 ends) and can be pasted back with Plain text.
-
-### Can subtitles help?
-
-Sometimes: **Subtitles** reads a .srt / .vtt next to the video, the video's
-own subtitle track, or the broadcaster's (yt-dlp); **Subtitles from
-OpenSubtitles** looks them up on opensubtitles.com (API key and account in
-the settings). Announcements and title cards become markers, in operas
-each sung number (titled with its first line). Concerts often have none —
-operas and films more often.
-
-### The broadcaster showed the pieces' names in the picture. Can those become markers?
-
-Yes — **Text in the picture (OCR)**. It looks for text that shows for a
-few seconds (a caption, a title card) and reads it with tesseract; each
-caption becomes a marker where it shows. Captions often come a little
-after the music starts: the review dialog's check against the audio
-suggests the right start. Install tesseract on the Stash server first
-(`apt install tesseract-ocr tesseract-ocr-deu`, or in Stash's Docker
-image `apk add tesseract-ocr tesseract-ocr-data-deu`).
-
-### Can OpenSubtitles find the subtitles for my file?
-
-Yes, by the file's fingerprint (size and a checksum of its start and
-end): subtitles made for exactly your release fit to the second. With an
-API key set, a scene without markers is checked when you open it and the
-subtitles are offered — the check costs no downloads. Otherwise the title
-is searched; when it picks the wrong production, use **search with your
-own words…** with the year or the place.
 
 ---
 
