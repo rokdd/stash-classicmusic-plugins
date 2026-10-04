@@ -28,6 +28,11 @@
   const DIALOG_ID = "marker-scrapers-dialog";
   const DEFAULT_PRIMARY = "Chapter";
 
+  // The browser's own words for a lost connection ("Failed to fetch",
+  // "NetworkError when attempting to fetch resource", "Load failed") and a
+  // proxy's error page instead of an answer say little — said plainly.
+  const LOST = "Lost the connection to the Stash server.";
+
   function gql(query, variables) {
     return fetch("/graphql", {
       method: "POST",
@@ -35,7 +40,10 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),
     })
-      .then((r) => r.json())
+      .catch(() => { throw Object.assign(new Error(LOST), { lost: true }); })
+      .then((r) => r.json().catch(() => {
+        throw Object.assign(new Error(`${LOST} It answered “${r.status} ${r.statusText}” instead (a proxy's time limit?).`), { lost: true });
+      }))
       .then((json) => {
         if (json.errors) throw new Error(json.errors.map((e) => e.message).join("; "));
         return json.data;
@@ -400,6 +408,17 @@
       settings = { ...(plugins[OLD_PLUGIN_ID] || {}), ...(plugins[PLUGIN_ID] || {}) };
     } catch (err) {
       clearInterval(timer);
+      if (err.lost) {
+        const s = Math.round((Date.now() - began) / 1000);
+        dialog.body.replaceChildren(
+          el("div", { className: "alert alert-warning", style: { whiteSpace: "pre-wrap" }, textContent:
+            `${err.message}\nLost the connection to the scanner after ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} — ` +
+            "the scraper may still be working on the server. What it has read (the audio, the picture) is remembered, " +
+            "so trying again once it's done is much quicker." }),
+          el("button", { type: "button", className: "btn btn-secondary", textContent: "Try again",
+            onclick: () => scrape(scraper, url, text) }));
+        return;
+      }
       const message = String(err.message || err);
       // A scraper that said why it found nothing is turned off in the menu
       // for this scene; one that crashed or timed out isn't.
