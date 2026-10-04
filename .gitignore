@@ -13,5 +13,6 @@ plugins/tag-improvements/written-descriptions.json
 # Task history kept by Scene Improvements
 plugins/advanced-file-operations/task-history.json
 
-# Markers as Chapters: cached loudness readings
+# Markers as Chapters: cached loudness readings and picture scans
 .audio-cache/
+.frames-cache/

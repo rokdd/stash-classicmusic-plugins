@@ -62,6 +62,7 @@ Standard library only.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -812,6 +813,13 @@ def available(gql, args, settings, env_extra):
             checked["opensubtitles"] = {"count": None, "why": "", "label": f"made for this file ({', '.join(langs)})"}
     elif "opensubtitles" in scrapers:
         checked["opensubtitles"] = {"count": 0, "why": "no API key in the plugin's settings", "setup": True}
+    # Text in the picture: not tried here (it reads the whole video), only
+    # whether tesseract is there.
+    if everything and "frames_ocr" in scrapers:
+        tesseract = env_extra.get("TESSERACT") or "tesseract"
+        if not (shutil.which(tesseract) or os.path.isfile(tesseract)):
+            checked["frames_ocr"] = {"count": 0, "setup": True, "why":
+                                     "tesseract isn't installed on the Stash server (apt install tesseract-ocr tesseract-ocr-deu)"}
     if scene.get("scene_markers"):
         found = []  # not offered for a scene with markers — the menu only
     return {"found": found, "checked": checked}
@@ -871,6 +879,9 @@ def tool_paths(gql):
         "OS_USERNAME": str(settings.get("openSubtitlesUser") or ""),
         "OS_PASSWORD": str(settings.get("openSubtitlesPassword") or ""),
         "OS_LANGUAGES": str(settings.get("openSubtitlesLanguages") or "de,en"),
+        # Text in the picture (OCR)
+        "TESSERACT": str(settings.get("tesseractPath") or ""),
+        "OCR_LANGUAGES": str(settings.get("ocrLanguages") or settings.get("openSubtitlesLanguages") or "de,en"),
     }
 
 

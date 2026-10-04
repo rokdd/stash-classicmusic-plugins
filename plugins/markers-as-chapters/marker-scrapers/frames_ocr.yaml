@@ -1,0 +1,9 @@
+# Markers from text in the picture — captions, title cards, burned-in
+# subtitles — read with tesseract (OCR) on the Stash server.
+name: Text in the picture (OCR)
+markerByFragment:
+  action: script
+  timeout: 3600
+  script:
+    - python
+    - frames_ocr.py

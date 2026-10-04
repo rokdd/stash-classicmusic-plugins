@@ -131,6 +131,22 @@ Built in:
   languages** (default `de,en`). Live concerts are rarely there; operas and
   films are. The dialog says which subtitles were used and how many
   downloads are left today.
+- **Text in the picture (OCR)** — reads what's written in the video
+  itself: the captions broadcasters show when a piece begins ("Sergej
+  Rachmaninow / Klavierkonzert Nr. 3 op. 30 / I. Allegro ma non tanto" at
+  the lower left), title cards, credits, burned-in subtitles. It goes
+  through the video a frame a second and looks for text that appears,
+  stays a few seconds and goes — a still stage or the channel's logo is
+  there all the time and doesn't count, nor does a still camera shot
+  (still everywhere, not in one patch). Only those places are read, with
+  **tesseract** on the Stash server, cut to the text. A few texts: a
+  marker each, where it shows, its lines joined with " – " (untick credits
+  and place names); many (an opera with burned-in subtitles): read like
+  subtitles. Takes a few minutes for a long concert the first time; the
+  scan is remembered (`.frames-cache`). Needs tesseract — Debian / Ubuntu:
+  `apt install tesseract-ocr tesseract-ocr-deu`; Stash's Docker image:
+  `apk add tesseract-ocr tesseract-ocr-data-deu` — else the menu entry is
+  turned off and says so.
 - **Turned off when there's nothing:** when the menu opens, the scene is
   checked in the background — a chapter file next to the video, chapters
   and subtitles in it, ARTE / ORF ON through its URLs, the OpenSubtitles
@@ -499,6 +515,11 @@ folder — Stash takes every `.yml` there for a plugin.
   dialog.
 - **Fill in tags under** — parent tags whose tags are filled in from the
   titles (above); empty: `Composers`, `-` switches it off.
+- **OpenSubtitles API key / username / password / languages** — for
+  Subtitles from OpenSubtitles (above).
+- **tesseract** — its path, for Text in the picture; empty: on the PATH.
+- **Languages of text in the picture** — e.g. `de,en` (each needs
+  tesseract's language pack); empty: the OpenSubtitles languages.
 
 These were Marker Improvements' settings before this became a plugin of
 its own; values set there are still used until you set them here.

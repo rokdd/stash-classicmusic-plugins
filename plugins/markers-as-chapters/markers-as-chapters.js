@@ -377,7 +377,10 @@
     const tick = () => {
       const s = Math.round((Date.now() - began) / 1000);
       status.textContent = `${url ? `Scraping ${url}` : "Scraping"} … ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-      if (s >= 8) {
+      if (s >= 8 && scraper.id === "frames_ocr") {
+        hint.textContent = "Still working. It goes through the whole video, a frame a second, and reads each text it finds — " +
+          "for a long concert that can take several minutes the first time (it's remembered for the next time). Closing this dialog doesn't stop it.";
+      } else if (s >= 8) {
         hint.textContent = "Still working. Finding the pauses in the audio reads the whole soundtrack — for a long concert " +
           "that can take a few minutes the first time (it's remembered for the next time). Closing this dialog doesn't stop it.";
       }

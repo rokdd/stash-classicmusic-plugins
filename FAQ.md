@@ -42,6 +42,11 @@ tab, **Scrape markers…** and try, in this order:
    subtitles made for exactly your release fit to the second (operas and
    films more often than concerts). With an API key set this is checked
    when you open the scene, and offered by itself.
+5. **Text in the picture (OCR)** — broadcasters show the work when it
+   begins ("Sergej Rachmaninow / Klavierkonzert Nr. 3 / I. Allegro ma non
+   tanto"); this finds those captions in the video and reads them (needs
+   tesseract on the Stash server). Also title cards and burned-in
+   subtitles.
 
 A scene without markers usually offers what it finds (a note at the
 bottom right) — you don't have to try each one.
@@ -156,6 +161,16 @@ OpenSubtitles** looks them up on opensubtitles.com (API key and account in
 the settings). Announcements and title cards become markers, in operas
 each sung number (titled with its first line). Concerts often have none —
 operas and films more often.
+
+### The broadcaster showed the pieces' names in the picture. Can those become markers?
+
+Yes — **Text in the picture (OCR)**. It looks for text that shows for a
+few seconds (a caption, a title card) and reads it with tesseract; each
+caption becomes a marker where it shows. Captions often come a little
+after the music starts: the review dialog's check against the audio
+suggests the right start. Install tesseract on the Stash server first
+(`apt install tesseract-ocr tesseract-ocr-deu`, or in Stash's Docker
+image `apk add tesseract-ocr tesseract-ocr-data-deu`).
 
 ### Can OpenSubtitles find the subtitles for my file?
 
