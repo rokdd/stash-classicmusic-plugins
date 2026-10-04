@@ -410,7 +410,7 @@
       barText.textContent = p.phase === "scan"
         ? `Looking at the picture (where pieces begin): ${formatTime(p.done)}${p.total ? ` of ${formatTime(p.total)} (${pct} %)` : ""}`
         : p.phase === "compare" ? `Looking for text in the picture … ${pct} %`
-        : p.phase === "read" ? `Reading the picture where pieces begin: frame ${p.done} of ${p.total} (${pct} %)`
+        : p.phase === "read" ? `Reading the picture where pieces begin: frame ${p.done} of ${p.total} (${pct} %)${timeLeft(p)}`
         : "";
     }) : null;
     dialog.body.append(status, barBox, barText, hint);
@@ -463,6 +463,14 @@
       return;
     }
     review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY, settings.skipPauseCheck !== true);
+  }
+
+  // "— about 12 min left", from how fast it went so far
+  function timeLeft(p) {
+    if (!p.started || !p.updated || !p.done || !p.total || p.done < 3) return "";
+    const left = ((p.updated - p.started) / p.done) * (p.total - p.done);
+    if (left < 60) return " — less than a minute left";
+    return ` — about ${left < 5400 ? `${Math.round(left / 60)} min` : `${(left / 3600).toFixed(1)} h`} left`;
   }
 
   // Asks the server every 3 s how far the scraper for this scene is

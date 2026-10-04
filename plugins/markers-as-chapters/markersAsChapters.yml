@@ -1,6 +1,6 @@
 name: Markers as Chapters
 description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert; ORF ON), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
-version: 0.0.43
+version: 0.0.44
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -91,5 +91,5 @@ settings:
     type: STRING
   ocrLanguages:
     displayName: Languages of text in the picture
-    description: "For Text in the picture (OCR): languages as two-letter codes separated by commas (each needs tesseract's language pack). Empty: the OpenSubtitles languages, else de,en."
+    description: "For Text in the picture (OCR): languages as two-letter codes separated by commas (each needs tesseract's language pack; each one more makes reading slower). Empty: the first of the OpenSubtitles languages, else de."
     type: STRING

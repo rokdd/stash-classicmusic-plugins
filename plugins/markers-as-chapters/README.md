@@ -143,7 +143,11 @@ Built in:
   is one text; a text in most frames (a channel's logo) is left out. A
   few texts: a marker each, where it shows, its lines joined with " – "
   (untick credits and place names); many (an opera with burned-in
-  subtitles): read like subtitles. The dialog shows how far it is; what
+  subtitles): read like subtitles. Frames the same as the one before (a
+  still shot, the caption still there) aren't read again; several are read
+  at once (one per processor core), in one language (the first; set more
+  in **Languages of text in the picture** — each makes it slower). The
+  dialog shows how far it is and how long it'll take; what
   was read is remembered (in Stash's generated folder), and asked again while it's
   still working (after a lost connection), it waits for that run instead
   of starting another. Needs tesseract — Debian / Ubuntu: `apt install

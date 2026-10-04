@@ -898,6 +898,7 @@ def tool_paths(gql):
         # Text in the picture (OCR)
         "TESSERACT": str(settings.get("tesseractPath") or ""),
         "OCR_LANGUAGES": str(settings.get("ocrLanguages") or settings.get("openSubtitlesLanguages") or "de,en"),
+        "OCR_EXPLICIT": "1" if str(settings.get("ocrLanguages") or "").strip() else "",
     }
 
 

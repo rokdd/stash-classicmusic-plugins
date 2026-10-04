@@ -20,6 +20,7 @@ What was read is remembered per file (in Stash's generated folder,
 markers-as-chapters/frames).
 """
 
+import concurrent.futures
 import difflib
 import hashlib
 import inspect
@@ -36,7 +37,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import subtitles  # noqa: E402 — markers from the texts, like from subtitles
 
 STEP = 4  # seconds between the frames read
-MAX_WIDTH = 1280  # wider pictures are scaled down for reading
+MAX_WIDTH = 1024  # wider pictures are scaled down for reading
+TINY = (64, 36)  # the pictures compared to find frames the same as the one before …
+SAME = 4  # … the same: the grey differs by less than this on average (of 255)
 MIN_CONF = 60  # words tesseract is less sure of are dropped
 PAUSE = (2.0, 20.0)  # pauses looked after: at least this long (s), this much quieter (dB) …
 WEAK_PAUSE = (1.0, 15.0)  # … or, if there are none such, these
@@ -47,7 +50,8 @@ CACHE_DIR = storage.folder("frames")
 CACHE_KEEP = 100
 # How far it is, for the dialog: <generated>/markers-as-chapters/progress/<scene id>.json
 PROGRESS_DIR = storage.folder("progress")
-_progress = {"file": None, "last": 0.0}
+_progress = {"file": None, "last": 0.0, "started": None}
+_reused = {"n": 0}
 
 
 def progress(phase, done, total, final=False):
@@ -59,7 +63,11 @@ def progress(phase, done, total, final=False):
         os.makedirs(PROGRESS_DIR, exist_ok=True)
         tmp = _progress["file"] + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"phase": phase, "done": done, "total": total, "updated": time.time()}, f)
+            if _progress["started"] is None or phase not in _progress.get("phases", ()):
+                _progress["started"] = time.time()
+                _progress["phases"] = (phase,)
+            json.dump({"phase": phase, "done": done, "total": total, "updated": time.time(),
+                       "started": _progress["started"]}, f)
         os.replace(tmp, _progress["file"])
     except OSError:
         pass
@@ -82,6 +90,10 @@ def languages(binary):
     except (OSError, subprocess.SubprocessError):
         installed = set()
     have = [l for l in wanted if l in installed] or (["eng"] if "eng" in installed else sorted(installed)[:1])
+    # each language more is another reading of every frame: the first one
+    # only, unless the OCR setting itself names more
+    if not os.environ.get("OCR_EXPLICIT"):
+        have = have[:1]
     return "+".join(have), [l for l in wanted if l not in installed]
 
 
@@ -152,24 +164,37 @@ def windows_for(path, duration):
 
 
 def frames(path, start, length, folder):
-    """The window's frames, one every STEP seconds, as PNG files:
-    [(time, file)]."""
+    """The window's frames, one every STEP seconds: [(time, PNG file, tiny
+    grey picture)] — the tiny one to tell whether a frame is the same as the
+    one before (then it needn't be read again)."""
     ffmpeg = os.environ.get("STASH_FFMPEG") or "ffmpeg"
     for old in os.listdir(folder):
         os.remove(os.path.join(folder, old))
     where = ["-ss", f"{start:.2f}"] if start else []
     span = ["-t", f"{length:.2f}"] if length else []
-    subprocess.run([ffmpeg, "-nostats", "-v", "error", *where, "-i", path, *span, "-an", "-sn", "-dn",
-                    "-vf", f"fps=1/{STEP},scale='min({MAX_WIDTH},iw)':-2,format=gray",
-                    os.path.join(folder, "%05d.png")], capture_output=True)
+    graph = (f"[0:v:0]fps=1/{STEP},format=gray,split[a][b];[a]scale='min({MAX_WIDTH},iw)':-2[big];"
+             f"[b]scale={TINY[0]}:{TINY[1]}[tiny]")
+    proc = subprocess.run([ffmpeg, "-nostats", "-v", "error", *where, "-i", path, *span, "-an", "-sn", "-dn",
+                           "-filter_complex", graph, "-map", "[big]", os.path.join(folder, "%05d.png"),
+                           "-map", "[tiny]", "-f", "rawvideo", "-"], capture_output=True)
     names = sorted(n for n in os.listdir(folder) if n.endswith(".png"))
-    return [(start + i * STEP, os.path.join(folder, n)) for i, n in enumerate(names)]
+    size = TINY[0] * TINY[1]
+    tiny = [proc.stdout[i * size:(i + 1) * size] for i in range(len(proc.stdout) // size)]
+    return [(start + i * STEP, os.path.join(folder, n), tiny[i] if i < len(tiny) else b"") for i, n in enumerate(names)]
+
+
+def same_picture(a, b):
+    """Two tiny grey pictures nearly the same (a still shot, the same
+    caption still there)?"""
+    if not a or not b or len(a) != len(b):
+        return False
+    return sum(abs(x - y) for x, y in zip(a, b)) / len(a) < SAME
 
 
 def read_text(png, binary, langs):
     """What tesseract reads in the picture, line by line; "" if nothing."""
-    out = subprocess.run([binary, png, "stdout", "-l", langs, "--psm", "11", "tsv"],
-                         capture_output=True).stdout.decode("utf-8", errors="replace")
+    out = subprocess.run([binary, png, "stdout", "-l", langs, "--psm", "11", "tsv"], capture_output=True,
+                         env={**os.environ, "OMP_THREAD_LIMIT": "1"}).stdout.decode("utf-8", errors="replace")
     lines = {}
     for row in out.splitlines()[1:]:
         cols = row.split("\t")
@@ -234,18 +259,33 @@ def texts(path, duration):
     total = sum(int((length or duration or 0) // STEP) + 1 for _, length in windows)
 
     def read_all():
-        out, done = [], 0
+        out, done, reused = [], 0, 0
         folder = tempfile.mkdtemp(prefix="markers-as-chapters-frames-")
+        workers = max(1, min(8, (os.cpu_count() or 2) - 1))
         try:
-            for start, length in windows:
-                for at, png in frames(path, start, length, folder):
-                    done += 1
-                    progress("read", done, max(total, done))
-                    text = read_text(png, binary, langs)
-                    if text:
-                        out.append([at, text])
+            with concurrent.futures.ThreadPoolExecutor(workers) as pool:
+                for start, length in windows:
+                    shots = frames(path, start, length, folder)
+                    # a frame like the one before: its text again, not read again
+                    jobs, previous = [], None
+                    for at, png, tiny in shots:
+                        if previous is not None and same_picture(tiny, previous[2]):
+                            jobs.append((at, None))
+                            reused += 1
+                        else:
+                            jobs.append((at, pool.submit(read_text, png, binary, langs)))
+                            previous = (at, png, tiny)
+                    last = ""
+                    for at, job in jobs:
+                        text = job.result() if job else last
+                        last = text
+                        done += 1
+                        progress("read", done, max(total, done))
+                        if text:
+                            out.append([at, text])
         finally:
             shutil.rmtree(folder, ignore_errors=True)
+        _reused["n"] = reused
         return out
     read = cached(path, f"read|{logic()}|{windows}|{langs}", read_all)
 
@@ -264,7 +304,8 @@ def texts(path, duration):
             cues[-1][1] = at + STEP
         else:
             cues.append([float(at), float(at + STEP), text])
-    notes = (f"Looked at {chosen}: {total} frames (one every {STEP} s), text in {len(read)} of them, "
+    notes = (f"Looked at {chosen}: {total} frames (one every {STEP} s"
+             + (f", {_reused['n']} the same as the one before" if _reused["n"] else "") + f"), text in {len(read)} of them, "
              f"{len(cues)} different text{'' if len(cues) == 1 else 's'} (tesseract, {langs})")
     if logos:
         notes += f"; left out as a logo: {len(logos)} text{'' if len(logos) == 1 else 's'} in most frames"
