@@ -829,6 +829,20 @@ def available(gql, args, settings, env_extra):
 # Plugin entry point (Stash runs this with interface: raw)
 # ---------------------------------------------------------------------------
 
+# How far a long scraper is (Text in the picture writes it): read by the
+# dialog every few seconds while it waits.
+PROGRESS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".progress")
+
+
+def scrape_progress(args):
+    name = re.sub(r"\W", "", str(args.get("scene_id") or ""))
+    try:
+        with open(os.path.join(PROGRESS_DIR, f"{name}.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
 def make_gql(server_connection):
     scheme = server_connection.get("Scheme", "http")
     host = server_connection.get("Host") or "localhost"
@@ -899,6 +913,8 @@ def main():
             output = scrape(gql, args, settings, env_extra)
         elif mode == "marker_available":
             output = available(gql, args, settings, env_extra)
+        elif mode == "marker_progress":
+            output = scrape_progress(args)
         elif mode == "marker_composers":
             output = marker_composers(gql, args, settings)
             if not args.get("scene_id") and "applied" in output:

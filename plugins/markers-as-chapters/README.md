@@ -142,8 +142,11 @@ Built in:
   **tesseract** on the Stash server, cut to the text. A few texts: a
   marker each, where it shows, its lines joined with " – " (untick credits
   and place names); many (an opera with burned-in subtitles): read like
-  subtitles. Takes a few minutes for a long concert the first time; the
-  scan is remembered (`.frames-cache`). Needs tesseract — Debian / Ubuntu:
+  subtitles. Takes a few minutes for a long concert the first time — the
+  dialog shows how far it is (going through the video, then reading the
+  texts found); if the connection to the server drops meanwhile, it keeps
+  watching and fetches the result when the scan is done. The scan is
+  remembered (`.frames-cache`). Needs tesseract — Debian / Ubuntu:
   `apt install tesseract-ocr tesseract-ocr-deu`; Stash's Docker image:
   `apk add tesseract-ocr tesseract-ocr-data-deu` — else the menu entry is
   turned off and says so.

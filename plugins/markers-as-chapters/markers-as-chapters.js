@@ -395,7 +395,23 @@
     };
     tick();
     const timer = setInterval(() => { if (!status.isConnected) clearInterval(timer); else tick(); }, 1000);
-    dialog.body.append(status, hint);
+    // How far a long scraper is (Text in the picture says it) — asked every
+    // few seconds, shown as a bar.
+    const bar = el("div", { className: "progress-bar", style: { width: "0%" } });
+    const barBox = el("div", { className: "progress mb-1", style: { display: "none", height: "8px" } }, bar);
+    const barText = el("div", { className: "small text-muted mb-2" });
+    const watch = scraper.id === "frames_ocr" && !text ? watchProgress((p) => {
+      if (!status.isConnected) return;
+      const pct = p.total ? Math.min(100, Math.round((100 * p.done) / p.total)) : null;
+      barBox.style.display = pct == null ? "none" : "";
+      bar.style.width = `${pct || 0}%`;
+      barText.textContent = p.phase === "scan"
+        ? `Going through the video: ${formatTime(p.done)}${p.total ? ` of ${formatTime(p.total)} (${pct} %)` : ""}`
+        : p.phase === "compare" ? `Looking for text in the picture … ${pct} %`
+        : p.phase === "read" ? `Reading the texts found: ${p.done} of ${p.total}`
+        : "";
+    }) : null;
+    dialog.body.append(status, barBox, barText, hint);
     let result;
     let settings = {};
     try {
@@ -408,6 +424,15 @@
       settings = { ...(plugins[OLD_PLUGIN_ID] || {}), ...(plugins[PLUGIN_ID] || {}) };
     } catch (err) {
       clearInterval(timer);
+      if (err.lost && watch && watch.running()) {
+        // The scanner's still at it on the server: keep showing how far it
+        // is, and fetch the result (remembered by then) when it's done.
+        hint.textContent = "Lost the connection to the scanner, but it's still working on the server — " +
+          "the result is fetched when it's done.";
+        watch.whenDone(() => { if (status.isConnected) scrape(scraper, url, text); });
+        return;
+      }
+      if (watch) watch.stop();
       if (err.lost) {
         const s = Math.round((Date.now() - began) / 1000);
         dialog.body.replaceChildren(
@@ -429,12 +454,46 @@
       return;
     }
     clearInterval(timer);
+    if (watch) watch.stop();
     if (!result.markers.length) {
       if (!text) foundNothing.set(nothingKey(scraper.id, url), result.notes || "nothing found"); // off in the menu now
       dialog.body.replaceChildren(el("p", { textContent: result.notes || "No markers found." }));
       return;
     }
     review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY, settings.skipPauseCheck !== true);
+  }
+
+  // Asks the server every 3 s how far the scraper for this scene is
+  // (marker_progress). A "done" left from an earlier run isn't taken for
+  // this one's.
+  function watchProgress(show) {
+    const scene = sceneId();
+    let first = null;
+    let last = null;
+    let stopped = false;
+    let onDone = null;
+    const poll = async () => {
+      if (stopped) return;
+      let p = null;
+      try { p = await runOperation({ mode: "marker_progress", scene_id: scene }); } catch (e) { /* ask again */ }
+      if (stopped) return;
+      if (p && first === null) first = p.updated;
+      if (p && !(p.phase === "done" && p.updated === first)) {
+        last = p;
+        if (p.phase === "done") {
+          if (onDone) { stopped = true; onDone(); return; }
+        } else {
+          show(p);
+        }
+      }
+      setTimeout(poll, 3000);
+    };
+    setTimeout(poll, 1500);
+    return {
+      stop: () => { stopped = true; },
+      running: () => !!last && last.phase !== "done",
+      whenDone: (fn) => { onDone = fn; },
+    };
   }
 
   function openDialog(title) {

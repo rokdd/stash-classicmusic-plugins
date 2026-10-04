@@ -16,6 +16,7 @@ plugins/advanced-file-operations/task-history.json
 # Markers as Chapters: cached loudness readings and picture scans
 .audio-cache/
 .frames-cache/
+.progress/
 
 # Python bytecode
 __pycache__/

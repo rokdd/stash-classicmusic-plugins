@@ -34,6 +34,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import subtitles  # noqa: E402 — markers from the texts, like from subtitles
@@ -50,6 +51,24 @@ MAX_READ = 1500  # texts read at most
 LOGO_SHARE = 0.2  # text seen for more than this share of the video: a logo, left out
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".frames-cache")
 CACHE_KEEP = 100
+# How far it is, for the dialog: <plugin>/.progress/<scene id>.json
+PROGRESS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".progress")
+_progress = {"file": None, "last": 0.0}
+
+
+def progress(phase, done, total, final=False):
+    """Write how far it is (at most every 2 seconds, unless `final`)."""
+    if not _progress["file"] or (not final and time.time() - _progress["last"] < 2):
+        return
+    _progress["last"] = time.time()
+    try:
+        os.makedirs(PROGRESS_DIR, exist_ok=True)
+        tmp = _progress["file"] + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"phase": phase, "done": done, "total": total, "updated": time.time()}, f)
+        os.replace(tmp, _progress["file"])
+    except OSError:
+        pass
 TWO_TO_THREE = {"de": "deu", "en": "eng", "fr": "fra", "it": "ita", "es": "spa", "nl": "nld", "pt": "por",
                 "cs": "ces", "pl": "pol", "ru": "rus", "hu": "hun", "sv": "swe", "da": "dan", "no": "nor", "fi": "fin"}
 
@@ -86,7 +105,7 @@ def size(path):
     return stream["width"], stream["height"]
 
 
-def scan(path):
+def scan(path, duration=None):
     """{"cells": [[new standing edges per cell] per second], "size": [w, h],
     "grid": [columns, rows], "cell_bits": bits in a cell}.
 
@@ -113,16 +132,19 @@ def scan(path):
                              "-vf", f"fps=1,scale={WIDTH}:{height},format=gray,{EDGES},format=monob",
                              "-f", "rawvideo", "-"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     frames = []
+    total = int(duration or 0) or None
     while True:
         data = proc.stdout.read(frame)
         if len(data) < frame:
             break
         frames.append(int.from_bytes(data, "big"))
+        progress("scan", len(frames), total)
     err = proc.stderr.read().decode(errors="replace")
     if proc.wait() != 0 and not frames:
         raise SystemExit(f"ffmpeg couldn't read the video: {err.strip()[-400:]}")
     cells = []
     for t in range(len(frames)):
+        progress("compare", t, len(frames))
         if t + 1 >= len(frames):
             cells.append([0] * len(masks))
             continue
@@ -243,7 +265,7 @@ def texts(path, duration):
                          "apt install tesseract-ocr tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr "
                          "tesseract-ocr-data-deu; or set its path in the plugin's settings.")
     langs, missing = languages(binary)
-    scanned = cached(path, f"scan|{WIDTH}|{COLS}x{ROWS}|{EDGES}", lambda: scan(path))
+    scanned = cached(path, f"scan|{WIDTH}|{COLS}x{ROWS}|{EDGES}", lambda: scan(path, duration))
     found = stretches(scanned)
     seconds = len(scanned["cells"])
     skipped = 0
@@ -253,7 +275,8 @@ def texts(path, duration):
 
     def read_all():
         out = []
-        for a, b, box, _ in found:
+        for i, (a, b, box, _) in enumerate(found):
+            progress("read", i, len(found))
             text = read_text(path, (a + b) / 2, box, scanned, binary, langs)
             if text:
                 out.append([list(box), a, b, text])
@@ -296,7 +319,13 @@ def main():
     if not files:
         raise SystemExit("The scene's video file isn't there (on the Stash server).")
     duration = files[0].get("duration")
-    cues, notes = texts(files[0]["path"], duration)
+    if scene.get("id"):
+        name = re.sub(r"\W", "", str(scene["id"]))
+        _progress["file"] = os.path.join(PROGRESS_DIR, name + ".json")
+    try:
+        cues, notes = texts(files[0]["path"], duration)
+    finally:
+        progress("done", 1, 1, final=True)
     if not cues:
         print(json.dumps({"markers": [], "notes": f"No text found in the picture. {notes}"}))
         return
