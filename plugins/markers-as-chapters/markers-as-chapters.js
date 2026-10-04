@@ -2001,6 +2001,8 @@
   }
 
   async function filesDialog() {
+    const note = document.getElementById(FILES_NOTE_ID);
+    if (note) note.remove();
     const dialog = openDialog("Markers and the scene's files");
     dialog.body.append(el("p", { textContent: "Loading…" }));
     let info;
@@ -2065,7 +2067,8 @@
     const same = r.likeness >= 0.6;
     const summary = same
       ? `The same recording (alike: ${Math.round(r.likeness * 100)} %): ${r.from.basename} is ` +
-        `${r.offset === 0 ? "in step with" : `${Math.abs(r.offset)} s ${r.offset < 0 ? "ahead of" : "behind"}`} the primary file` +
+        (r.offset === 0 ? "in step with the primary file"
+          : `in step with the primary file, but everything comes ${Math.abs(r.offset)} s ${r.offset < 0 ? "earlier" : "later"} there`) +
         (pct ? `, and plays ${Math.abs(pct)} % ${pct > 0 ? "faster" : "slower"} (PAL / film speed)` : "") +
         ". Each marker was compared in the two minutes around it, so cuts in between are followed."
       : `The two files don't sound alike (${Math.round(r.likeness * 100)} %) — perhaps not the same recording. Check before applying.`;
@@ -2087,7 +2090,7 @@
         el("td", { textContent: m.title || "(no title)" }),
         el("td", { textContent: formatTime(m.seconds) }),
         el("td", { textContent: `${formatTime(m.new_seconds)}${m.new_end_seconds != null ? ` – ${formatTime(m.new_end_seconds)}` : ""}` }),
-        el("td", { textContent: `${shift > 0 ? "+" : ""}${shift} s` }),
+        el("td", { textContent: `${shift > 0 ? "+" : ""}${shift} s`, style: { whiteSpace: "nowrap" } }),
         el("td", { className: "small" },
           m.outside ? "not in the primary file (cut away?) " : "",
           m.likeness < 0.6 ? "not alike around it — moved by the whole's offset " : "",

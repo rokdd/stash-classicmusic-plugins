@@ -436,6 +436,35 @@ scraper suggests (ARTE Concert's composers) is replaced by the matching
 tag. The review dialog says how many markers got tags this way; change
 them there as needed.
 
+## Markers and the scene's files
+
+A marker's time belongs to the file it was set on — Stash doesn't keep
+which one. When scenes are **merged**, all their markers move to the one
+scene with their times unchanged; when the **primary file changes**, the
+markers stay as they are. If the files differ in length (another cut, an
+intro more or less, a broadcast vs. a disc, PAL speed), the markers set on
+the other file are then off.
+
+- **Which file**: Markers as Chapters remembers the file each marker was
+  set on (`.marker-files.json` in the plugin's folder) — new markers by
+  themselves (a hook, when a marker is created or its time changed); for
+  the markers you already have, run **Settings → Tasks → Remember each
+  marker's file** once (it covers every scene with one file — best before
+  merging).
+- **Noticed by itself**: on a scene with several files where markers were
+  set on a file of another length than the primary one, a note at the
+  bottom right says so — **Line them up…**.
+- **Scrape markers… → Markers and the scene's files…**: the files with
+  their lengths and markers. Pick the file the markers were set on,
+  **Compare the audio**: the two files' loudness (every half second, as
+  for the pause check) is compared — first as a whole (also at PAL / film
+  speed), then in the two minutes around each marker, so a cut-out intro
+  or a piece missing in between is followed. Each row shows the old and
+  the new time (and end); markers that fall into a part the primary file
+  doesn't have are left unticked. After a merge, a marker that lands where
+  the same piece already has one is offered for deleting instead.
+  **Apply** moves them and remembers the primary file for them.
+
 ## Copying markers as text
 
 **Copy as text…** in the review dialog gives the ticked markers as they'd
