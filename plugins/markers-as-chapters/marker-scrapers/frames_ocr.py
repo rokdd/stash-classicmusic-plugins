@@ -1,28 +1,22 @@
-"""Markers from text in the picture: captions ("Johann Strauss: Radetzky-
-Marsch" in the lower third), title cards, burned-in subtitles.
+"""Markers from text in the picture: captions ("Sergej Rachmaninow /
+Klavierkonzert Nr. 3 / I. Allegro ma non tanto" at the lower left), title
+cards, burned-in subtitles.
 
-How:
-  1. One pass of ffmpeg over the video, one frame a second, scaled down,
-     as edges (1-bit pictures).
-  2. Text stays put for a few seconds and then goes: per cell of a 12 × 8
-     grid, the edges that are in two frames running but not in most of the
-     frames 10 and 20 seconds before and after are counted — a still stage
-     or a logo is there all the time and drops out. A few cells with many
-     more of them than the rest of the picture: something was written
-     there (a still camera shot has them everywhere). Seconds running with
-     the same cells are one text.
-  3. Each such text is read once, from the full-size frame cut to those
-     cells, with tesseract (OCR) — only those, not every frame.
-  4. What was read becomes subtitle entries, and those markers like the
-     Subtitles scraper makes them: a short text (a caption, a title card)
-     gets a marker where it shows. Text that's there most of the time (a
-     channel's logo) is left out.
+Kept simple:
+  1. Where pieces begin: the start of the video and the 45 seconds after
+     each pause in the audio (the whole video if there are no pauses).
+  2. There, a frame every 4 seconds, the whole picture, read by tesseract.
+  3. Words tesseract isn't sure of (under 60 %) are dropped; a frame counts
+     if a word of 3 letters or more is left.
+  4. The same text in frames running is one text; a text in most of the
+     frames (a channel's logo) is left out.
+  5. A few texts: a marker each, where it shows. Many (an opera's burned-in
+     subtitles): markers as from subtitles.
 
 Needs tesseract on the Stash server (Debian: apt install tesseract-ocr
 tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr
 tesseract-ocr-data-deu) — the plugin setting "tesseract", else on the PATH.
-The scan is remembered per file (in .frames-cache), so scraping the scene
-again only reads the texts again.
+What was read is remembered per file (in .frames-cache).
 """
 
 import difflib
@@ -31,7 +25,6 @@ import json
 import os
 import re
 import shutil
-import statistics
 import subprocess
 import sys
 import time
@@ -39,20 +32,13 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import subtitles  # noqa: E402 — markers from the texts, like from subtitles
 
-WIDTH = 480  # the scan's width in pixels
-COLS, ROWS = 12, 8  # the grid
-EDGES = "edgedetect=low=0.12:high=0.3"
-MIN_SHARE = 0.04  # a cell with text: new standing edges in at least this share of it …
-MIN_RISE = 3.0  # … and this many times more than the picture's median cell
-MAX_HOT = 0.35  # more cells than this: a still camera shot, not text
-MIN_CELLS = 3  # fewer: a speck
-MAX_BOX = 0.5  # text over more of the picture than this: a still camera shot
+STEP = 4  # seconds between the frames read
+MAX_WIDTH = 1280  # wider pictures are scaled down for reading
+MIN_CONF = 60  # words tesseract is less sure of are dropped
 PAUSE = (2.0, 20.0)  # pauses looked after: at least this long (s), this much quieter (dB) …
 WEAK_PAUSE = (1.0, 15.0)  # … or, if there are none such, these
 BEFORE, AFTER = 5, 45  # seconds looked at before a pause's end and after it
 MAX_WINDOWS = 80  # pauses looked after at most (the longest)
-MAX_READ = 1500  # texts read at most
-LOGO_SHARE = 0.2  # text seen for more than this share of the video: a logo, left out
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".frames-cache")
 CACHE_KEEP = 100
 # How far it is, for the dialog: <plugin>/.progress/<scene id>.json
@@ -134,20 +120,6 @@ def wait_for_other_run(progress_file):
             return None
 
 
-def ones(n):
-    return n.bit_count() if hasattr(n, "bit_count") else bin(n).count("1")  # Python < 3.10
-
-
-def size(path):
-    ffprobe = os.environ.get("STASH_FFPROBE") or "ffprobe"
-    out = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
-                          "-of", "json", path], capture_output=True, text=True)
-    stream = (json.loads(out.stdout or "{}").get("streams") or [{}])[0]
-    if not stream.get("width"):
-        raise SystemExit(f"ffprobe couldn't read the video: {out.stderr.strip()[-300:]}")
-    return stream["width"], stream["height"]
-
-
 def windows_for(path, duration):
     """[(start, length)] to look at, and how they were chosen. Captions
     come when a piece begins: the start of the video and the 45 seconds
@@ -175,156 +147,39 @@ def windows_for(path, duration):
             f"the start and the {AFTER} seconds after each of {len(found)} pauses in the audio")
 
 
-def edges(path, start, length, width, height):
-    """The window's frames, one a second, as 1-bit edge pictures (ints)."""
+def frames(path, start, length, folder):
+    """The window's frames, one every STEP seconds, as PNG files:
+    [(time, file)]."""
     ffmpeg = os.environ.get("STASH_FFMPEG") or "ffmpeg"
-    stride = (width + 7) // 8
-    frame = stride * height
+    for old in os.listdir(folder):
+        os.remove(os.path.join(folder, old))
     where = ["-ss", f"{start:.2f}"] if start else []
     span = ["-t", f"{length:.2f}"] if length else []
-    # Only every second's frame is needed: frames nothing refers to are
-    # skipped, the loop filter too (about twice as fast, the edges still fine).
-    proc = subprocess.Popen([ffmpeg, "-nostats", "-v", "error", "-threads", "0", "-skip_frame", "noref",
-                             "-skip_loop_filter", "all", *where, "-i", path, *span, "-an", "-sn", "-dn",
-                             "-vf", f"fps=1,scale={width}:{height},format=gray,{EDGES},format=monob",
-                             "-f", "rawvideo", "-"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    frames = []
-    while True:
-        data = proc.stdout.read(frame)
-        if len(data) < frame:
-            break
-        frames.append(int.from_bytes(data, "big"))
-        _scanned["done"] += 1
-        progress("scan", _scanned["done"], _scanned["total"])
-    err = proc.stderr.read().decode(errors="replace")
-    if proc.wait() != 0 and not frames:
-        raise SystemExit(f"ffmpeg couldn't read the video: {err.strip()[-400:]}")
-    return frames
+    subprocess.run([ffmpeg, "-nostats", "-v", "error", *where, "-i", path, *span, "-an", "-sn", "-dn",
+                    "-vf", f"fps=1/{STEP},scale='min({MAX_WIDTH},iw)':-2,format=gray",
+                    os.path.join(folder, "%05d.png")], capture_output=True)
+    names = sorted(n for n in os.listdir(folder) if n.endswith(".png"))
+    return [(start + i * STEP, os.path.join(folder, n)) for i, n in enumerate(names)]
 
 
-_scanned = {"done": 0, "total": None}
-
-
-def scan(path, windows):
-    """{"windows": [{"start", "cells": [[new standing edges per cell] per
-    second]}], "size": [w, h], "grid": [columns, rows], "cell_bits"}.
-
-    Per window: the picture, scaled down, as edges; per cell of a grid, the
-    edges that stand (in this second's frame and the next one's) and are
-    new (not in most of the frames 10 and 20 seconds before and after) are
-    counted — a still stage or a logo is there all the time and drops out."""
-    w, h = size(path)
-    height = max(ROWS, round(WIDTH * h / w / ROWS) * ROWS)
-    stride = (WIDTH + 7) // 8
-    total = stride * height * 8
-    cw, ch = WIDTH // COLS, height // ROWS
-    masks = []
-    for r in range(ROWS):
-        for c in range(COLS):
-            x0, x1 = c * cw, (c + 1) * cw
-            m = 0
-            for y in range(r * ch, (r + 1) * ch):
-                m |= ((1 << (x1 - x0)) - 1) << (total - (y * stride * 8 + x1))
-            masks.append(m)
-    _scanned["total"] = int(sum(length for _, length in windows if length)) or None
-    out = []
-    for start, length in windows:
-        frames = edges(path, start, length, WIDTH, height)
-        cells = []
-        for t in range(len(frames)):
-            if t + 1 >= len(frames):
-                cells.append([0] * len(masks))
-                continue
-            standing = frames[t] & frames[t + 1]
-            far = [frames[u] for u in (t - 20, t - 10, t + 11, t + 21) if 0 <= u < len(frames)]
-            usual = far[0] if len(far) == 1 else 0  # in at least two of them
-            for i in range(len(far)):
-                for j in range(i + 1, len(far)):
-                    usual |= far[i] & far[j]
-            new = standing & ~usual
-            cells.append([ones(new & m) for m in masks] if new else [0] * len(masks))
-        out.append({"start": start, "cells": cells})
-    return {"windows": out, "size": [w, h], "grid": [COLS, ROWS], "cell_bits": cw * ch}
-
-
-def stretches(scanned):
-    """[(first second, last second, (col0, row0, col1, row1), strength)]
-    where text stood: a few cells with many more new standing edges than
-    the rest of the picture (a still camera shot has them everywhere)."""
-    found = []
-    for window in scanned["windows"]:
-        found += [(a + window["start"], b + window["start"], box, strength)
-                  for a, b, box, strength in _stretches(window["cells"], scanned)]
-    return found
-
-
-def _stretches(all_cells, scanned):
-    cols, rows = scanned["grid"]
-    least = MIN_SHARE * scanned["cell_bits"]
-    seconds = []
-    for values in all_cells:
-        floor = statistics.median(values) if values else 0
-        hot = {i for i, v in enumerate(values) if v > max(least, MIN_RISE * floor)}
-        seconds.append(hot if 0 < len(hot) <= MAX_HOT * len(values) else set())
-    found, t = [], 0
-    while t < len(seconds):
-        if not seconds[t]:
-            t += 1
-            continue
-        cells, u = set(seconds[t]), t
-        while u + 1 < len(seconds) and seconds[u + 1] and len(seconds[u + 1] & cells) * 3 >= min(len(seconds[u + 1]), len(cells)):
-            u += 1
-            cells |= seconds[u]
-        span = range(t, u + 1)
-        # the text's cells: hot in most of its seconds (the others: the
-        # picture around it, moving now and then)
-        cells = {i for i in cells if sum(i in seconds[x] for x in span) * 5 >= 2 * len(span)}
-        t = u + 1
-        if len(cells) < MIN_CELLS:
-            continue  # a speck, not a line of text
-        cs, rs = [i % cols for i in cells], [i // cols for i in cells]
-        box = (min(cs), min(rs), max(cs) + 1, max(rs) + 1)
-        if (box[2] - box[0]) * (box[3] - box[1]) > MAX_BOX * cols * rows:
-            continue  # most of the picture: a still camera shot
-        strength = sum(sum(all_cells[x][i] for i in cells) for x in span)
-        found.append((span[0], span[-1] + 1, box, strength))
-    return found
-
-
-def read_text(path, at, box, scanned, binary, langs):
-    """The text at second `at` within `box` (grid cells), read by tesseract;
-    "" if nothing worth reading (words it isn't sure of are dropped)."""
-    ffmpeg = os.environ.get("STASH_FFMPEG") or "ffmpeg"
-    (w, h), (cols, rows) = scanned["size"], scanned["grid"]
-    c0, r0, c1, r1 = max(0, box[0] - 1), max(0, box[1] - 1), min(cols, box[2] + 1), min(rows, box[3] + 1)
-    x, y = int(w * c0 / cols), int(h * r0 / rows)
-    cw, ch = int(w * (c1 - c0) / cols) // 2 * 2, int(h * (r1 - r0) / rows) // 2 * 2
-    scale = "scale=iw*2:ih*2," if h < 1000 else ""
-    png = subprocess.run([ffmpeg, "-v", "error", "-ss", f"{at:.2f}", "-i", path, "-frames:v", "1", "-an", "-sn",
-                          "-vf", f"crop={cw}:{ch}:{x}:{y},{scale}format=gray", "-f", "image2pipe", "-vcodec", "png", "-"],
-                         capture_output=True).stdout
-    if not png:
-        return ""
-    out = subprocess.run([binary, "stdin", "stdout", "-l", langs, "--psm", "3", "tsv"], input=png,
+def read_text(png, binary, langs):
+    """What tesseract reads in the picture, line by line; "" if nothing."""
+    out = subprocess.run([binary, png, "stdout", "-l", langs, "--psm", "11", "tsv"],
                          capture_output=True).stdout.decode("utf-8", errors="replace")
-    lines, confs = {}, []
+    lines = {}
     for row in out.splitlines()[1:]:
-        cols_ = row.split("\t")
-        if len(cols_) < 12 or cols_[0] != "5":
+        cols = row.split("\t")
+        if len(cols) < 12 or cols[0] != "5":
             continue
         try:
-            conf = float(cols_[10])
+            conf = float(cols[10])
         except ValueError:
             continue
-        word = cols_[11].strip()
-        if conf < 60 or not word or not re.search(r"\w", word):
-            continue
-        confs.append(conf)
-        lines.setdefault((cols_[2], cols_[3], cols_[4]), []).append(word)
+        word = cols[11].strip()
+        if conf >= MIN_CONF and word:
+            lines.setdefault((cols[2], cols[3], cols[4]), []).append(word)
     text = "\n".join(" ".join(ws) for ws in lines.values()).strip()
-    if sum(c.isalpha() for c in text) < 4 or not re.search(r"[^\W\d_]{3,}", text) or (confs and statistics.mean(confs) < 70):
-        return ""
-    return text
+    return text if re.search(r"[^\W\d_]{3,}", text) else ""
 
 
 def similar(a, b):
@@ -362,51 +217,47 @@ def texts(path, duration):
                          "tesseract-ocr-data-deu; or set its path in the plugin's settings.")
     langs, missing = languages(binary)
     windows, chosen = windows_for(path, duration)
-    scanned = cached(path, f"scan|{WIDTH}|{COLS}x{ROWS}|{EDGES}|{windows}", lambda: scan(path, windows))
-    found = stretches(scanned)
-    seconds = sum(len(win["cells"]) for win in scanned["windows"])
-    skipped = 0
-    if len(found) > MAX_READ:
-        skipped = len(found) - MAX_READ
-        found = sorted(sorted(found, key=lambda f: -f[3])[:MAX_READ], key=lambda f: f[0])
+    total = sum(int((length or duration or 0) // STEP) + 1 for _, length in windows)
 
     def read_all():
-        out = []
-        for i, (a, b, box, _) in enumerate(found):
-            progress("read", i, len(found))
-            text = read_text(path, (a + b) / 2, box, scanned, binary, langs)
-            if text:
-                out.append([list(box), a, b, text])
+        out, done = [], 0
+        folder = os.path.join(CACHE_DIR, f"frames-{os.getpid()}")
+        os.makedirs(folder, exist_ok=True)
+        try:
+            for start, length in windows:
+                for at, png in frames(path, start, length, folder):
+                    done += 1
+                    progress("read", done, max(total, done))
+                    text = read_text(png, binary, langs)
+                    if text:
+                        out.append([at, text])
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
         return out
-    read = cached(path, f"read|{WIDTH}|{COLS}x{ROWS}|{EDGES}|{windows}|{MIN_SHARE}|{MIN_RISE}|{MAX_HOT}|{langs}", read_all)
+    read = cached(path, f"read|{STEP}|{MAX_WIDTH}|{MIN_CONF}|{windows}|{langs}", read_all)
 
-    # one text shown a little longer (read twice in a row): once
-    merged = []
-    for box, a, b, text in sorted(read, key=lambda r: r[1]):
-        last = merged[-1] if merged else None
-        if last and a - last[2] <= 2 and similar(last[3], text):
-            last[2] = b
-        else:
-            merged.append([box, a, b, text])
-    # a logo, a channel's name: there most of the time
-    total = duration or seconds or 1
-    shown = {}
-    for box, a, b, text in merged:
+    # a logo, a channel's name: in most of the frames
+    counts = {}
+    for _, text in read:
         key = re.sub(r"\W+", "", text.lower())
-        shown[key] = shown.get(key, 0) + (b - a)
-    logos = {k for k, s in shown.items() if s > LOGO_SHARE * total}
-    cues = sorted((float(a), float(b), text) for box, a, b, text in merged
-                  if re.sub(r"\W+", "", text.lower()) not in logos)
-    notes = (f"Looked at {chosen} — {seconds // 60} min of video, a frame a second — found {len(found)} place"
-             f"{'' if len(found) == 1 else 's'} with text standing in the picture and could read {len(cues)} "
-             f"(tesseract, {langs})")
+        counts[key] = counts.get(key, 0) + 1
+    logos = {k for k, n in counts.items() if n > max(3, total / 2)}
+    # the same text in frames running: one text
+    cues = []
+    for at, text in read:
+        if re.sub(r"\W+", "", text.lower()) in logos:
+            continue
+        if cues and at - cues[-1][1] <= STEP and similar(cues[-1][2], text):
+            cues[-1][1] = at + STEP
+        else:
+            cues.append([float(at), float(at + STEP), text])
+    notes = (f"Looked at {chosen}: {total} frames (one every {STEP} s), text in {len(read)} of them, "
+             f"{len(cues)} different text{'' if len(cues) == 1 else 's'} (tesseract, {langs})")
     if logos:
-        notes += f"; left out as a logo: {len(logos)} text{'' if len(logos) == 1 else 's'} shown most of the time"
-    if skipped:
-        notes += f"; {skipped} weaker places not read"
+        notes += f"; left out as a logo: {len(logos)} text{'' if len(logos) == 1 else 's'} in most frames"
     if missing:
         notes += f"; not installed for tesseract: {', '.join(missing)}"
-    return cues, notes + "."
+    return [tuple(c) for c in cues], notes + "."
 
 
 def main():

@@ -134,24 +134,22 @@ Built in:
 - **Text in the picture (OCR)** — reads what's written in the video
   itself: the captions broadcasters show when a piece begins ("Sergej
   Rachmaninow / Klavierkonzert Nr. 3 op. 30 / I. Allegro ma non tanto" at
-  the lower left), title cards, credits, burned-in subtitles. It looks
+  the lower left), title cards, credits, burned-in subtitles. Kept simple:
   where pieces begin — the start of the video and the 45 seconds after
   each pause in the audio (the whole video only when there are no
-  pauses) — a frame a second, for text that appears,
-  stays a few seconds and goes — a still stage or the channel's logo is
-  there all the time and doesn't count, nor does a still camera shot
-  (still everywhere, not in one patch). Only those places are read, with
-  **tesseract** on the Stash server, cut to the text. A few texts: a
-  marker each, where it shows, its lines joined with " – " (untick credits
-  and place names); many (an opera with burned-in subtitles): read like
-  subtitles. Takes a few minutes for a long concert the first time — the
-  dialog shows how far it is (going through the video, then reading the
-  texts found); if the connection to the server drops meanwhile, it keeps
-  watching and fetches the result when the scan is done. The scan is
-  remembered (`.frames-cache`). Needs tesseract — Debian / Ubuntu:
-  `apt install tesseract-ocr tesseract-ocr-deu`; Stash's Docker image:
-  `apk add tesseract-ocr tesseract-ocr-data-deu` — else the menu entry is
-  turned off and says so.
+  pauses) — a frame every 4 seconds goes to **tesseract** on the Stash
+  server. Words it's less than 60 % sure of are dropped; a frame counts
+  if a word of 3 letters or more is left. The same text in frames running
+  is one text; a text in most frames (a channel's logo) is left out. A
+  few texts: a marker each, where it shows, its lines joined with " – "
+  (untick credits and place names); many (an opera with burned-in
+  subtitles): read like subtitles. The dialog shows how far it is; what
+  was read is remembered (`.frames-cache`), and asked again while it's
+  still working (after a lost connection), it waits for that run instead
+  of starting another. Needs tesseract — Debian / Ubuntu: `apt install
+  tesseract-ocr tesseract-ocr-deu`; Stash's Docker image: `apk add
+  tesseract-ocr tesseract-ocr-data-deu` — else the menu entry is turned
+  off and says so.
 - **Turned off when there's nothing:** when the menu opens, the scene is
   checked in the background — a chapter file next to the video, chapters
   and subtitles in it, ARTE / ORF ON through its URLs, the OpenSubtitles
