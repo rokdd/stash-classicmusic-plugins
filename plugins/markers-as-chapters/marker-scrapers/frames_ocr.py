@@ -198,8 +198,10 @@ def frames(path, start, length, folder):
     span = ["-t", f"{length:.2f}"] if length else []
     graph = (f"[0:v:0]fps=1/{STEP},format=gray,split[a][b];[a]scale='min({MAX_WIDTH},iw)':-2[big];"
              f"[b]scale={TINY[0]}:{TINY[1]}[tiny]")
-    proc = subprocess.run([ffmpeg, "-nostats", "-v", "error", *where, "-i", path, *span, "-an", "-sn", "-dn",
-                           "-filter_complex", graph, "-map", "[big]", os.path.join(folder, "%05d.png"),
+    # keyframes only (a full picture every second or two): decoding every
+    # frame of a 50-fps broadcast to keep one in 200 took minutes per part
+    proc = subprocess.run([ffmpeg, "-nostats", "-v", "error", "-skip_frame", "nokey", *where, "-i", path, *span,
+                           "-an", "-sn", "-dn", "-filter_complex", graph, "-map", "[big]", os.path.join(folder, "%05d.png"),
                            "-map", "[tiny]", "-f", "rawvideo", "-"], capture_output=True)
     names = sorted(n for n in os.listdir(folder) if n.endswith(".png"))
     size = TINY[0] * TINY[1]
