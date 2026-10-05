@@ -36,6 +36,9 @@ no extra modules.
 | Studio | the station: NDR, 3Sat, ARTE.DE, ORF … |
 | URLs | the Mediathek page — if it's still there, [Classical Concerts](../ClassicalConcerts/) can scrape the performers from it |
 
-MediathekView has no pictures. The file's name, length and date are read
+MediathekView has no pictures. Reading the archive needs Python's `lzma`
+module or the `xz` program on the server (some self-built Pythons lack
+`lzma`: `apt install xz-utils` then); without either, only what's online
+now is searched and the log says so. The file's name, length and date are read
 through Stash's API on the same machine (`STASH_URL`, default
 `http://localhost:9999`; `STASH_API_KEY` if Stash has a login).

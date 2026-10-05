@@ -29,11 +29,14 @@ http://localhost:9999; STASH_API_KEY if Stash has a login).
 """
 
 import datetime
+import io
 import json
-import lzma
 import os
 import re
+import shutil
+import subprocess
 import sys
+import threading
 import urllib.request
 
 USER_AGENT = "Mozilla/5.0 (StashMediathekViewScraper; https://github.com/rokdd/stash-classicmusic-plugins)"
@@ -74,7 +77,8 @@ def stash(query, variables):
 # -- words and dates ----------------------------------------------------------------------------
 
 def words(text):
-    return {w for w in re.split(r"[^\w]+", (text or "").lower()) if len(w) > 2 and w not in STOP and not w.isdigit()}
+    text = re.sub(r"(?<=[a-zäöüß])(?=[A-ZÄÖÜ])", " ", text or "")  # "JubiläumskonzertMit" → two words
+    return {w for w in re.split(r"[^\w]+", text.lower()) if len(w) > 2 and w not in STOP and not w.isdigit()}
 
 
 def years(text):
@@ -135,23 +139,94 @@ def search_online(text, size=50):
     return (post_json(API, body).get("result") or {}).get("results") or []
 
 
-def archive_list(day):
+def _broadcast(x, channel, topic):
+    return {"channel": x[0] or channel, "topic": x[1] or topic, "title": x[2], "date": x[3], "duration": seconds(x[5]),
+            "description": x[7], "url_website": x[9],
+            "timestamp": int(x[16]) if len(x) > 16 and str(x[16]).isdigit() else None}
+
+
+class unpacked:
+    """The xz file being downloaded, unpacked as text while it comes: with
+    Python's lzma — or, where Python was built without it (seen: a Python
+    3.8 in /usr/local), with the xz program."""
+
+    def __init__(self, response):
+        self.response, self.proc = response, None
+
+    def __enter__(self):
+        try:
+            import lzma
+            self.text = lzma.open(self.response, "rt", encoding="utf-8", errors="replace")
+            return self.text
+        except ImportError:
+            pass
+        xz = shutil.which("xz") or shutil.which("unxz")
+        if not xz:
+            raise SystemExit("can't unpack MediathekView's archive: this Python has no lzma module and the xz program "
+                             "isn't installed (Debian / Ubuntu: apt install xz-utils; Alpine: apk add xz)")
+        self.proc = subprocess.Popen([xz, "-dc"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+        def feed():
+            try:
+                while True:
+                    block = self.response.read(1 << 20)
+                    if not block:
+                        break
+                    self.proc.stdin.write(block)
+            except (OSError, ValueError):
+                pass
+            finally:
+                try:
+                    self.proc.stdin.close()
+                except OSError:
+                    pass
+        threading.Thread(target=feed, daemon=True).start()
+        self.text = io.TextIOWrapper(self.proc.stdout, encoding="utf-8", errors="replace")
+        return self.text
+
+    def __exit__(self, *exc):
+        try:
+            self.text.close()
+        except (OSError, AttributeError):
+            pass
+        if self.proc:
+            self.proc.kill()
+            self.proc.wait()
+        return False
+
+
+def archive_list(day, needles=()):
     """The broadcasts in the archive's list of `day`, one after the other (as
-    dicts like the search's), read while it downloads."""
+    dicts like the search's), read while it downloads — a few MB at a time,
+    so a list of 80 MB (500 MB unpacked) needs little memory. With `needles`,
+    only entries whose text has one of them are read closer."""
     url = ARCHIVE.format(y=day.year, m=day.month, d=day.day)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    response = urllib.request.urlopen(request, timeout=60)
-    unpack = lzma.LZMADecompressor()
-    rest, channel, topic = "", "", ""
-    with response:
+    channel, topic, rest = "", "", ""
+    with urllib.request.urlopen(request, timeout=60) as response, unpacked(response) as text:
         while True:
-            chunk = response.read(1 << 20)
+            chunk = text.read(4 << 20)
             if not chunk:
                 break
-            rest += unpack.decompress(chunk).decode("utf-8", "replace")
-            pieces = rest.split('"X":')
+            pieces = (rest + chunk).split('"X":')
             rest = pieces.pop()
             for piece in pieces:
+                # the station and topic are only written when they change:
+                # kept for the entries after
+                head = piece[:200]
+                if head.startswith('["'):
+                    first = head[2:head.find('"', 2)] if '"' in head[2:] else ""
+                    channel = first or channel
+                low = piece.lower() if needles else ""
+                if needles and not any(n in low for n in needles):
+                    if head.startswith('["",') or not head.startswith('["'):
+                        continue
+                    try:  # the topic may change here: read just enough for it
+                        x = json.loads(piece.rstrip().rstrip(",").rstrip("}"))
+                        topic = x[1] or topic
+                    except ValueError:
+                        pass
+                    continue
                 piece = piece.rstrip().rstrip(",").rstrip("}")
                 if not piece.startswith("["):
                     continue
@@ -161,18 +236,14 @@ def archive_list(day):
                     continue
                 if len(x) < 10:
                     continue
-                channel = x[0] or channel
-                topic = x[1] or topic
-                yield {"channel": channel, "topic": topic, "title": x[2], "date": x[3], "duration": seconds(x[5]),
-                       "description": x[7], "url_website": x[9],
-                       "timestamp": int(x[16]) if len(x) > 16 and str(x[16]).isdigit() else None}
+                b = _broadcast(x, channel, topic)
+                channel, topic = b["channel"], b["topic"]
+                yield b
     piece = rest.rstrip().rstrip("}")
     if piece.startswith("["):
         try:
             x = json.loads(piece)
-            yield {"channel": x[0] or channel, "topic": x[1] or topic, "title": x[2], "date": x[3],
-                   "duration": seconds(x[5]), "description": x[7], "url_website": x[9],
-                   "timestamp": int(x[16]) if len(x) > 16 and str(x[16]).isdigit() else None}
+            yield _broadcast(x, channel, topic)
         except (ValueError, IndexError):
             pass
 
@@ -188,7 +259,7 @@ def search_archive(wanted, day, length=None, wanted_years=()):
             continue
         log(f"looking in the archive's list of {list_day.isoformat()} …")
         try:
-            for b in archive_list(list_day):
+            for b in archive_list(list_day, needles):
                 text = f"{b['title']} {b['topic']}".lower()
                 if not any(n in text for n in needles):
                     continue
