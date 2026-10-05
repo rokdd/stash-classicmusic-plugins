@@ -26,6 +26,15 @@ no extra modules.
   online now; with a date in the words ("last night of the proms
   08.09.2018") that day's broadcasts from the archive too.
 
+How sure it has to be: the names share at least two words and half the
+words of the shorter one (words every concert broadcast has — "ARTE",
+"Konzert", "Klassik", "live" — don't count); a broadcast less than half as
+long as the file is a trailer or a clip, not the recording; another year
+in its title is another concert of the series. "Neujahrskonzert 2021"
+and "Silvesterkonzert 2021" are looked for on their day; a file saved in
+January counts for the year before (a New Year's Eve concert). Rather
+nothing than the wrong broadcast — then search by name.
+
 ## What's filled in
 
 | Field | |

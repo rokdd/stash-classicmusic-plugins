@@ -46,7 +46,9 @@ FIRST_ARCHIVE = datetime.date(2015, 3, 8)
 AFTER_DAYS = (1, 7, 30)  # the archive's lists looked at: this many days after the broadcast
 STOP = {"der", "die", "das", "und", "the", "and", "von", "mit", "for", "with", "auf", "aus", "ein", "eine",
         "des", "dem", "den", "hd", "sd", "mp4", "mkv", "avi", "m4v", "ts", "720p", "1080p", "fassung",
-        "originalversion", "teil", "part", "folge"}
+        "originalversion", "teil", "part", "folge",
+        # words of every concert broadcast: they don't tell which one
+        "arte", "concert", "concerts", "konzert", "klassik", "musik", "music", "live", "tipp", "kultur", "oper"}
 LOG_INFO = "\x01i\x02"
 
 
@@ -281,11 +283,22 @@ def search_archive(wanted, day, length=None, wanted_years=()):
 def score(b, wanted, length=None, wanted_years=(), day=None):
     """How well a broadcast fits: shared words, the year, the date, the
     length."""
-    theirs = words(f"{b.get('title')} {b.get('topic')} {b.get('channel')}")
+    theirs = words(f"{b.get('title')} {b.get('topic')}")
     shared = len(wanted & theirs)
-    if shared < min(2, len(wanted)):
+    # enough in common: two words, and half the words of the shorter name
+    # ("Christmas" and "Concert" alone don't make "Jingle bells! – Christmas
+    # on ARTE Concert" the crabs of Christmas Island)
+    if shared < min(2, len(wanted)) or shared < 0.5 * min(len(wanted), len(theirs) or 1):
         return 0
-    s = shared
+    # a broadcast less than half as long as the file: a trailer, a clip, an
+    # interview about it — not the recording
+    if length and b.get("duration") and b["duration"] < 0.45 * length:
+        return 0
+    # another year in its title: another concert of the series
+    title_years = years(f"{b.get('title')} {b.get('topic')}")
+    if wanted_years and title_years and not (wanted_years & title_years):
+        return 0
+    s = shared + (1 if words(b.get("channel")) & wanted else 0)  # the station named in the file name
     when = None
     if b.get("timestamp"):
         when = datetime.datetime.fromtimestamp(int(b["timestamp"]), datetime.timezone.utc).date()
@@ -333,10 +346,20 @@ def by_fragment(data):
     length = next((f.get("duration") for f in files if f.get("duration")), None)
     if not day:
         day = date_in(name)
+    if not day and wanted_years:
+        # concerts on a fixed day: New Year's, New Year's Eve
+        year = min(wanted_years)
+        low = name.lower()
+        if "neujahr" in low or "new year" in low:
+            day = datetime.date(year, 1, 1)
+        elif "silvester" in low or "new year's eve" in low:
+            day = datetime.date(year, 12, 31)
     if not day and files and files[0].get("mod_time"):
         # the file's date: a recording is usually saved the day it aired
         day = date_in(files[0]["mod_time"][:10])
-        if day and wanted_years and day.year not in wanted_years:
+        # a New Year's Eve concert is saved on the 1st of January: the year
+        # before counts too (January, February)
+        if day and wanted_years and day.year not in wanted_years and not (day.year - 1 in wanted_years and day.month <= 2):
             day = None
     query = " ".join(sorted(wanted, key=len, reverse=True)[:4])
     best = sorted(((score(b, wanted, length, wanted_years, day), b) for b in search_online(query)),
