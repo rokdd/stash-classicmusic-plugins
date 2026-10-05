@@ -376,8 +376,11 @@
     setTimeout(() => area.focus(), 0);
   }
 
-  async function scrape(scraper, url, text) {
-    const dialog = openDialog(`Scrape markers — ${scraper.name}`);
+  async function scrape(scraper, url, text, again) {
+    // again: the dialog of a first try (a task that's done now) — used on,
+    // not closed and opened anew
+    const dialog = again || openDialog(`Scrape markers — ${scraper.name}`);
+    if (again) dialog.body.replaceChildren();
     // How long it's been working — reading the audio for the pauses (titles
     // without times) can take minutes on a long concert and a small server.
     const status = el("p", {});
@@ -433,7 +436,7 @@
         // is, and fetch the result (remembered by then) when it's done.
         hint.textContent = "Lost the connection to the scanner, but it's still working on the server — " +
           "the result is fetched when it's done.";
-        watch.whenDone(() => { if (status.isConnected) scrape(scraper, url, text); });
+        watch.whenDone(() => { if (status.isConnected) scrape(scraper, url, text, dialog); });
         return;
       }
       if (watch) watch.stop();
@@ -457,14 +460,15 @@
       dialog.body.replaceChildren(el("div", { className: "alert alert-danger", style: { whiteSpace: "pre-wrap" }, textContent: message }));
       return;
     }
-    if (result.running && watch) {
-      // a Stash task does the work (the job queue): the dialog shows how far,
-      // and asks again when it's done (then the answer is there)
+    if (result.running && watch && result.job) {
+      // a Stash task does the work (the job queue): the dialog follows that
+      // job — waiting in the queue, running (how far: the progress file),
+      // done (then the answer is there: fetched into this dialog)
+      clearInterval(timer);
       hint.textContent = "It runs as a Stash task (Settings → Tasks, and the job indicator at the top) — closing this " +
         "dialog or the page doesn't stop it; it can be stopped there. Open Text in the picture again later and the " +
         "markers are there.";
-      watch.whenDone(() => { if (status.isConnected) scrape(scraper, url, text); });
-      if (result.job) watchJob(result.job, watch, status, hint);
+      followJob(result.job, watch, status, () => scrape(scraper, url, text, dialog));
       return;
     }
     clearInterval(timer);
@@ -477,23 +481,49 @@
     review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY, settings.skipPauseCheck !== true);
   }
 
-  // The task in Stash's queue: stopped (Settings → Tasks) or failed — said,
-  // instead of waiting for it.
-  function watchJob(jobId, watch, status, hint) {
+  // The task in Stash's queue, followed by its id: waiting (and behind
+  // what), running, done — then `fetch` (the answer is there) — or stopped
+  // or failed: said.
+  function followJob(jobId, watch, status, fetch) {
+    const began = Date.now();
     const check = async () => {
-      if (!status.isConnected) return;
+      if (!status.isConnected) { watch.stop(); return; }
       let job = null;
-      try { job = (await gql("query($id: ID!) { findJob(input: {id: $id}) { status error } }", { id: String(jobId) })).findJob; } catch (e) { /* ask again */ }
-      if (job && ["CANCELLED", "FAILED"].includes(job.status)) {
+      let queue = [];
+      try {
+        const data = await gql("query($id: ID!) { findJob(input: {id: $id}) { id status error } jobQueue { id description status } }",
+          { id: String(jobId) });
+        job = data.findJob;
+        queue = data.jobQueue || [];
+      } catch (e) {
+        setTimeout(check, 5000);
+        return;
+      }
+      const s = Math.round((Date.now() - began) / 1000);
+      const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      if (!job || job.status === "FINISHED") {
         watch.stop();
-        hint.textContent = job.status === "CANCELLED"
+        fetch();
+        return;
+      }
+      if (job.status === "CANCELLED" || job.status === "FAILED") {
+        watch.stop();
+        status.textContent = job.status === "CANCELLED"
           ? "The task was stopped. What it had read is kept — Text in the picture again goes on from there."
           : `The task failed${job.error ? `: ${job.error}` : ""}.`;
         return;
       }
-      setTimeout(check, 5000);
+      if (job.status === "READY") {
+        const before = queue.filter((j) => Number(j.id) < Number(jobId) && j.status !== "FINISHED");
+        status.textContent = `Waiting in Stash's task queue — ${before.length} task${before.length === 1 ? "" : "s"} before it` +
+          (before.length ? ` (${before.map((j) => j.description.replace(/^Running plugin task: /, "")).join("; ")})` : "") +
+          ` … ${clock}. Stash runs its tasks one after another.`;
+      } else {
+        status.textContent = `Running as a Stash task … ${clock}`;
+      }
+      setTimeout(check, 3000);
     };
-    setTimeout(check, 5000);
+    check();
   }
 
   // "— about 12 min left", from how fast it went so far

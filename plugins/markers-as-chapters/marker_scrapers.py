@@ -65,6 +65,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 
 PLUGIN_ID = "markersAsChapters"
@@ -313,12 +314,18 @@ def scrape(gql, args, settings, env_extra):
     markers, notes, pieces = run_action(scraper, action, payload, env_extra)
     if run_action.running:
         job = None
-        if run_action.start_job:
-            # a Stash task does the long work: the job queue doesn't end it
-            # when the browser's request ends
-            name = os.path.basename(((scene.get("files") or [{}])[0]).get("path") or "") or scene.get("title") or ""
+        # a Stash task does the long work: the job queue doesn't end it when
+        # the browser's request ends. One per video: one already waiting or
+        # running is followed, not started again.
+        name = os.path.basename(((scene.get("files") or [{}])[0]).get("path") or "") or scene.get("title") or ""
+        description = f"Text in the picture: {name}"
+        queued = next((j for j in (gql("query { jobQueue { id description status } }").get("jobQueue") or [])
+                       if j["description"].endswith(description) and j["status"] in ("READY", "RUNNING", "STOPPING")), None)
+        if queued:
+            job = queued["id"]
+        elif run_action.start_job:
             job = gql("""mutation($id: ID!, $d: String, $a: Map) { runPluginTask(plugin_id: $id, description: $d, args_map: $a) }""",
-                      {"id": PLUGIN_ID, "d": f"Text in the picture: {name}",
+                      {"id": PLUGIN_ID, "d": description,
                        "a": {"mode": "marker_ocr_job", "scene_id": str(scene.get("id"))}})["runPluginTask"]
         return {"scraper": scraper["name"], "markers": [], "notes": notes, "running": True, "job": job,
                 "existing": scene.get("scene_markers") or []}
@@ -941,6 +948,34 @@ def main():
                 raise ValueError(f"No scene {args.get('scene_id')}.")
             answer = frames_ocr.run_job(scene, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))
             output = {"markers": len(answer["markers"])}
+        elif mode == "marker_ocr_status":
+            # what's going on with Text in the picture (read only): the files,
+            # the lock, whether its process lives and what it is
+            sys.path.insert(0, BUILT_IN_DIR)
+            os.environ.update(env_extra)
+            import storage
+            folder = storage.folder("progress")
+            out = {"folder": folder, "files": {}}
+            for name in sorted(os.listdir(folder)):
+                path = os.path.join(folder, name)
+                info = {"age_s": round(time.time() - os.path.getmtime(path)), "size": os.path.getsize(path)}
+                if name.endswith(".lock") or (name.endswith(".json") and os.path.getsize(path) < 2000):
+                    with open(path, encoding="utf-8", errors="replace") as f:
+                        info["content"] = f.read()[:500]
+                if name.endswith(".lock"):
+                    try:
+                        pid = int(info["content"].strip())
+                        with open(f"/proc/{pid}/cmdline", "rb") as f:
+                            info["process"] = f.read().replace(b"\0", b" ").decode("utf-8", "replace")[:300]
+                    except (OSError, ValueError):
+                        info["process"] = None
+                out["files"][name] = info
+            try:
+                out["processes"] = [line[:250] for line in subprocess.run(["ps", "-eo", "pid,etime,pcpu,args"], capture_output=True,
+                                    text=True).stdout.splitlines() if any(k in line for k in ("frames_ocr", "marker_scrapers", "tesseract", "ffmpeg"))]
+            except OSError:
+                out["processes"] = None
+            output = out
         elif mode == "marker_progress":
             os.environ.update(env_extra)
             output = scrape_progress(args)
