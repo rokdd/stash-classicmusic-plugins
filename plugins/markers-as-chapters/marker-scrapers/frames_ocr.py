@@ -56,9 +56,13 @@ _reused = {"n": 0}
 
 
 def progress(phase, done, total, final=False):
-    """Write how far it is (at most every 2 seconds, unless `final`)."""
+    """Write how far it is (at most every 2 seconds, unless `final`) — for the
+    dialog, and as a Stash task for the task queue."""
     if not _progress["file"] or (not final and time.time() - _progress["last"] < 2):
         return
+    if _progress.get("job") and phase == "read" and total:
+        sys.stderr.write(f"\x01p\x02{min(1.0, done / total):.3f}\n")
+        sys.stderr.flush()
     _progress["last"] = time.time()
     try:
         os.makedirs(PROGRESS_DIR, exist_ok=True)
@@ -380,10 +384,11 @@ def result(scene, path, duration):
 
 # Stash ends a plugin's process when the browser's request ends (the dialog
 # closed, the page reloaded, a proxy's time limit) — too soon for a long
-# concert. So the reading runs on its own, in the background: the scraper
-# starts it and answers "running"; the dialog shows how far it is and asks
-# again when it's done; then the answer is there (<scene>.result.json,
-# for this file and this way of reading). Asked while it's running: running.
+# concert. So the reading runs as a Stash task (the job queue: Settings →
+# Tasks, stoppable there): the scraper answers "start a task" (the plugin
+# starts it) or "running"; the dialog shows how far it is and asks again
+# when it's done — then the answer is there (<scene>.result.json, for this
+# file and this way of reading).
 
 def signature(path):
     st = os.stat(path)
@@ -400,19 +405,26 @@ def lock_alive(progress_file):
         return False
 
 
-def background(payload_file):
-    """The reading itself, started by main() on its own."""
-    with open(payload_file, encoding="utf-8") as f:
-        job = json.load(f)
-    _progress["file"] = job["progress"]
-    lock = wait_for_other_run(job["progress"])
+def files_for(scene):
+    name = re.sub(r"\W", "", str(scene.get("id") or "x"))
+    return os.path.join(PROGRESS_DIR, name + ".json"), os.path.join(PROGRESS_DIR, name + ".result.json")
+
+
+def run_job(scene, log=lambda line: None):
+    """The reading itself — run as a Stash task (marker_ocr_job)."""
+    files = [f for f in scene.get("files") or [] if os.path.isfile(f.get("path") or "")]
+    if not files:
+        raise SystemExit("The scene's video file isn't there (on the Stash server).")
+    path, duration = files[0]["path"], files[0].get("duration")
+    progress_file, result_file = files_for(scene)
+    _progress["file"], _progress["job"] = progress_file, True
+    lock = wait_for_other_run(progress_file)
+    log(f"Reading the picture of {os.path.basename(path)} …")
     try:
-        answer = result(job["scene"], job["path"], job["duration"])
-        answer["signature"] = signature(job["path"])
+        answer = result(scene, path, duration)
+        answer["signature"] = signature(path)
     except SystemExit as exc:
-        answer = {"markers": [], "notes": str(exc.code), "signature": signature(job["path"])}
-    except Exception as exc:  # noqa: BLE001
-        answer = {"markers": [], "notes": f"{type(exc).__name__}: {exc}", "signature": ""}
+        answer = {"markers": [], "notes": str(exc.code), "signature": signature(path)}
     finally:
         progress("done", 1, 1, final=True)
         if lock:
@@ -420,18 +432,13 @@ def background(payload_file):
                 os.remove(lock)
             except OSError:
                 pass
-        try:
-            os.remove(payload_file)
-        except OSError:
-            pass
-    with open(job["result"], "w", encoding="utf-8") as f:
+    with open(result_file, "w", encoding="utf-8") as f:
         json.dump(answer, f)
+    log(f"Text in the picture: {len(answer['markers'])} markers for {os.path.basename(path)}. {answer.get('notes', '')}")
+    return answer
 
 
 def main():
-    if sys.argv[1:2] == ["background"]:
-        background(sys.argv[2])
-        return
     payload = json.load(sys.stdin)
     scene = payload.get("scene") or {}
     files = [f for f in scene.get("files") or [] if os.path.isfile(f.get("path") or "")]
@@ -439,10 +446,8 @@ def main():
         raise SystemExit("The scene's video file isn't there (on the Stash server).")
     if not tesseract():
         texts(files[0]["path"], None)  # says what's missing
-    path, duration = files[0]["path"], files[0].get("duration")
-    name = re.sub(r"\W", "", str(scene.get("id") or "x"))
-    progress_file = os.path.join(PROGRESS_DIR, name + ".json")
-    result_file = os.path.join(PROGRESS_DIR, name + ".result.json")
+    path = files[0]["path"]
+    progress_file, result_file = files_for(scene)
     try:
         with open(result_file, encoding="utf-8") as f:
             answer = json.load(f)
@@ -452,16 +457,8 @@ def main():
             return
     except (OSError, ValueError):
         pass
-    if not lock_alive(progress_file):
-        job_file = os.path.join(PROGRESS_DIR, name + ".job.json")
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump({"scene": scene, "path": path, "duration": duration, "progress": progress_file,
-                       "result": result_file}, f)
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "background", job_file],
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True, close_fds=True)
-    print(json.dumps({"markers": [], "running": True, "notes":
-                      "Reading the picture on the server — it goes on when this dialog is closed."}))
+    print(json.dumps({"markers": [], "running": True, "start_job": not lock_alive(progress_file), "notes":
+                      "Reading the picture as a Stash task (Settings → Tasks) — it goes on when this dialog is closed."}))
 
 
 if __name__ == "__main__":

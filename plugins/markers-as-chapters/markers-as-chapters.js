@@ -456,11 +456,13 @@
       return;
     }
     if (result.running && watch) {
-      // working on the server, on its own: the dialog shows how far, and
-      // asks again when it's done (then the answer is there)
-      hint.textContent = "It works on the server on its own — closing this dialog (or the page) doesn't stop it. " +
-        "Open Text in the picture again later and the result is there.";
+      // a Stash task does the work (the job queue): the dialog shows how far,
+      // and asks again when it's done (then the answer is there)
+      hint.textContent = "It runs as a Stash task (Settings → Tasks, and the job indicator at the top) — closing this " +
+        "dialog or the page doesn't stop it; it can be stopped there. Open Text in the picture again later and the " +
+        "markers are there.";
       watch.whenDone(() => { if (status.isConnected) scrape(scraper, url, text); });
+      if (result.job) watchJob(result.job, watch, status, hint);
       return;
     }
     clearInterval(timer);
@@ -471,6 +473,25 @@
       return;
     }
     review(dialog, result, (settings.scrapedMarkerTag || "").trim() || DEFAULT_PRIMARY, settings.skipPauseCheck !== true);
+  }
+
+  // The task in Stash's queue: stopped (Settings → Tasks) or failed — said,
+  // instead of waiting for it.
+  function watchJob(jobId, watch, status, hint) {
+    const check = async () => {
+      if (!status.isConnected) return;
+      let job = null;
+      try { job = (await gql("query($id: ID!) { findJob(input: {id: $id}) { status error } }", { id: String(jobId) })).findJob; } catch (e) { /* ask again */ }
+      if (job && ["CANCELLED", "FAILED"].includes(job.status)) {
+        watch.stop();
+        hint.textContent = job.status === "CANCELLED"
+          ? "The task was stopped. What it had read is kept — Text in the picture again goes on from there."
+          : `The task failed${job.error ? `: ${job.error}` : ""}.`;
+        return;
+      }
+      setTimeout(check, 5000);
+    };
+    setTimeout(check, 5000);
   }
 
   // "— about 12 min left", from how fast it went so far

@@ -259,6 +259,7 @@ def run_action(scraper, action, payload, env_extra):
         return result, "", None
     # still working in the background (Text in the picture): said by "running"
     run_action.running = bool(result.get("running"))
+    run_action.start_job = bool(result.get("start_job"))
     return result.get("markers", []), str(result.get("notes") or ""), result.get("pieces")
 
 
@@ -308,10 +309,18 @@ def scrape(gql, args, settings, env_extra):
         action = scraper["fragment"]
         if not action:
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
-    run_action.running = False
+    run_action.running = run_action.start_job = False
     markers, notes, pieces = run_action(scraper, action, payload, env_extra)
     if run_action.running:
-        return {"scraper": scraper["name"], "markers": [], "notes": notes, "running": True,
+        job = None
+        if run_action.start_job:
+            # a Stash task does the long work: the job queue doesn't end it
+            # when the browser's request ends
+            name = os.path.basename(((scene.get("files") or [{}])[0]).get("path") or "") or scene.get("title") or ""
+            job = gql("""mutation($id: ID!, $d: String, $a: Map) { runPluginTask(plugin_id: $id, description: $d, args_map: $a) }""",
+                      {"id": PLUGIN_ID, "d": f"Text in the picture: {name}",
+                       "a": {"mode": "marker_ocr_job", "scene_id": str(scene.get("id"))}})["runPluginTask"]
+        return {"scraper": scraper["name"], "markers": [], "notes": notes, "running": True, "job": job,
                 "existing": scene.get("scene_markers") or []}
     markers = normalise(markers)
     if len(markers) > 1 and len({m["seconds"] for m in markers}) == 1:
@@ -922,6 +931,16 @@ def main():
             output = scrape(gql, args, settings, env_extra)
         elif mode == "marker_available":
             output = available(gql, args, settings, env_extra)
+        elif mode == "marker_ocr_job":
+            # Text in the picture, as a task in Stash's job queue
+            os.environ.update(env_extra)
+            sys.path.insert(0, BUILT_IN_DIR)
+            import frames_ocr
+            scene = scene_for_scraper(gql, args.get("scene_id"))
+            if not scene:
+                raise ValueError(f"No scene {args.get('scene_id')}.")
+            answer = frames_ocr.run_job(scene, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))
+            output = {"markers": len(answer["markers"])}
         elif mode == "marker_progress":
             os.environ.update(env_extra)
             output = scrape_progress(args)
