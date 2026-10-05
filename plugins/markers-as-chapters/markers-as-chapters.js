@@ -176,6 +176,14 @@
   // add what was found to it.
   function markItem(button, state) {
     if (!button || !state) return;
+    if (button.classList.contains("mac-small")) {
+      if (state.off) {
+        button.disabled = true;
+        button.style.opacity = "0.45";
+        button.title = `${state.setup ? "Not set up" : "Nothing for this scene"} — ${state.why || ""}`;
+      }
+      return;
+    }
     const note = button.querySelector(".mac-why") || el("div", { className: "mac-why small text-muted",
       style: { whiteSpace: "normal", maxWidth: "360px", fontSize: "0.8em" } });
     if (state.off) {
@@ -226,37 +234,67 @@
       if (scraperId) entries.push([button, scraperId, url || "", kind]);
       return button;
     };
+    // a small button on a line of its own scraper (another way to use it)
+    const small = (label, run, scraperId, url, kind) => {
+      const button = el("button", { type: "button", className: "btn btn-link btn-sm p-0 ml-3 mac-small", textContent: label,
+        style: { whiteSpace: "nowrap" }, onclick: (e) => { e.stopPropagation(); closeMenu(); run(); } });
+      if (scraperId) entries.push([button, scraperId, url || "", kind]);
+      return button;
+    };
+    const line = (main, ...more) => el("div", { className: "d-flex align-items-start", style: { paddingRight: "1rem" } },
+      el("div", { style: { flex: "1 1 auto", minWidth: 0 } }, main), ...more);
+    const header = (text) => el("h6", { className: "dropdown-header", textContent: text });
     const items = [];
-    // On top: what works on the scene itself (its file) and on text. A
-    // scraper for websites goes below the line only — scraping "the scene"
-    // with it just means scraping the scene's URL, listed there.
+    const generic = (pattern) => /^https?:?\/*$/i.test(pattern);
+    const specific = (s, u) => (s.urls || []).some((p) => p && !generic(p) && u.includes(p));
     const byUrl = scrapers.filter((s) => (s.urls || []).length);
-    scrapers.filter((s) => s.fragment && (!(s.urls || []).length || s.fragment_in_menu))
-      .forEach((s) => items.push(item(s.name, () => scrape(s, null), s.id, "", "scene")));
-    scrapers.filter((s) => s.text).forEach((s) => items.push(item(`${s.name} — ${s.text_label || "paste text or pick a file…"}`, () => textDialog(s), s.id, "", "text")));
+    const shortName = (s) => (s.id === "subtitles" ? "subtitles" : s.id === "online_chapters" ? "chapters (yt-dlp)" : `chapters (${s.name.split(/[ /]/)[0]})`);
+
+    // 1. From the video and its files: one line per scraper; its other ways
+    //    (paste text, own search words) as small buttons on the same line
+    const own = scrapers.filter((s) => s.fragment && (!(s.urls || []).length || s.fragment_in_menu));
+    if (own.length) items.push(header("From the video and its files"));
+    own.forEach((s) => items.push(line(item(s.name, () => scrape(s, null), s.id, "", "scene"),
+      ...(s.text ? [small(s.text_label ? s.text_label.replace(/^search with /, "") : "paste…", () => textDialog(s), s.id, "", "text")] : []))));
+
+    // 2. From the scene's web pages: one line per URL, with what can read it
+    const pages = urls.map((u) => {
+      // the scrapers made for that site; else the general ones ("http")
+      const fits = byUrl.filter((s) => specific(s, u));
+      const readers = (fits.length ? fits : byUrl.filter((s) => urlMatches(s, u)))
+        .sort((x, y) => (x.id === "subtitles") - (y.id === "subtitles")); // chapters first
+      return { u, readers };
+    }).filter((x) => x.readers.length);
+    if (byUrl.length) items.push(header("From the scene's web pages"));
+    pages.forEach(({ u, readers }) => {
+      let host = u;
+      try { host = new URL(u).host.replace(/^www\./, ""); } catch (e) { /* keep it whole */ }
+      const [first, ...rest] = readers;
+      items.push(line(item(`${host} — ${shortName(first)}`, () => scrape(first, u), first.id, u, "url"),
+        ...rest.map((s) => small(shortName(s), () => scrape(s, u), s.id, u, "url"))));
+    });
+    if (byUrl.length) {
+      items.push(item("Another URL…", () => {
+        const u = (window.prompt("URL to scrape markers from (ARTE, ORF ON, YouTube, a Mediathek …):") || "").trim();
+        if (!u) return;
+        const pick = byUrl.find((s) => specific(s, u) && s.id !== "subtitles") || byUrl.find((s) => specific(s, u))
+          || byUrl.find((s) => urlMatches(s, u));
+        if (pick) scrape(pick, u);
+        else window.alert("No marker scraper reads that address.");
+      }));
+    }
+
+    // 3. From text
+    const fromText = scrapers.filter((s) => s.text && !own.includes(s));
+    if (fromText.length) items.push(header("From text"));
+    fromText.forEach((s) => items.push(item(`${s.name} — ${s.text_label || "paste text or pick a file…"}`, () => textDialog(s), s.id, "", "text")));
+
+    // 4. Tools
+    items.push(header("Tools"));
     items.push(item("Copy the scene's markers as text…", () => copySceneMarkers()));
     items.push(item("Composers from the titles…", () => composersDialog()));
     items.push(item("New composer…", () => newComposerDialog()));
     items.push(item("Markers and the scene's files…", () => filesDialog()));
-    if (byUrl.length) {
-      // A URL a scraper for that very site handles isn't offered to the
-      // catch-all ones (a pattern like "http") too.
-      const generic = (p) => /^https?:?\/*$/i.test(p);
-      const specific = (s, u) => (s.urls || []).some((p) => p && !generic(p) && u.includes(p));
-      const handledSpecifically = (u) => byUrl.some((s) => specific(s, u));
-      if (items.length) items.push(el("div", { className: "dropdown-divider" }));
-      byUrl.forEach((s) => {
-        urls.filter((u) => specific(s, u) || (urlMatches(s, u) && !handledSpecifically(u))).forEach((u) => {
-          let host = u;
-          try { host = new URL(u).host.replace(/^www\./, ""); } catch (e) { /* keep it whole */ }
-          items.push(item(`${s.name} — ${host}`, () => scrape(s, u), s.id, u, "url"));
-        });
-        items.push(item(`${s.name} — other URL…`, () => {
-          const u = window.prompt(`URL to scrape markers from with ${s.name}:`);
-          if (u && u.trim()) scrape(s, u.trim());
-        }));
-      });
-    }
     if (!items.length) {
       items.push(el("span", { className: "dropdown-item-text text-muted", textContent: "No marker scrapers found." }));
     }
