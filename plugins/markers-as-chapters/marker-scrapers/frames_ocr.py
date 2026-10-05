@@ -10,8 +10,9 @@ Kept simple:
      with two real words or more (three letters each, most of the line) —
      so a logo read as "NDRID", a backdrop's "Proms", bits of the picture
      ("=", "4") drop out.
-  4. The same text in frames running is one text; a text in most of the
-     frames (a channel's logo) is left out.
+  4. The same text in frames running is one text; a line read before
+     (anywhere, in capitals or not) isn't new and is left out; a text in
+     most of the frames (a channel's logo) is left out.
   5. Texts less than 30 seconds apart are one marker (a song's lines, a
      caption): titled by a caption in capitals if there's one, else by its
      first line.
@@ -250,6 +251,11 @@ def good_line(line):
     return len(real) >= 2 and len(real) >= len(words) / 2
 
 
+def plain_line(line):
+    """A line as compared for repeats: small letters, no punctuation."""
+    return " ".join(re.sub(r"[^\w\s]", " ", line.lower()).split())
+
+
 def similar(a, b):
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= 0.8
 
@@ -388,9 +394,25 @@ def texts(path, duration):
             cues[-1][1] = at + STEP
         else:
             cues.append([float(at), float(at + STEP), text])
+    # a line read before — anywhere, in capitals or not, with small reading
+    # differences — isn't new: left out; a text of nothing but such lines too
+    seen, fresh = [], []
+    for a, b, text in cues:
+        lines = []
+        for line in text.splitlines():
+            key = plain_line(line)
+            if key and not any(similar(key, old) for old in seen):
+                seen.append(key)
+                lines.append(line)
+        if lines:
+            fresh.append([a, b, "\n".join(lines)])
+    repeats = len(cues) - len(fresh)
+    cues = fresh
     notes = (f"Looked at {chosen}: {total} frames (one every {STEP} s"
              + (f", {_reused['n']} the same as the one before" if _reused["n"] else "") + f"), text in {len(read)} of them, "
              f"{len(cues)} different text{'' if len(cues) == 1 else 's'} (tesseract, {langs})")
+    if repeats:
+        notes += f"; {repeats} text{'' if repeats == 1 else 's'} left out as already read before"
     if logos:
         notes += f"; left out as a logo: {len(logos)} text{'' if len(logos) == 1 else 's'} in most frames"
     if missing:

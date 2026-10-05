@@ -132,31 +132,34 @@ Built in:
   films are. The dialog says which subtitles were used and how many
   downloads are left today.
 - **Text in the picture (OCR)** — reads what's written in the video
-  itself: the captions broadcasters show when a piece begins ("Sergej
-  Rachmaninow / Klavierkonzert Nr. 3 op. 30 / I. Allegro ma non tanto" at
-  the lower left), title cards, credits, burned-in subtitles. Kept simple:
-  where pieces begin — the start of the video and the 45 seconds after
-  each pause in the audio (the whole video only when there are no
-  pauses) — a frame every 4 seconds goes to **tesseract** on the Stash
-  server. Words it's less than 60 % sure of are dropped; a frame counts
-  if a word of 3 letters or more is left. The same text in frames running
-  is one text; a text in most frames (a channel's logo) is left out. A
-  few texts: a marker each, where it shows, its lines joined with " – "
-  (untick credits and place names); many (an opera with burned-in
-  subtitles): read like subtitles. Frames the same as the one before (a
-  still shot, the caption still there) aren't read again; several are read
-  at once (one per processor core), in one language (the first; set more
-  in **Languages of text in the picture** — each makes it slower). The
-  dialog shows how far it is and how long it'll take. It runs as a
-  **Stash task** ("Text in the picture: <file>" in Settings → Tasks and
-  the job indicator, where it can be stopped): closing the dialog or the
-  page doesn't stop it (Stash ends a scraper then) — open it again later
-  and the markers are there. What's read is saved every minute, so a run that's stopped anyway
-  goes on from there next time; what
-  was read is remembered (in Stash's generated folder), and asked again while it's
-  still working (after a lost connection), it waits for that run instead
-  of starting another. Needs tesseract — Debian / Ubuntu: `apt install
-  tesseract-ocr tesseract-ocr-deu`; Stash's Docker image: `apk add
+  itself: the captions broadcasters show when a piece begins ("HOMEWARD
+  BOUND", "Sergej Rachmaninow / Klavierkonzert Nr. 3"), title cards,
+  burned-in subtitles. Where pieces begin — the start of the video and the
+  45 seconds after each pause in the audio (the whole video only when
+  there are no pauses) — a frame every 4 seconds goes to **tesseract** on
+  the Stash server. Then:
+  - words it's less than 60 % sure of are dropped; a line counts with two
+    real words or more (three letters each, most of the line) — a logo
+    read as "NDRID", a backdrop's "Proms", bits of the picture drop out;
+  - a line read before — anywhere, in capitals or not, with small reading
+    differences — isn't new and is left out; a text in most frames (a
+    channel's logo) too;
+  - texts less than 30 seconds apart are one marker (a song's lines, a
+    caption): titled by a caption in capitals if there's one, else by its
+    first line.
+
+  These steps run on what was read: changing them doesn't read the video
+  again. Frames the same as the one before aren't read again; several are
+  read at once (one per processor core), in one language (the first; set
+  more in **Languages of text in the picture** — each makes it slower).
+  It runs as a **Stash task** ("Text in the picture: <file>" in Settings →
+  Tasks and the job indicator, where it can be stopped; Stash runs its
+  tasks one after another): closing the dialog or the page doesn't stop
+  it — open it again later and the markers are there. The dialog follows
+  the task (waiting in the queue, how far, how long). What's read is saved
+  every minute, so a run that's stopped goes on from there; it's kept in
+  Stash's generated folder. Needs tesseract — Debian / Ubuntu: `apt
+  install tesseract-ocr tesseract-ocr-deu`; Stash's Docker image: `apk add
   tesseract-ocr tesseract-ocr-data-deu` — else the menu entry is turned
   off and says so.
 - **Turned off when there's nothing:** when the menu opens, the scene is
