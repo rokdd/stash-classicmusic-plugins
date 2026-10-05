@@ -257,6 +257,8 @@ def run_action(scraper, action, payload, env_extra):
         raise RuntimeError(f"Scraper {scraper['name']} didn't print JSON: {exc}") from exc
     if isinstance(result, list):
         return result, "", None
+    # still working in the background (Text in the picture): said by "running"
+    run_action.running = bool(result.get("running"))
     return result.get("markers", []), str(result.get("notes") or ""), result.get("pieces")
 
 
@@ -306,7 +308,11 @@ def scrape(gql, args, settings, env_extra):
         action = scraper["fragment"]
         if not action:
             raise ValueError(f"Scraper {scraper['name']} only scrapes URLs.")
+    run_action.running = False
     markers, notes, pieces = run_action(scraper, action, payload, env_extra)
+    if run_action.running:
+        return {"scraper": scraper["name"], "markers": [], "notes": notes, "running": True,
+                "existing": scene.get("scene_markers") or []}
     markers = normalise(markers)
     if len(markers) > 1 and len({m["seconds"] for m in markers}) == 1:
         # Every marker at the same time: the source had no real times.

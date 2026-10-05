@@ -455,6 +455,14 @@
       dialog.body.replaceChildren(el("div", { className: "alert alert-danger", style: { whiteSpace: "pre-wrap" }, textContent: message }));
       return;
     }
+    if (result.running && watch) {
+      // working on the server, on its own: the dialog shows how far, and
+      // asks again when it's done (then the answer is there)
+      hint.textContent = "It works on the server on its own — closing this dialog (or the page) doesn't stop it. " +
+        "Open Text in the picture again later and the result is there.";
+      watch.whenDone(() => { if (status.isConnected) scrape(scraper, url, text); });
+      return;
+    }
     clearInterval(timer);
     if (watch) watch.stop();
     if (!result.markers.length) {
@@ -467,8 +475,9 @@
 
   // "— about 12 min left", from how fast it went so far
   function timeLeft(p) {
-    if (!p.started || !p.updated || !p.done || !p.total || p.done < 3) return "";
-    const left = ((p.updated - p.started) / p.done) * (p.total - p.done);
+    const since = (p.done || 0) - (p.base || 0); // read in this run (a run going on counts from there)
+    if (!p.started || !p.updated || !p.total || since < 3) return "";
+    const left = ((p.updated - p.started) / since) * (p.total - p.done);
     if (left < 60) return " — less than a minute left";
     return ` — about ${left < 5400 ? `${Math.round(left / 60)} min` : `${(left / 3600).toFixed(1)} h`} left`;
   }
@@ -482,18 +491,27 @@
     let last = null;
     let stopped = false;
     let onDone = null;
+    let sawRunning = false;
+    let doneChecks = 0;
     const poll = async () => {
       if (stopped) return;
       let p = null;
       try { p = await runOperation({ mode: "marker_progress", scene_id: scene }); } catch (e) { /* ask again */ }
       if (stopped) return;
       if (p && first === null) first = p.updated;
-      if (p && !(p.phase === "done" && p.updated === first)) {
+      if (p && p.phase !== "done") {
+        sawRunning = true;
         last = p;
-        if (p.phase === "done") {
-          if (onDone) { stopped = true; onDone(); return; }
-        } else {
-          show(p);
+        show(p);
+      } else if (p && onDone) {
+        // done after running — or a "done" left from before: then asked
+        // again after a few checks (the server answers "running" if not)
+        doneChecks += 1;
+        if (sawRunning || p.updated !== first || doneChecks >= 3) {
+          last = p;
+          stopped = true;
+          onDone();
+          return;
         }
       }
       setTimeout(poll, 3000);

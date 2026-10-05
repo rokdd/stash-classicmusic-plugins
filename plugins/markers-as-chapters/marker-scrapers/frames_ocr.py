@@ -44,6 +44,7 @@ MIN_CONF = 60  # words tesseract is less sure of are dropped
 PAUSE = (2.0, 20.0)  # pauses looked after: at least this long (s), this much quieter (dB) …
 WEAK_PAUSE = (1.0, 15.0)  # … or, if there are none such, these
 BEFORE, AFTER = 5, 45  # seconds looked at before a pause's end and after it
+CHUNK = 60  # seconds read at a time (then saved)
 MAX_WINDOWS = 80  # pauses looked after at most (the longest)
 import storage  # noqa: E402 — where the analyses are kept (Stash's generated folder)
 CACHE_DIR = storage.folder("frames")
@@ -66,8 +67,9 @@ def progress(phase, done, total, final=False):
             if _progress["started"] is None or phase not in _progress.get("phases", ()):
                 _progress["started"] = time.time()
                 _progress["phases"] = (phase,)
+                _progress["base"] = done  # what was done before (a run that goes on)
             json.dump({"phase": phase, "done": done, "total": total, "updated": time.time(),
-                       "started": _progress["started"]}, f)
+                       "started": _progress["started"], "base": _progress.get("base", 0)}, f)
         os.replace(tmp, _progress["file"])
     except OSError:
         pass
@@ -225,10 +227,14 @@ def logic():
     return hashlib.sha1("".join(parts).encode()).hexdigest()[:12]
 
 
-def cached(path, key_extra, make):
+def cache_file(path, key_extra):
     st = os.stat(path)
     key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime}|{key_extra}".encode()).hexdigest()
-    cache = os.path.join(CACHE_DIR, key + ".json")
+    return os.path.join(CACHE_DIR, key + ".json")
+
+
+def cached(path, key_extra, make):
+    cache = cache_file(path, key_extra)
     try:
         with open(cache, encoding="utf-8") as f:
             return json.load(f)
@@ -239,7 +245,8 @@ def cached(path, key_extra, make):
         os.makedirs(CACHE_DIR, exist_ok=True)
         with open(cache, "w", encoding="utf-8") as f:
             json.dump(value, f)
-        old = sorted((os.path.join(CACHE_DIR, n) for n in os.listdir(CACHE_DIR)), key=os.path.getmtime)
+        old = sorted((os.path.join(CACHE_DIR, n) for n in os.listdir(CACHE_DIR) if n.endswith(".json")),
+                     key=os.path.getmtime)
         for stale in old[:-CACHE_KEEP]:
             os.remove(stale)
     except OSError:
@@ -258,13 +265,36 @@ def texts(path, duration):
     windows, chosen = windows_for(path, duration)
     total = sum(int((length or duration or 0) // STEP) + 1 for _, length in windows)
 
+    key = f"read|{logic()}|{windows}|{langs}"
+    # in pieces of at most a minute: what's read is saved after each, so a
+    # run that's stopped goes on from there (also for a whole video)
+    pieces = []
+    for start, length in windows:
+        length = length or duration or 0
+        at = start
+        while at < start + length - 0.01:
+            pieces.append((at, min(CHUNK, start + length - at)))
+            at += CHUNK
+    partial = cache_file(path, key) + ".partial"
+
     def read_all():
-        out, done, reused = [], 0, 0
+        # what an earlier run that was stopped had read already: on from there
+        try:
+            with open(partial, encoding="utf-8") as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            saved = {}
+        out, done, reused = saved.get("out", []), saved.get("done", 0), saved.get("reused", 0)
+        first = saved.get("windows", 0)
+        if done:
+            progress("read", done, max(total, done), final=True)  # on from where it was
         folder = tempfile.mkdtemp(prefix="markers-as-chapters-frames-")
         workers = max(1, min(8, (os.cpu_count() or 2) - 1))
         try:
             with concurrent.futures.ThreadPoolExecutor(workers) as pool:
-                for start, length in windows:
+                for w, (start, length) in enumerate(pieces):
+                    if w < first:
+                        continue
                     shots = frames(path, start, length, folder)
                     # a frame like the one before: its text again, not read again
                     jobs, previous = [], None
@@ -283,11 +313,21 @@ def texts(path, duration):
                         progress("read", done, max(total, done))
                         if text:
                             out.append([at, text])
+                    try:  # saved after each part: a run stopped goes on from here
+                        with open(partial + ".tmp", "w", encoding="utf-8") as f:
+                            json.dump({"windows": w + 1, "out": out, "done": done, "reused": reused}, f)
+                        os.replace(partial + ".tmp", partial)
+                    except OSError:
+                        pass
         finally:
             shutil.rmtree(folder, ignore_errors=True)
         _reused["n"] = reused
         return out
-    read = cached(path, f"read|{logic()}|{windows}|{langs}", read_all)
+    read = cached(path, key, read_all)
+    try:
+        os.remove(partial)
+    except OSError:
+        pass
 
     # a logo, a channel's name: in most of the frames
     counts = {}
@@ -314,37 +354,18 @@ def texts(path, duration):
     return [tuple(c) for c in cues], notes + "."
 
 
-def main():
-    payload = json.load(sys.stdin)
-    scene = payload.get("scene") or {}
-    files = [f for f in scene.get("files") or [] if os.path.isfile(f.get("path") or "")]
-    if not files:
-        raise SystemExit("The scene's video file isn't there (on the Stash server).")
-    duration = files[0].get("duration")
-    if scene.get("id"):
-        name = re.sub(r"\W", "", str(scene["id"]))
-        _progress["file"] = os.path.join(PROGRESS_DIR, name + ".json")
-    lock = wait_for_other_run(_progress["file"])
-    try:
-        cues, notes = texts(files[0]["path"], duration)
-    finally:
-        progress("done", 1, 1, final=True)
-        if lock:
-            try:
-                os.remove(lock)
-            except OSError:
-                pass
+def result(scene, path, duration):
+    """The scraper's answer: {"markers", "notes"}."""
+    cues, notes = texts(path, duration)
     if not cues:
-        print(json.dumps({"markers": [], "notes": f"No text found in the picture. {notes}"}))
-        return
+        return {"markers": [], "notes": f"No text found in the picture. {notes}"}
     minutes = (duration or cues[-1][1]) / 60
     if len(cues) > max(20, 1.5 * minutes):
         # many texts: subtitles burned into the picture (an opera, a film) —
         # markers as from subtitles
         flat = [(a, b, " ".join(text.split())) for a, b, text in cues]
         markers, more = subtitles.markers_from(flat, duration)
-        print(json.dumps({"markers": markers, "notes": f"{notes} Many texts — read as subtitles: {more}"}))
-        return
+        return {"markers": markers, "notes": f"{notes} Many texts — read as subtitles: {more}"}
     # a few: captions — "Sergej Rachmaninow / Klavierkonzert Nr. 3 op. 30 /
     # I. Allegro ma non tanto" — a marker each, where it shows
     markers = []
@@ -352,9 +373,95 @@ def main():
         lines = [" ".join(line.split()) for line in text.splitlines() if line.strip()]
         end = cues[i + 1][0] if i + 1 < len(cues) else duration
         markers.append({"seconds": a, "end_seconds": end, "title": " – ".join(lines)})
-    print(json.dumps({"markers": markers, "notes": f"{notes} Each text is a marker where it shows; captions are "
-                      "often shown a little after the piece begins — the check against the audio suggests the "
-                      "start. Credits and place names become markers too: untick them."}))
+    return {"markers": markers, "notes": f"{notes} Each text is a marker where it shows; captions are "
+            "often shown a little after the piece begins — the check against the audio suggests the "
+            "start. Credits and place names become markers too: untick them."}
+
+
+# Stash ends a plugin's process when the browser's request ends (the dialog
+# closed, the page reloaded, a proxy's time limit) — too soon for a long
+# concert. So the reading runs on its own, in the background: the scraper
+# starts it and answers "running"; the dialog shows how far it is and asks
+# again when it's done; then the answer is there (<scene>.result.json,
+# for this file and this way of reading). Asked while it's running: running.
+
+def signature(path):
+    st = os.stat(path)
+    binary = tesseract()
+    langs = languages(binary)[0] if binary else ""
+    return f"{path}|{st.st_size}|{st.st_mtime}|{logic()}|{langs}"
+
+
+def lock_alive(progress_file):
+    try:
+        with open(progress_file[:-5] + ".lock", encoding="utf-8") as f:
+            return running(int(f.read().strip() or 0))
+    except (OSError, ValueError):
+        return False
+
+
+def background(payload_file):
+    """The reading itself, started by main() on its own."""
+    with open(payload_file, encoding="utf-8") as f:
+        job = json.load(f)
+    _progress["file"] = job["progress"]
+    lock = wait_for_other_run(job["progress"])
+    try:
+        answer = result(job["scene"], job["path"], job["duration"])
+        answer["signature"] = signature(job["path"])
+    except SystemExit as exc:
+        answer = {"markers": [], "notes": str(exc.code), "signature": signature(job["path"])}
+    except Exception as exc:  # noqa: BLE001
+        answer = {"markers": [], "notes": f"{type(exc).__name__}: {exc}", "signature": ""}
+    finally:
+        progress("done", 1, 1, final=True)
+        if lock:
+            try:
+                os.remove(lock)
+            except OSError:
+                pass
+        try:
+            os.remove(payload_file)
+        except OSError:
+            pass
+    with open(job["result"], "w", encoding="utf-8") as f:
+        json.dump(answer, f)
+
+
+def main():
+    if sys.argv[1:2] == ["background"]:
+        background(sys.argv[2])
+        return
+    payload = json.load(sys.stdin)
+    scene = payload.get("scene") or {}
+    files = [f for f in scene.get("files") or [] if os.path.isfile(f.get("path") or "")]
+    if not files:
+        raise SystemExit("The scene's video file isn't there (on the Stash server).")
+    if not tesseract():
+        texts(files[0]["path"], None)  # says what's missing
+    path, duration = files[0]["path"], files[0].get("duration")
+    name = re.sub(r"\W", "", str(scene.get("id") or "x"))
+    progress_file = os.path.join(PROGRESS_DIR, name + ".json")
+    result_file = os.path.join(PROGRESS_DIR, name + ".result.json")
+    try:
+        with open(result_file, encoding="utf-8") as f:
+            answer = json.load(f)
+        if answer.get("signature") == signature(path):
+            answer.pop("signature", None)
+            print(json.dumps(answer))
+            return
+    except (OSError, ValueError):
+        pass
+    if not lock_alive(progress_file):
+        job_file = os.path.join(PROGRESS_DIR, name + ".job.json")
+        with open(job_file, "w", encoding="utf-8") as f:
+            json.dump({"scene": scene, "path": path, "duration": duration, "progress": progress_file,
+                       "result": result_file}, f)
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "background", job_file],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True, close_fds=True)
+    print(json.dumps({"markers": [], "running": True, "notes":
+                      "Reading the picture on the server — it goes on when this dialog is closed."}))
 
 
 if __name__ == "__main__":

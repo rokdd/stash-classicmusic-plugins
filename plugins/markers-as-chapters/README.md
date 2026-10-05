@@ -147,7 +147,11 @@ Built in:
   still shot, the caption still there) aren't read again; several are read
   at once (one per processor core), in one language (the first; set more
   in **Languages of text in the picture** — each makes it slower). The
-  dialog shows how far it is and how long it'll take; what
+  dialog shows how far it is and how long it'll take. It runs on the
+  server on its own: closing the dialog or the page doesn't stop it (Stash
+  would end a scraper then) — open it again later and the markers are
+  there. What's read is saved every minute, so a run that's stopped anyway
+  goes on from there next time; what
   was read is remembered (in Stash's generated folder), and asked again while it's
   still working (after a lost connection), it waits for that run instead
   of starting another. Needs tesseract — Debian / Ubuntu: `apt install
