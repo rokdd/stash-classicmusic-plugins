@@ -409,6 +409,8 @@
       bar.style.width = `${pct || 0}%`;
       barText.textContent = p.phase === "scan"
         ? `Looking at the picture (where pieces begin): ${formatTime(p.done)}${p.total ? ` of ${formatTime(p.total)} (${pct} %)` : ""}`
+        : p.phase === "audio" ? "Measuring the audio, to find where pieces begin … (a few minutes for a long concert, the first time)"
+        : p.phase === "frames" ? "Taking the frames where pieces begin …"
         : p.phase === "compare" ? `Looking for text in the picture … ${pct} %`
         : p.phase === "read" ? `Reading the picture where pieces begin: frame ${p.done} of ${p.total} (${pct} %)${timeLeft(p)}`
         : "";

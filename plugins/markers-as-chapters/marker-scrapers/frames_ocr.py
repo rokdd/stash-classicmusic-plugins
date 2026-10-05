@@ -104,14 +104,24 @@ def languages(binary):
 
 
 def running(pid):
+    """Is `pid` (still) one of ours? A process number left in a lock may be
+    another program's by now: on Linux its command line tells."""
     try:
         os.kill(pid, 0)
-        return True
     except (OSError, ValueError):
         return False
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            line = f.read().decode("utf-8", "replace")
+        return "frames_ocr" in line or "marker_scrapers" in line
+    except OSError:
+        return True  # no /proc (macOS …): the process number alone
 
 
-def wait_for_other_run(progress_file):
+STALE = 1800  # seconds: a run whose progress hasn't moved for this long is taken as hung
+
+
+def wait_for_other_run(progress_file, log=lambda line: None):
     """One scan per scene at a time: when another one is still running
     (asked again after a lost connection, say), wait for it — what it read
     is remembered, so this one is quick then. The lock file, or None."""
@@ -119,6 +129,7 @@ def wait_for_other_run(progress_file):
         return None
     lock = progress_file[:-5] + ".lock"
     os.makedirs(PROGRESS_DIR, exist_ok=True)
+    waited = False
     while True:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -131,12 +142,19 @@ def wait_for_other_run(progress_file):
                     pid = int(f.read().strip() or 0)
             except (OSError, ValueError):
                 pid = 0
-            if not running(pid):
+            try:
+                quiet = time.time() - os.path.getmtime(progress_file)
+            except OSError:
+                quiet = 0
+            if not running(pid) or quiet > STALE:
                 try:
-                    os.remove(lock)  # left by a run that ended without tidying up
+                    os.remove(lock)  # left by a run that ended (or hung) without tidying up
                 except OSError:
                     pass
                 continue
+            if not waited:
+                log(f"Waiting for another reading of this scene to finish (process {pid}) …")
+                waited = True
             time.sleep(5)
         except OSError:
             return None
@@ -267,6 +285,7 @@ def texts(path, duration):
                          "tesseract-ocr-data-deu; or set its path in the plugin's settings.")
     langs, missing = languages(binary)
     windows, chosen = windows_for(path, duration)
+    progress("frames", 0, 0, final=True)
     total = sum(int((length or duration or 0) // STEP) + 1 for _, length in windows)
 
     key = f"read|{logic()}|{windows}|{langs}"
@@ -418,8 +437,9 @@ def run_job(scene, log=lambda line: None):
     path, duration = files[0]["path"], files[0].get("duration")
     progress_file, result_file = files_for(scene)
     _progress["file"], _progress["job"] = progress_file, True
-    lock = wait_for_other_run(progress_file)
-    log(f"Reading the picture of {os.path.basename(path)} …")
+    log(f"Text in the picture: {os.path.basename(path)} …")
+    lock = wait_for_other_run(progress_file, log)
+    progress("audio", 0, 0, final=True)
     try:
         answer = result(scene, path, duration)
         answer["signature"] = signature(path)
