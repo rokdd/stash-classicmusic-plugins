@@ -13,9 +13,12 @@ Kept simple:
   4. The same text in frames running is one text; a line read before
      (anywhere, in capitals or not) isn't new and is left out; a text in
      most of the frames (a channel's logo) is left out.
-  5. Texts less than 30 seconds apart are one marker (a song's lines, a
-     caption): titled by a caption in capitals if there's one, else by its
-     first line.
+  5. Sounds described ("(Applaus)", "WHISTLING", "♪ Musik ♪" — also without
+     brackets) are left out; applause ends a piece.
+  6. Texts less than 30 seconds apart (and no applause between) are one
+     marker (a song's lines, a caption): titled by the line most like a
+     caption — capitals, "op." / "Nr." / a colon, short; not one going on
+     with a comma or a small letter — else by its first line.
 
 Needs tesseract on the Stash server (Debian: apt install tesseract-ocr
 tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr
@@ -242,6 +245,23 @@ def read_text(png, binary, langs):
     return text if re.search(r"[^\W\d_]{3,}", text) else ""
 
 
+def caption_like(line):
+    """How much a line looks like a caption (a piece's name) rather than a
+    sung or spoken line: capitals, "op." / "Nr." / "BWV" / a colon, short;
+    a comma at the end or a small first letter (a line going on) against."""
+    score = 0
+    letters = [c for c in line if c.isalpha()]
+    if letters and sum(c.isupper() for c in letters) > 0.6 * len(letters):
+        score += 2
+    if re.search(r"\b(op|nr|no|bwv|kv|hob|d|woo)\.?\s*\d|:\s|\s[–-]\s", line, re.I):
+        score += 2
+    if len(line.split()) <= 7:
+        score += 1
+    if line.rstrip().endswith(",") or (letters and line.lstrip()[:1].islower()):
+        score -= 2
+    return score
+
+
 REAL_WORD = re.compile(r"^[^\W\d_]{3,}[.,!?'’…:;]*$")
 
 
@@ -372,8 +392,13 @@ def texts(path, duration):
     # line): a channel's logo read as "NDRID", a backdrop's "Proms", bits of
     # the picture ("=", "4") drop out — applied after reading, so changing it
     # doesn't read the video again
+    # sounds described ("(Applaus)", "WHISTLING", "♪ Musik ♪") are no titles:
+    # left out — applause is remembered, it ends a piece
+    applause = sorted({at for at, text in read for line in text.splitlines()
+                       if subtitles.is_sound(line) and subtitles.is_applause(line)})
     read = [[at, "\n".join(lines)] for at, text in read
-            for lines in [[line for line in text.splitlines() if good_line(line)]] if lines]
+            for lines in [[line for line in text.splitlines() if not subtitles.is_sound(line) and good_line(line)]]
+            if lines]
     try:
         os.remove(partial)
     except OSError:
@@ -417,6 +442,7 @@ def texts(path, duration):
         notes += f"; left out as a logo: {len(logos)} text{'' if len(logos) == 1 else 's'} in most frames"
     if missing:
         notes += f"; not installed for tesseract: {', '.join(missing)}"
+    texts.applause = applause
     return [tuple(c) for c in cues], notes + "."
 
 
@@ -428,17 +454,18 @@ def result(scene, path, duration):
     # texts close together are one piece (a song's lines, a caption and what
     # follows): a marker where the group begins, titled by a caption in
     # capitals if there's one (a piece's name), else by its first line
+    applause = getattr(texts, "applause", [])
     groups = []
     for a, b, text in cues:
-        if groups and a - groups[-1][-1][1] <= GROUP_GAP:
+        clapped = groups and any(groups[-1][-1][0] < t < a for t in applause)  # applause between: a piece ended
+        if groups and a - groups[-1][-1][1] <= GROUP_GAP and not clapped:
             groups[-1].append((a, b, text))
         else:
             groups.append([(a, b, text)])
     markers = []
     for i, g in enumerate(groups):
         lines = [" ".join(line.split()) for _, _, text in g for line in text.splitlines() if line.strip()]
-        caps = [line for line in lines if sum(c.isupper() for c in line) > 0.6 * sum(c.isalpha() for c in line)]
-        title = (caps or lines)[0].strip(" .…\"“”„")
+        title = max(lines, key=lambda line: (caption_like(line), -lines.index(line))).strip(" .…\"“”„")
         end = groups[i + 1][0][0] if i + 1 < len(groups) else duration
         markers.append({"seconds": g[0][0], "end_seconds": end, "title": title})
     return {"markers": markers, "notes": f"{notes} Texts less than {GROUP_GAP} s apart are one marker (a song's lines, "

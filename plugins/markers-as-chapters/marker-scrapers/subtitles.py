@@ -55,6 +55,36 @@ LEAD = re.compile(r"^(?:und\s+)?(?:nun|jetzt|es folgt|als nächstes|wir beginnen
                   r"zum abschluss|zum schluss|zugabe|now|next|we begin with|you will hear|and finally)\s*[:,]?\s*"
                   r"(?:der|die|das|den|dem|ein|eine|einen|the|a)?\s+", re.I)
 MUSIC_WORDS = {"musik", "music", "gesang", "singing", "orchester", "orchestra", "instrumental"}
+# Words of sound descriptions (subtitles for the hard of hearing, also read
+# off the picture without their brackets): "(Applaus)", "[Beifall und
+# Jubel]", "*Pfiffe*", "WHISTLING", "♪ Musik ♪".
+SOUND_WORDS = MUSIC_WORDS | {
+    "applaus", "beifall", "jubel", "jubeln", "bravo", "bravorufe", "rufe", "zwischenrufe", "pfiffe", "pfeifen",
+    "lachen", "gelächter", "klatschen", "glocken", "glockengeläut", "trommeln", "fanfare", "stille", "publikum",
+    "applause", "cheering", "cheers", "whistling", "whistles", "whistle", "laughter", "laughing", "clapping",
+    "bells", "drums", "silence", "audience", "crowd", "booing", "chanting", "fanfare", "playing", "plays",
+    "und", "and", "mit", "with", "anhaltender", "anhaltend", "lauter", "loud", "continues", "continuing",
+    "verhaltener", "starker", "frenetischer", "begeisterter", "music", "instrumentalmusik", "orchestermusik"}
+SOUND_CORE = SOUND_WORDS - {"und", "and", "mit", "with", "anhaltender", "anhaltend", "lauter", "loud", "continues",
+                            "continuing", "verhaltener", "starker", "frenetischer", "begeisterter", "playing", "plays"}
+APPLAUSE_WORDS = {"applaus", "beifall", "jubel", "jubeln", "bravo", "bravorufe", "applause", "cheering", "cheers",
+                  "clapping", "klatschen", "pfiffe", "whistling"}
+
+
+def is_sound(line):
+    """A description of a sound, not words said or sung: in brackets or
+    stars, after a ♪, or nothing but sound words ("APPLAUS UND JUBEL")."""
+    text = line.strip()
+    if not text:
+        return False
+    if re.fullmatch(r"[(\[*].*[)\]*]", text) or text.startswith(("♪", "♫")):
+        return True
+    words = [w for w in re.split(r"[^\w]+", text.lower()) if w]
+    return bool(words) and all(w in SOUND_WORDS for w in words) and any(w in SOUND_CORE for w in words)
+
+
+def is_applause(line):
+    return any(w in APPLAUSE_WORDS for w in re.split(r"[^\w]+", line.lower()))
 TIME = r"(\d{1,2}):(\d{2}):(\d{2})[.,](\d{1,3})|(\d{1,2}):(\d{2})[.,](\d{1,3})"
 
 

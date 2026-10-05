@@ -144,8 +144,13 @@ Built in:
   - a line read before — anywhere, in capitals or not, with small reading
     differences — isn't new and is left out; a text in most frames (a
     channel's logo) too;
-  - texts less than 30 seconds apart are one marker (a song's lines, a
-    caption): titled by a caption in capitals if there's one, else by its
+  - sounds described — "(Applaus)", "[Beifall]", "WHISTLING", "*Pfiffe*",
+    "♪ Musik ♪", also when the brackets weren't read — are left out;
+    applause ends a piece;
+  - texts less than 30 seconds apart (and no applause between) are one
+    marker (a song's lines, a caption), titled by the line most like a
+    caption: in capitals, with "op." / "Nr." / "BWV" / a colon, short —
+    not one going on (a comma at the end, a small first letter); else the
     first line.
 
   These steps run on what was read: changing them doesn't read the video
