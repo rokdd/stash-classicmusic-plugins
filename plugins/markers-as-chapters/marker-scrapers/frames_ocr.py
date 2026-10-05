@@ -6,12 +6,15 @@ Kept simple:
   1. Where pieces begin: the start of the video and the 45 seconds after
      each pause in the audio (the whole video if there are no pauses).
   2. There, a frame every 4 seconds, the whole picture, read by tesseract.
-  3. Words tesseract isn't sure of (under 60 %) are dropped; a frame counts
-     if a word of 3 letters or more is left.
+  3. Words tesseract isn't sure of (under 60 %) are dropped; a line counts
+     with two real words or more (three letters each, most of the line) —
+     so a logo read as "NDRID", a backdrop's "Proms", bits of the picture
+     ("=", "4") drop out.
   4. The same text in frames running is one text; a text in most of the
      frames (a channel's logo) is left out.
-  5. A few texts: a marker each, where it shows. Many (an opera's burned-in
-     subtitles): markers as from subtitles.
+  5. Texts less than 30 seconds apart are one marker (a song's lines, a
+     caption): titled by a caption in capitals if there's one, else by its
+     first line.
 
 Needs tesseract on the Stash server (Debian: apt install tesseract-ocr
 tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr
@@ -45,6 +48,7 @@ PAUSE = (2.0, 20.0)  # pauses looked after: at least this long (s), this much qu
 WEAK_PAUSE = (1.0, 15.0)  # … or, if there are none such, these
 BEFORE, AFTER = 5, 45  # seconds looked at before a pause's end and after it
 CHUNK = 60  # seconds read at a time (then saved)
+GROUP_GAP = 30  # seconds: texts closer than this are one marker
 MAX_WINDOWS = 80  # pauses looked after at most (the longest)
 import storage  # noqa: E402 — where the analyses are kept (Stash's generated folder)
 CACHE_DIR = storage.folder("frames")
@@ -237,6 +241,15 @@ def read_text(png, binary, langs):
     return text if re.search(r"[^\W\d_]{3,}", text) else ""
 
 
+REAL_WORD = re.compile(r"^[^\W\d_]{3,}[.,!?'’…:;]*$")
+
+
+def good_line(line):
+    words = [w.strip("\"“”„'’()[]«»") for w in line.split()]
+    real = [w for w in words if REAL_WORD.match(w)]
+    return len(real) >= 2 and len(real) >= len(words) / 2
+
+
 def similar(a, b):
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= 0.8
 
@@ -349,6 +362,12 @@ def texts(path, duration):
         _reused["n"] = reused
         return out
     read = cached(path, key, read_all)
+    # only lines with two real words or more (three letters each, most of the
+    # line): a channel's logo read as "NDRID", a backdrop's "Proms", bits of
+    # the picture ("=", "4") drop out — applied after reading, so changing it
+    # doesn't read the video again
+    read = [[at, "\n".join(lines)] for at, text in read
+            for lines in [[line for line in text.splitlines() if good_line(line)]] if lines]
     try:
         os.remove(partial)
     except OSError:
@@ -384,23 +403,25 @@ def result(scene, path, duration):
     cues, notes = texts(path, duration)
     if not cues:
         return {"markers": [], "notes": f"No text found in the picture. {notes}"}
-    minutes = (duration or cues[-1][1]) / 60
-    if len(cues) > max(20, 1.5 * minutes):
-        # many texts: subtitles burned into the picture (an opera, a film) —
-        # markers as from subtitles
-        flat = [(a, b, " ".join(text.split())) for a, b, text in cues]
-        markers, more = subtitles.markers_from(flat, duration)
-        return {"markers": markers, "notes": f"{notes} Many texts — read as subtitles: {more}"}
-    # a few: captions — "Sergej Rachmaninow / Klavierkonzert Nr. 3 op. 30 /
-    # I. Allegro ma non tanto" — a marker each, where it shows
+    # texts close together are one piece (a song's lines, a caption and what
+    # follows): a marker where the group begins, titled by a caption in
+    # capitals if there's one (a piece's name), else by its first line
+    groups = []
+    for a, b, text in cues:
+        if groups and a - groups[-1][-1][1] <= GROUP_GAP:
+            groups[-1].append((a, b, text))
+        else:
+            groups.append([(a, b, text)])
     markers = []
-    for i, (a, b, text) in enumerate(cues):
-        lines = [" ".join(line.split()) for line in text.splitlines() if line.strip()]
-        end = cues[i + 1][0] if i + 1 < len(cues) else duration
-        markers.append({"seconds": a, "end_seconds": end, "title": " – ".join(lines)})
-    return {"markers": markers, "notes": f"{notes} Each text is a marker where it shows; captions are "
-            "often shown a little after the piece begins — the check against the audio suggests the "
-            "start. Credits and place names become markers too: untick them."}
+    for i, g in enumerate(groups):
+        lines = [" ".join(line.split()) for _, _, text in g for line in text.splitlines() if line.strip()]
+        caps = [line for line in lines if sum(c.isupper() for c in line) > 0.6 * sum(c.isalpha() for c in line)]
+        title = (caps or lines)[0].strip(" .…\"“”„")
+        end = groups[i + 1][0][0] if i + 1 < len(groups) else duration
+        markers.append({"seconds": g[0][0], "end_seconds": end, "title": title})
+    return {"markers": markers, "notes": f"{notes} Texts less than {GROUP_GAP} s apart are one marker (a song's lines, "
+            "a caption): titled by a caption in capitals if there's one, else by its first line. Captions often come a "
+            "little after the piece begins — the check against the audio suggests the start."}
 
 
 # Stash ends a plugin's process when the browser's request ends (the dialog
@@ -415,7 +436,11 @@ def signature(path):
     st = os.stat(path)
     binary = tesseract()
     langs = languages(binary)[0] if binary else ""
-    return f"{path}|{st.st_size}|{st.st_mtime}|{logic()}|{langs}"
+    # the reading's fingerprint and the one of what's made of it afterwards
+    # (lines kept, groups): a change there makes the markers again from what
+    # was read, without reading again
+    after = hashlib.sha1("".join(inspect.getsource(f) for f in (texts, result, good_line)).encode()).hexdigest()[:12]
+    return f"{path}|{st.st_size}|{st.st_mtime}|{logic()}|{langs}|{after}"
 
 
 def lock_alive(progress_file):

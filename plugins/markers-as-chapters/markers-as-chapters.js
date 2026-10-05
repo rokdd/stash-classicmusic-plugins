@@ -1523,7 +1523,7 @@
       return bar;
     };
 
-    const columns = 7 + (checkAudio ? 1 : 0);
+    const columns = 5 + (checkAudio ? 1 : 0);
     // A gap between markers: a pause (light blue) or a stretch with music
     // but without a marker (amber) — a row of its own, always labelled.
     // How much of a stretch is quiet in the audio (0–1), or null before the
@@ -1575,29 +1575,34 @@
           first,
           el("td", {}),
           el("td", { style: { whiteSpace: "nowrap" } }, timeText),
-          el("td", { colSpan: 3, className: "text-muted" },
+          el("td", { className: "text-muted" },
             el("em", { textContent: r.piece == null && !pieces ? `not music — ${t.title || ""}` : "not music" })),
           checkAudio ? el("td", {}) : null,
           el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", textContent: "undo",
             onclick: () => undoNotMusic(r) })));
       }
       const check = el("input", { type: "checkbox", checked: r.pick, onchange: (ev) => { r.pick = ev.target.checked; render(); } });
-      const title = el("input", { type: "text", value: t.title, className: "form-control form-control-sm",
-        oninput: (ev) => { t.title = ev.target.value; t.edited = true; } });
-      const primary = el("input", { type: "text", value: t.primary_tag, placeholder: primaryAll.value, className: "form-control form-control-sm",
+      // the title wraps and grows with its text (long titles, narrow screens)
+      const grow = (box) => { box.style.height = "auto"; box.style.height = `${box.scrollHeight + 2}px`; };
+      const title = el("textarea", { rows: 1, value: t.title, className: "form-control form-control-sm mac-title",
+        oninput: (ev) => { t.title = ev.target.value.replace(/\n/g, " "); t.edited = true; grow(ev.target); } });
+      setTimeout(() => grow(title), 0);
+      const primary = el("input", { type: "text", value: t.primary_tag, placeholder: `Primary tag: ${primaryAll.value}`,
+        className: "form-control form-control-sm", title: "Primary tag",
         oninput: (ev) => { t.primary_tag = ev.target.value; } });
-      const tags = el("input", { type: "text", value: t.tags.join(", "), placeholder: "Tag, Tag …", className: "form-control form-control-sm",
+      const tags = el("input", { type: "text", value: t.tags.join(", "), placeholder: "Tags: Tag, Tag …", title: "Tags",
+        className: "form-control form-control-sm",
         oninput: (ev) => { t.tags = ev.target.value.split(",").map((x) => x.trim()).filter(Boolean); } });
       return el("tr", { style: { height: `${height}px`, ...(r.exists && !r.pick ? { opacity: 0.6 } : {}) } },
         first,
         el("td", {}, check),
-        el("td", { style: { whiteSpace: "nowrap" } }, timeText,
+        el("td", { className: "mac-time", style: { whiteSpace: "nowrap" } }, timeText,
           el("div", { className: "small text-muted", textContent: formatTime(e - s) }),
           r.exists ? el("div", { className: "small text-warning",
             textContent: r.pick ? "updates the marker that's here" : "already a marker here — tick to update it" }) : null),
-        el("td", {}, title),
-        el("td", {}, primary),
-        el("td", {}, tags),
+        // the title the whole width; primary tag and tags smaller beneath it
+        el("td", { className: "mac-fields" }, title,
+          el("div", { className: "mac-tag-fields" }, primary, tags)),
         checkAudio ? el("td", { className: "small" }, audioCell(r)) : null,
         el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", style: { whiteSpace: "nowrap" },
           textContent: "not music", title: pieces
@@ -1632,6 +1637,14 @@
         ".mac-preview { display: none; position: fixed; z-index: 3000; padding: 4px; background: #111; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; }",
         ".mac-preview-time { color: #fff; font-size: .8em; text-align: center; padding-top: 2px; }",
         ".mac-row-not-music { opacity: .6; }",
+        ".mac-table td.mac-fields { width: 100%; min-width: 14em; }",
+        ".mac-title { resize: none; overflow: hidden; line-height: 1.3; min-height: calc(1.5em + .5rem + 2px); }",
+        ".mac-tag-fields { display: flex; gap: 4px; margin-top: 3px; }",
+        ".mac-tag-fields input { font-size: .8em; height: auto; padding: 1px 6px; }",
+        ".mac-tag-fields input:first-child { flex: 0 1 40%; } .mac-tag-fields input:last-child { flex: 1 1 60%; }",
+        "@media (max-width: 700px) { .mac-table td, .mac-table th { padding-left: 3px !important; padding-right: 3px !important; }"
+          + " .mac-table td.mac-fields { min-width: 9em; } .mac-table td:last-child button { white-space: normal !important; }"
+          + " .mac-table td.small { max-width: 5.5em; font-size: .72em; } .mac-table .mac-time { white-space: normal !important; } }",
       ].join("\n");
       document.head.appendChild(style);
     }
@@ -1647,7 +1660,7 @@
       notice,
       el("table", { className: "table table-sm mac-table" },
         el("thead", {}, el("tr", {},
-          el("th", {}), el("th", {}, toggleAll), el("th", {}, "Time"), el("th", {}, "Title"), el("th", {}, "Primary tag"), el("th", {}, "Tags"),
+          el("th", {}), el("th", {}, toggleAll), el("th", {}, "Time"), el("th", {}, "Title · primary tag · tags"),
           checkAudio ? el("th", {}, "Audio") : null, el("th", {}))),
         tbody),
       el("p", { className: "small text-muted", textContent:
