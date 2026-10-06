@@ -333,6 +333,23 @@ Two things to know:
   the new file is still on disk; scan it in by hand. Setting an API key in
   the environment Stash runs in (`STASH_API_KEY`) avoids this.
 
+## Joining a recording's parts
+
+A VDR recording (the Linux video recorder) comes in parts —
+`<Title>/<date.time….rec>/001.vdr`, `002.vdr` … (newer VDRs: `00001.ts` …)
+— and Stash makes a scene of each part. On such a scene, **⋮ → Join
+Recording Parts…** (shown only there) lists the parts with their lengths and
+scenes, then:
+
+1. joins them end to end into one `.mkv` next to the recording's folder,
+   named after it ("The Last Night of the Proms 2010 2010-09-13.mkv") —
+   without re-encoding: the parts are one stream cut into pieces, nothing is
+   lost; a joined file shorter than its parts is thrown away again;
+2. scans it, and makes it this scene's primary file;
+3. (ticked by default) moves the other parts' scenes into this one: their
+   markers shifted by where their part starts in the joined file, their
+   files kept with the scene as further files — nothing is deleted.
+
 ## Repairing a corrupt file
 
 Choose **Repair File…** from the scene's ⋮ menu. A small dialog

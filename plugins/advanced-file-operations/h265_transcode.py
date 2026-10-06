@@ -1138,6 +1138,148 @@ def run_convert_finalize(client, args):
 
 
 # ---------------------------------------------------------------------------
+# Joining a recording's parts
+# ---------------------------------------------------------------------------
+#
+# A VDR recording comes in parts — <Title>/<date.time….rec>/001.vdr, 002.vdr …
+# (newer VDRs: 00001.ts …) — and Stash makes a scene of each. They're one
+# stream cut into pieces, so they're joined end to end (ffmpeg's concat
+# protocol) and only repackaged into one .mkv, without re-encoding. The new
+# file then becomes the first part's scene's primary file; the other parts'
+# scenes are moved into it — their markers shifted by where their part
+# starts — and their files stay with it as further files (nothing deleted).
+
+PART_RE = re.compile(r"^(\d{3,5})(\s*\(.*\))?\.(vdr|ts)$", re.I)
+
+
+def find_parts(path):
+    """The recording's parts, in order ([path] if it isn't one of several)."""
+    m = PART_RE.match(os.path.basename(path))
+    if not m:
+        return [path]
+    folder, suffix, ext = os.path.dirname(path), (m.group(2) or ""), m.group(3).lower()
+    parts = []
+    for name in os.listdir(folder):
+        n = PART_RE.match(name)
+        if n and (n.group(2) or "") == suffix and n.group(3).lower() == ext:
+            parts.append((int(n.group(1)), os.path.join(folder, name)))
+    return [p for _, p in sorted(parts)]
+
+
+def joined_name(path, scene):
+    """Where the joined file goes: next to the .rec folder, named after the
+    recording ("<Title> <date>.mkv") — else next to the parts."""
+    folder = os.path.dirname(path)
+    rec = re.match(r"^(\d{4}-\d{2}-\d{2})\.(\d{2})[.:](\d{2})\.[\d.-]+\.rec$", os.path.basename(folder))
+    if rec:
+        title = os.path.basename(os.path.dirname(folder))
+        title = re.sub(r"#([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), title).lstrip("%@").replace("_", " ").strip()
+        base = os.path.join(os.path.dirname(folder), f"{title} {rec.group(1)}")
+    else:
+        base = os.path.join(folder, f"{scene.get('title') or os.path.splitext(os.path.basename(path))[0]} (joined)")
+    base = re.sub(r"[\\:*?\"<>|]", "-", base)
+    out, n = base + ".mkv", 2
+    while os.path.exists(out):
+        out, n = f"{base} {n}.mkv", n + 1
+    return out
+
+
+def run_join_parts(client, args):
+    scene_id = args.get("scene_id")
+    scene = client.get_scene(scene_id) if scene_id else None
+    if not scene or not scene.get("files"):
+        write_plugin_output(error=f"No scene {scene_id} with a file")
+        return
+    parts = find_parts(scene["files"][0]["path"])
+    if len(parts) < 2:
+        write_plugin_output(error="This scene's file isn't one of several parts of a recording (001.vdr, 002.vdr … / 00001.ts …).")
+        return
+    durations = []
+    for path in parts:
+        try:
+            durations.append(get_duration_seconds(path))
+        except Exception as exc:  # noqa: BLE001
+            write_plugin_output(error=f"Couldn't read {os.path.basename(path)}: {exc}")
+            return
+    out = joined_name(parts[0], scene)
+    tmp = out + ".joining.mkv"
+    log_info(f"Joining {len(parts)} parts ({', '.join(os.path.basename(p) for p in parts)}) into {os.path.basename(out)}")
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-fflags", "+genpts+igndts", "-i", "concat:" + "|".join(parts),
+           "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-ignore_unknown", "-max_muxing_queue_size", "4096", tmp]
+    try:
+        run_ffmpeg_tracking_progress(cmd, duration=sum(durations), on_progress=lambda f: log_progress(0.95 * f))
+        joined = get_duration_seconds(tmp)
+    except Exception as exc:  # noqa: BLE001
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        write_plugin_output(error=f"Joining failed: {exc}")
+        return
+    if joined < 0.97 * sum(durations):
+        os.remove(tmp)
+        write_plugin_output(error=f"The joined file is shorter than its parts ({joined:.0f} s instead of {sum(durations):.0f} s) — left as it was.")
+        return
+    shutil.move(tmp, out)
+    # each part's scene and where its part starts in the joined file
+    offsets, start = [], 0.0
+    for path, length in zip(parts, durations):
+        offsets.append([client.find_scene_by_path(path), round(start, 3)])
+        start += length
+    client.rescan_paths([out])
+    move = str(args.get("move_scenes", "true")).lower() == "true"
+    description = f"Attach the joined {os.path.basename(out)}"
+    try:
+        client.run_plugin_task(description, {"mode": "join_finalize", "scene_id": str(scene["id"]), "new_path": out,
+                                             "parts": json.dumps(offsets), "move_scenes": "true" if move else "false"})
+    except Exception as exc:  # noqa: BLE001
+        log_warn(f"Couldn't queue attaching the joined file ({exc}); after the scan it's its own scene.")
+    log_progress(1.0)
+    summary = f"Joined {len(parts)} parts into {out} ({joined / 60:.0f} min). Queued: scan, then attaching it to {scene_label(scene)}."
+    log_info(summary)
+    write_plugin_output(output=summary)
+
+
+def run_join_finalize(client, args):
+    """After the scan: the joined file becomes the scene's primary file; the
+    other parts' scenes are moved into it, their markers shifted."""
+    scene = client.get_scene(args.get("scene_id"))
+    new_path = args.get("new_path")
+    if not scene:
+        write_plugin_output(error=f"Scene {args.get('scene_id')} no longer exists; {new_path} stays its own scene")
+        return
+    if not link_converted_file_to_scene(client, scene, new_path):
+        write_plugin_output(error="Couldn't attach the joined file — see the warnings above.")
+        return
+    try:
+        parts = json.loads(args.get("parts") or "[]")
+    except ValueError:
+        parts = []
+    moved, others = 0, []
+    if str(args.get("move_scenes", "true")).lower() == "true":
+        for part_scene, offset in parts:
+            if not part_scene or str(part_scene) == str(scene["id"]):
+                continue
+            other = client.call("query($id: ID!) { findScene(id: $id) { id scene_markers { id seconds end_seconds } } }",
+                                {"id": str(part_scene)}).get("findScene")
+            if not other:
+                continue
+            for m in other.get("scene_markers") or []:
+                values = {"id": m["id"], "scene_id": str(scene["id"]), "seconds": round(m["seconds"] + offset, 3)}
+                if m.get("end_seconds") is not None:
+                    values["end_seconds"] = round(m["end_seconds"] + offset, 3)
+                client.call("mutation($i: SceneMarkerUpdateInput!) { sceneMarkerUpdate(input: $i) { id } }", {"i": values})
+                moved += 1
+            others.append(str(part_scene))
+        if others:
+            client.call("mutation($i: SceneMergeInput!) { sceneMerge(input: $i) { id } }",
+                        {"i": {"source": others, "destination": str(scene["id"]), "play_history": True, "o_history": True}})
+    summary = (f"The joined file is now {scene_label(scene)}'s primary file"
+               + (f"; {len(others)} part scene(s) moved into it ({moved} marker(s) shifted to the joined file)" if others else "")
+               + ". The parts' files stay with the scene.")
+    log_info(summary)
+    write_plugin_output(output=summary)
+
+
+# ---------------------------------------------------------------------------
 # Splitting a scene at its markers
 # ---------------------------------------------------------------------------
 
@@ -1940,6 +2082,7 @@ def task_name(args):
         "convert_library": f"Convert Library to H265 ({'keep' if keep else 'replace'} originals)",
         "split_scene": "Split Scene at Markers",
         "repair_scene": "Repair Corrupt Scene File",
+        "join_parts": "Join a recording's parts",
     }.get(mode, mode.replace("_", " ").capitalize())
 
 
@@ -2026,6 +2169,14 @@ def _main(plugin_input):
 
     if mode == "split_finalize":
         run_split_finalize(client, args)
+        return
+
+    if mode == "join_parts":
+        run_join_parts(client, args)
+        return
+
+    if mode == "join_finalize":
+        run_join_finalize(client, args)
         return
 
     if mode == "convert_finalize":

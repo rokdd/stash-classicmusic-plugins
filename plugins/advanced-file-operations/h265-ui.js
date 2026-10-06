@@ -414,6 +414,120 @@
   // attached as the scene's primary file (original kept as a secondary
   // file) or replaces the original, and whether to keep the best audio.
   // Resolves to { keepOriginal, losslessAudio }, or null if cancelled.
+  // -- joining a recording's parts ---------------------------------------
+  //
+  // A VDR recording's parts (001.vdr, 002.vdr … / 00001.ts …) are each a
+  // scene of their own in Stash. The scene's file's folder is asked for its
+  // other parts (as Stash knows them), shown with their scenes and lengths.
+  const PART_RE = /^(\d{3,5})(\s*\(.*\))?\.(vdr|ts)$/i;
+
+  async function fetchParts(sceneId) {
+    const data = await callGQL("query($id: ID!) { findScene(id: $id) { files { path } } }", { id: sceneId });
+    const path = (((data.findScene || {}).files || [])[0] || {}).path || "";
+    const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    const folder = path.slice(0, slash + 1);
+    const own = PART_RE.exec(path.slice(slash + 1));
+    if (!own) return { path, parts: [] };
+    const found = await callGQL(
+      "query($p: String!) { findScenes(scene_filter: { path: { value: $p, modifier: INCLUDES } }, filter: { per_page: -1 }) { scenes { id title files { path duration } } } }",
+      { p: folder });
+    const parts = [];
+    ((found.findScenes || {}).scenes || []).forEach((sc) => (sc.files || []).forEach((f) => {
+      const name = f.path.slice(f.path.lastIndexOf("/") + 1);
+      const m = PART_RE.exec(name);
+      if (f.path.startsWith(folder) && !f.path.slice(folder.length).includes("/") && m
+          && (m[2] || "") === (own[2] || "") && m[3].toLowerCase() === own[3].toLowerCase()) {
+        parts.push({ n: Number(m[1]), name, scene: sc.id, duration: f.duration });
+      }
+    }));
+    parts.sort((a, b) => a.n - b.n);
+    return { path, parts };
+  }
+
+  function openJoinDialog(info, sceneId) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.style.cssText =
+        "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3000;" +
+        "display:flex;align-items:center;justify-content:center;font-family:sans-serif;";
+      const box = document.createElement("div");
+      box.style.cssText =
+        "background:#242730;color:#eee;padding:20px 24px;border-radius:8px;" +
+        "max-width:480px;width:92%;max-height:80vh;overflow:auto;box-shadow:0 4px 24px rgba(0,0,0,0.5);";
+      const heading = document.createElement("h5");
+      heading.style.marginTop = "0";
+      heading.textContent = "Join the recording's parts";
+      box.appendChild(heading);
+      const hint = document.createElement("p");
+      hint.style.cssText = "font-size:0.85em;opacity:0.75;margin-bottom:10px;";
+      const fmt = (s) => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+        return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(s % 60).padStart(2, "0")}`; };
+      const parts = info.parts;
+      if (parts.length < 2) {
+        hint.textContent = "This scene's file isn't one of several parts of a recording (VDR's 001.vdr, 002.vdr … " +
+          "or 00001.ts … in one folder) — or Stash doesn't know the other parts yet (scan the folder).";
+      } else {
+        hint.textContent = `${parts.length} parts, ${fmt(parts.reduce((t, p) => t + (p.duration || 0), 0))} together. ` +
+          "They're joined end to end into one .mkv next to the recording's folder — without re-encoding, nothing " +
+          "is lost. The new file becomes this scene's primary file.";
+      }
+      box.appendChild(hint);
+      const list = document.createElement("div");
+      list.style.cssText = "font-size:0.85em;margin-bottom:12px;";
+      parts.forEach((p) => {
+        const row = document.createElement("div");
+        row.textContent = `${p.name} — ${fmt(p.duration)} — scene ${p.scene}${String(p.scene) === String(sceneId) ? " (this one)" : ""}`;
+        list.appendChild(row);
+      });
+      box.appendChild(list);
+      const optionsWrap = document.createElement("div");
+      optionsWrap.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:18px;font-size:0.9em;";
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:flex-start;gap:8px;cursor:pointer;";
+      const moveCb = document.createElement("input");
+      moveCb.type = "checkbox";
+      moveCb.checked = true;
+      moveCb.style.marginTop = "3px";
+      label.appendChild(moveCb);
+      label.appendChild(document.createTextNode(
+        "Move the other parts' scenes into this one — their markers shifted to where their part starts in the " +
+        "joined file; their files stay with the scene as further files (nothing deleted)"));
+      optionsWrap.appendChild(label);
+      const bgCb = addBackgroundOption(optionsWrap);
+      box.appendChild(optionsWrap);
+      const btnRow = document.createElement("div");
+      btnRow.style.cssText = "display:flex;justify-content:flex-end;gap:8px;";
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "btn btn-secondary";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.addEventListener("click", () => { overlay.remove(); resolve(null); });
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = "btn btn-primary";
+      confirmBtn.textContent = "Join";
+      confirmBtn.disabled = parts.length < 2;
+      confirmBtn.addEventListener("click", () => { overlay.remove(); resolve({ moveScenes: moveCb.checked, background: bgCb.checked }); });
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(confirmBtn);
+      box.appendChild(btnRow);
+      overlay.appendChild(box);
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+      document.body.appendChild(overlay);
+    });
+  }
+
+  async function runJoinParts(sceneId, opts) {
+    const description = `Join the parts of ${await sceneLabel(sceneId)}`;
+    return runTask(`${description}${backgroundSuffix(opts)}`, {
+      background: opts.background ? "true" : "false",
+      task_description: description,
+      mode: "join_parts",
+      scene_id: String(sceneId),
+      move_scenes: opts.moveScenes ? "true" : "false",
+    });
+  }
+
   function openRepairDialog() {
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
@@ -827,7 +941,28 @@
       stashStyle,
     });
 
-    return [convertItem, splitItem, repairItem];
+    const joinItem = makeMenuItem({
+      id: "h265-join-btn",
+      label: "Join Recording Parts…",
+      title: "A recording in parts (VDR's 001.vdr, 002.vdr … / 00001.ts …): join them into one file, without re-encoding, and the parts' scenes into this one",
+      onClick: async () => {
+        closeMenu();
+        const info = await fetchParts(sceneId);
+        const choice = await openJoinDialog(info, sceneId);
+        if (!choice) {
+          return { cancelled: true };
+        }
+        return runJoinParts(sceneId, choice);
+      },
+      closeMenu,
+      stashStyle,
+    });
+    // only where it applies: a file named like a part
+    fetchParts(sceneId)
+      .then((info) => { if (info.parts.length < 2) joinItem.style.display = "none"; })
+      .catch(() => { joinItem.style.display = "none"; });
+
+    return [convertItem, splitItem, repairItem, joinItem];
   }
 
   // -- Stash's own scene operations menu ------------------------------------
