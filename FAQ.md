@@ -103,6 +103,16 @@ are usually saved the day they aired; the file's length decides between
 broadcasts of the same name. If the Mediathek page it gives is still
 there, **Classical Concerts** can then scrape the performers from it.
 
+Older than 2015 (the archive's start)? Two more places:
+- **Your video recorder's own data:** a VDR recording keeps the programme
+  guide's entry beside it (`info` / `info.vdr`), and its folder names
+  carry the title and broadcast start — **Scrape with… → Sidecar / local
+  files** reads them.
+- **The broadcaster's press release** (search for the title and year, e.g.
+  "Last Night of the Proms 2008 NDR Pressemitteilung"): paste its page as
+  the scene's URL and scrape with **Classical Concerts** — broadcast date,
+  channel, text, performers, programme.
+
 For concert films and productions sold on disc, **TMDB** and **TVDB**
 (API keys in Markers as Chapters' settings).
 

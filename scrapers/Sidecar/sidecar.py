@@ -12,11 +12,15 @@ Read, next to the video (the first file of the scene):
     cast and composers as performers, director, festival and venue as tags;
   - a Kodi / Jellyfin NFO: <video>.nfo, else movie.nfo / musicvideo.nfo in
     the folder — title, plot, date, studio, director, actors, genres, tags;
+  - a VDR recording (the Linux video recorder: <Title>/<date.time….rec>/
+    001.vdr or 00001.ts): its programme guide entry ("info" / "info.vdr":
+    title, subtitle, description, channel, broadcast start), else what the
+    folder names say (title, broadcast date);
   - yt-dlp's info file: <video>.info.json — title, description, date, the
     channel as studio, the page, tags;
   - a cover: <video>.jpg / .png / -poster.jpg / -thumb.jpg / -fanart.jpg,
     or poster / folder / cover / thumb .jpg / .png in the folder.
-Several of them: medici.tv first, then the NFO, then yt-dlp's file. Standard
+Several of them: medici.tv first, then the NFO, then VDR's, then yt-dlp's file. Standard
 library only.
 """
 
@@ -214,6 +218,62 @@ def from_info_json(video):
     }
 
 
+# -- a VDR recording ------------------------------------------------------------------------------
+#
+# VDR (the Linux video recorder) keeps a recording as
+#   <Title>/<YYYY-MM-DD.hh.mm.prio.life>.rec/001.vdr (002.vdr …)  — older VDRs
+#   <Title>/<YYYY-MM-DD.hh.mm.n-n>.rec/00001.ts                    — newer ones
+# with the programme guide's entry beside it in "info.vdr" / "info":
+#   C <channel id> <channel name>   E <event id> <start (Unix time)> <duration> …
+#   T <title>   S <subtitle>   D <description, "|" for new lines>
+# Without that file the folder names still say a lot: the title ("_" for
+# spaces, "#XX" for special characters, "%" before a cut recording) and the
+# broadcast's start in the .rec folder's name.
+
+REC = re.compile(r"^(\d{4}-\d{2}-\d{2})\.(\d{2})[.:](\d{2})\.[\d.-]+\.rec$")
+
+
+def vdr_name(name):
+    name = re.sub(r"#([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), name)
+    return name.lstrip("%@").replace("_", " ").replace("~", " – ").strip()
+
+
+def from_vdr(video):
+    folder = os.path.dirname(video)
+    rec = REC.match(os.path.basename(folder))
+    info = {}
+    for name in ("info", "info.vdr"):
+        path = os.path.join(folder, name)
+        if os.path.isfile(path):
+            with open(path, "rb") as f:
+                raw = f.read()
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                text = raw.decode("latin-1")  # older VDRs
+            for line in text.splitlines():
+                if len(line) > 2 and line[1] == " ":
+                    info.setdefault(line[0], line[2:].strip())
+            break
+    if not rec and not info:
+        return None
+    title = info.get("T") or (vdr_name(os.path.basename(os.path.dirname(folder))) if rec else None)
+    if title and info.get("S") and info["S"].lower() not in title.lower():
+        title = f"{title} – {info['S']}"
+    date = rec.group(1) if rec else None
+    event = (info.get("E") or "").split()
+    if len(event) >= 2 and event[1].isdigit():
+        import datetime
+        date = datetime.datetime.fromtimestamp(int(event[1])).date().isoformat()
+    channel = None
+    if info.get("C"):
+        parts = info["C"].split(None, 1)
+        channel = parts[1].split(";")[0].strip() if len(parts) > 1 else None  # "NDR FS NDS;ARD": without the provider
+    details = (info.get("D") or "").replace("|", "\n").strip() or None
+    return {"title": title, "details": details, "date": date, "studio": channel, "director": None,
+            "performers": [], "tags": [], "urls": [], "image_url": None}
+
+
 # -- the cover ------------------------------------------------------------------------------------
 
 def cover(video):
@@ -269,13 +329,18 @@ def main():
         if found:
             parts.append(found)
             sources.append(os.path.basename(nfo))
+    recording = from_vdr(video)
+    if recording:
+        parts.append(recording)
+        sources.append("VDR recording" + (" (programme guide)" if recording.get("details") or recording.get("studio") else
+                                         " (folder names)"))
     info = from_info_json(video)
     if info:
         parts.append(info)
         sources.append("yt-dlp info")
     image = cover(video)
     if not parts and not image:
-        raise SystemExit("No medici.tv JSON, NFO, .info.json or cover image next to the video.")
+        raise SystemExit("No medici.tv JSON, NFO, VDR recording info, .info.json or cover image next to the video.")
     s = merge(parts) if parts else {}
     result = {}
     if s.get("title"):

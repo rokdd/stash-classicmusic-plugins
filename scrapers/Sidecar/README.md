@@ -24,10 +24,11 @@ environment Stash runs in.
 |---|---|
 | medici.tv's JSON — `<video>.json`, `<video>.medici.json`, or any medici.tv JSON in the folder if it's the only one or its name matches the video's | title (with the festival), description, date, cast and composers as performers, director, festival and venue as tags |
 | A Kodi / Jellyfin NFO — `<video>.nfo`, else `movie.nfo` / `musicvideo.nfo` | title, plot, date, studio, director, actors (and artist, composer) as performers, genres and tags |
+| a **VDR** recording — `<Title>/<date.time….rec>/001.vdr` or `00001.ts` | from VDR's programme guide entry beside it (`info` / `info.vdr`): title and subtitle, description, broadcast start, channel as studio; without it, the folder names: the title and the broadcast date |
 | yt-dlp's info file — `<video>.info.json` | title, description, date, the channel as studio, the page's URL, tags |
 | A cover — `<video>.jpg` / `.png` / `-poster.jpg` / `-thumb.jpg` / `-fanart.jpg`, or `poster` / `folder` / `cover` / `thumb` in the folder | the scene's cover |
 
-When there are several: medici.tv first, then the NFO, then yt-dlp's file —
+When there are several: medici.tv first, then the NFO, then VDR's, then yt-dlp's file —
 field by field; performers, tags and URLs come from all of them, and the
 scene's own URLs stay.
 

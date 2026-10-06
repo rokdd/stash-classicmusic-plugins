@@ -17,6 +17,15 @@ Paste the page of the broadcast into the scene's URL field and scrape it
 (**Edit → URL → scrape**), or **Scrape with… → Classical Concerts** for a
 scene that already has such a URL.
 
+**Press releases** of the broadcasters (NDR, Das Erste, ZDF, WDR, BR, SWR,
+MDR, hr, ARTE, ORF, SRF, presseportal.de) — often all that's left of an old
+broadcast: paste the release's page as the scene's URL. Read: the title
+(what's in quotes in the headline, "The Last Night of the Proms 2008"), the
+text, the broadcast date and channel from its "Sendetermin: Sonnabend,
+13. September, 22.10 Uhr, NDR Fernsehen" (the year from the release), and
+the performers and composers named in it. A link copied from Google's
+results (google.com/url?…) works too.
+
 ## What's filled in
 
 | Field | |

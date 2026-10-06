@@ -120,7 +120,8 @@ def ensemble_like(text):
 def from_text(text):
     """(performers, composers) named in a programme text."""
     performers, composers = [], []
-    for raw in re.split(r"\n|\s\|\s|;\s", text or ""):
+    # lines, parts after "; " and sentences ("… Norrington. Mitwirkende sind …")
+    for raw in re.split(r"\n|\s\|\s|;\s|(?<=[a-zäöüß])\.\s+(?=[A-ZÄÖÜ])", text or ""):
         line = raw.strip(" •·-–—*\t")
         if not line or len(line) > 120:
             continue
@@ -134,11 +135,16 @@ def from_text(text):
         if m:
             performers += [n.strip() for n in re.split(r",| und | and ", m.group(1)) if name_like(n.strip()) or ensemble_like(n.strip())]
             continue
-        # "Name, Dirigent" / "Name, Klavier"
+        # "Name, Dirigent" / "Name, Klavier" — also after a lead-in
+        # ("Mitwirkende in diesem Jahr sind Bryn Terfel, Bassbariton")
         m = re.match(r"^(.+?),\s*(.+)$", line)
-        if m and name_like(m.group(1)) and ROLE_RE.match(m.group(2)):
-            performers.append(m.group(1))
-            continue
+        if m and ROLE_RE.match(m.group(2)):
+            words = m.group(1).split()
+            name = next((" ".join(words[-n:]) for n in (4, 3, 2) if len(words) >= n and name_like(" ".join(words[-n:]))
+                         and (len(words) == n or words[-n - 1][:1].islower())), None)
+            if name:
+                performers.append(name)
+                continue
         # "Name (Klavier)"
         m = re.match(r"^(.+?)\s*\((.+)\)$", line)
         if m and name_like(m.group(1)) and ROLE_RE.match(m.group(2)):
@@ -149,7 +155,24 @@ def from_text(text):
         first = re.sub(r"\s*\(.*$", "", first).strip()  # "Vocalconsort Berlin (Einstudierung: …)"
         if ensemble_like(first):
             performers.append(first)
+    # in running text: "unter der Leitung von Sir Roger Norrington",
+    # "Es spielt das BBC Symphony Orchestra", "mit dem hr-Sinfonieorchester"
+    flat = re.sub(r"\s+", " ", text or "")
+    for m in LED_BY.finditer(flat):
+        performers.append(m.group(1))
+    for m in ENSEMBLE_IN_TEXT.finditer(flat):
+        if len(m.group(1).split()) >= 2:  # "the Orchestra" alone is no name
+            performers.append(m.group(1))
     return performers, composers
+
+
+NAME_WORD = r"(?:[A-Z]\.|[A-ZÄÖÜÉ][\w'’-]+|van|von|de|der|den|di|da|du|le|la|del|zu)"  # no full stop: a sentence ends
+LED_BY = re.compile(rf"(?:unter (?:der )?(?:musikalischen )?Leitung von|dirigiert von|Dirigent(?:in)? ist|conducted by|"
+                    rf"under the baton of)\s+((?:Sir |Dame )?[A-ZÄÖÜÉ][\w'’-]+(?:\s+{NAME_WORD}){{1,3}})")
+ENSEMBLE_IN_TEXT = re.compile(r"(?:spielt das|spielen die|spielt die|mit dem|mit der|mit den|with the|by the|"
+                              r"das|der|die|the)\s+((?:[A-ZÄÖÜ][\w-]*\s+){0,4}(?:Symphony Orchestra|Philharmonic Orchestra|"
+                              r"Chamber Orchestra|Orchestra|Orchester|Sinfonieorchester|Symphonieorchester|Philharmoniker|"
+                              r"Philharmonic|Symphony Chorus|Chorus|Choir|Chor|Singers|Ensemble)\b)")
 
 
 def unique(names):
@@ -502,6 +525,76 @@ def json_beside(scene_id):
 
 # -- Stash -------------------------------------------------------------------------------------------
 
+# -- a broadcaster's press release ------------------------------------------------------------
+#
+# Often the only thing left of an old broadcast (NDR's "Live aus London …
+# The Last Night of the Proms 2008"): the broadcast date and channel
+# ("Sendetermin: Sonnabend, 13. September, 22.10 Uhr, NDR Fernsehen"), the
+# performers and the programme.
+
+PRESS = re.compile(r"/presse|presseportal|pressemitteilung|pressemeldung|/press/|/medien/medienmitteilung", re.I)
+CHANNELS = re.compile(r"(?:Das Erste|NDR|WDR|BR|SWR|MDR|hr|rbb|SR|Radio Bremen|ZDF|3sat|ARTE|arte|ORF\s?\w*|SRF\s?\w*|"
+                      r"ONE|ZDFneo|ZDFinfo|tagesschau24|ARD[- ]alpha|Phoenix|KiKA|Deutschlandfunk\w*|NDR Kultur|WDR 3|"
+                      r"BR-KLASSIK|SWR2|MDR KLASSIK|hr2|rbbKultur)(?:\s+Fernsehen|\s+Kultur|\s+Klassik)?\b")
+
+
+def press(url):
+    page = fetch(url)
+
+    def meta(prop):
+        m = re.search(rf'<meta[^>]+(?:property|name)="{re.escape(prop)}"[^>]+content="([^"]*)"', page)
+        return html.unescape(m.group(1)) if m else ""
+    article = {}
+    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', page, re.S):
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue
+        for item in data if isinstance(data, list) else data.get("@graph", [data]):
+            if isinstance(item, dict) and item.get("@type") in ("Article", "NewsArticle", "PressRelease", "BlogPosting"):
+                article = item
+    headline = html.unescape(article.get("headline") or "") or meta("og:title")
+    headline = re.sub(r"\s*[|–-]\s*[\w.]+\.(?:de|at|ch|com)$", "", headline).strip()
+    published = iso_date(article.get("datePublished") or meta("date") or meta("article:published_time"))
+    # the title: what's in quotes ("…: "The Last Night of the Proms 2008"") — else all of it
+    quoted = re.findall(r'[„"“»]([^"“”«»]{6,})["”“«]', headline)
+    title = quoted[-1].strip() if quoted else headline
+    # the text: from the headline (its last appearance: the article, not the
+    # page's title) to where the page goes on with other things
+    text = plain(page)
+    start = text.rfind(headline) if headline else -1
+    body = text[start + len(headline):] if start >= 0 else text
+    stop = re.search(r"\n(?:Beitrag teilen|Teilen|Mehr zum Thema|Weitere Pressemitteilungen|Zum Seitenanfang|Kontakt|"
+                     r"Pressekontakt|Share|©)\b", body)
+    body = body[:stop.start()] if stop else body[:5000]
+    lines = [line for line in body.splitlines()
+             if line.strip() and not re.match(r"^(Stand:|\d{1,2}\. \w+ \d{4}\s*/\s*\w+$)", line.strip())]
+    details = "\n".join(lines).strip()
+    # broadcast date and channel: "Sendetermin: Sonnabend, 13. September, 22.10 Uhr, NDR Fernsehen"
+    date, studio = None, None
+    when = re.search(r"(?:Sende(?:termin|zeit|datum)|Ausstrahlung|Erstausstrahlung|Sendung|TV-Termin)\b[^\n]*", details, re.I)
+    if when:
+        line = when.group(0)
+        m = re.search(rf"(\d{{1,2}})\.\s*({_MONTH})(?:\s+(\d{{4}}))?", line, re.I) or \
+            re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{2,4})?", line)
+        if m:
+            day, month, year = m.groups()
+            month = MONTHS.get(month.lower()) if not month.isdigit() else int(month)
+            year = int(year) + (2000 if year and len(year) == 2 else 0) if year else None
+            if not year and published:
+                year = int(published[:4]) + (1 if month < int(published[5:7]) else 0)  # announced in December for January
+            if year and month:
+                date = f"{year}-{int(month):02d}-{int(day):02d}"
+        channel = CHANNELS.findall(line)
+        studio = channel[-1] if channel else None
+    date = date or concert_date(details) or published
+    if not studio:
+        site = (meta("og:site_name") or urllib.parse.urlparse(url).netloc).replace("www.", "")
+        studio = re.sub(r"\.(de|at|ch|com)$", "", site).upper() if site else None
+    performers, composers = from_text(details)
+    return scene(title, details=details, date=date, studio=studio, performers=performers + composers, urls=[url])
+
+
 SOURCES = [
     ("arte.tv", arte),
     ("orf.at", orf),
@@ -513,7 +606,21 @@ SOURCES = [
 ]
 
 
+def unwrap(url):
+    """A link copied from Google's results (google.com/url?…&url=<the page>)
+    → the page itself."""
+    if re.search(r"//(www\.)?google\.[a-z.]+/url\?", url or ""):
+        target = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("url") or \
+            urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("q")
+        if target:
+            return target[0]
+    return url
+
+
 def scrape(url):
+    url = unwrap(url)
+    if PRESS.search(url):
+        return press(url)
     for domain, handler in SOURCES:
         if domain in url:
             return handler(url)
