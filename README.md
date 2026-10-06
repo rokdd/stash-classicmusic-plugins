@@ -22,6 +22,7 @@ And scrapers:
 | [MediathekView](scrapers/MediathekView/) | Scenes from the German-language public media libraries (ARD, ZDF, 3sat, ARTE, ORF, SRF …) — what's online now, and from MediathekView's archive every broadcast since 2015; no key needed |
 | [TMDB](scrapers/TMDB/) | Scenes from The Movie Database — concert films, opera and ballet productions, documentaries, series episodes (API key) |
 | [TVDB](scrapers/TVDB/) | Scenes from TheTVDB — series episodes, recurring broadcasts, films (API key) |
+| [TV & concert series](scrapers/TVSeries/) | The series a recording belongs to — a recurring concert, festival, concert or TV series — from Wikipedia and Wikidata, as the scene's group (synopsis, picture, genres) |
 
 **How do they work together?** The [FAQ](FAQ.md) goes through typical
 use cases (a recorded concert, a medici.tv download, composers in marker

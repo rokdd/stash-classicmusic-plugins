@@ -16,6 +16,7 @@ plugin or scraper does what; the details are in their READMEs.
 | [Sidecar / local files](scrapers/Sidecar/) (scene scraper) | the files next to the video: medici.tv JSON, NFO, yt-dlp info, cover |
 | [MediathekView](scrapers/MediathekView/) (scene scraper) | German-language public broadcasts — online now and, from the archive, since 2015 |
 | [TMDB](scrapers/TMDB/), [TVDB](scrapers/TVDB/) (scene scrapers) | films, productions on disc, series episodes (API keys) |
+| [TV & concert series](scrapers/TVSeries/) (scene / group scraper) | the series a recording belongs to (New Year's Concert, Proms, a festival) as a group, from Wikipedia |
 
 Plugins: Settings → Plugins, source `https://rokdd.github.io/stash-classicmusic-plugins/main/index.yml`.
 Scrapers: Settings → Metadata Providers → Available Scrapers, source

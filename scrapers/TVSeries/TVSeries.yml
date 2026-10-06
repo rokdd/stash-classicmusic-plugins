@@ -1,0 +1,31 @@
+name: TV & concert series (Wikipedia)
+# The series a recording belongs to — a TV series, a recurring concert
+# (New Year's Concert, New Year's Eve concert), a festival or concert series
+# — from Wikipedia and Wikidata: the scene goes into a group of that name
+# (synopsis, picture, the article), the series' genres become tags.
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - tv_series.py
+    - fragment
+sceneByName:
+  action: script
+  script:
+    - python
+    - tv_series.py
+    - name
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - tv_series.py
+    - query
+groupByURL:
+  - action: script
+    url:
+      - wikipedia.org/wiki/
+    script:
+      - python
+      - tv_series.py
+      - group
