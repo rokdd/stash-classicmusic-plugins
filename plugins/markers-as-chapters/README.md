@@ -453,6 +453,46 @@ scraper suggests (ARTE Concert's composers) is replaced by the matching
 tag. The review dialog says how many markers got tags this way; change
 them there as needed.
 
+## The chapter editor
+
+**Scrape markers… → Chapter editor** — one panel for a scene's chapters:
+
+- **All sources in one table:** the markers in Stash, and with **Add from**
+  whatever a scraper finds (the file's chapters, a chapter file, ARTE,
+  subtitles, text in the picture, pasted text …). A chapter at the same
+  time (±5 s) gets it as an alternative — take its **title**, **times** or
+  **tags** with one click — the rest come in as new chapters.
+- **Tools for all chapters:** **Clean titles & composers** (composers named
+  in the titles become tags, the titles lose their names), **Extend to the
+  next pause** (each chapter ends where the audio's next pause begins, never
+  past the next chapter), **Starts onto the pauses**, **Shift all**, and a
+  new chapter **at the player**'s position.
+- **Overview:** the whole scene as a bar — chapters in Stash blue, changed
+  orange, new green, to be deleted red, the pauses light blue; click one to
+  get to its row.
+- **Columns** (time, title, primary tag, tags, source, audio) can be hidden;
+  remembered in the browser.
+- **Save** creates, updates and deletes in one go; tags that don't exist
+  yet are asked about first, as when importing.
+
+## Composers of scene and chapters in step
+
+On the scene a composer is a **performer**, on a chapter a **tag** (markers
+have no performers): the composer tags under **Composers** (the first of
+**Fill in tags under**), each named like its performer — the tags Tag
+Improvements keeps. Kept in step when a scene or a marker is saved (and by
+**Settings → Tasks → Composers of scenes and chapters in step**):
+
+- a chapter's composer is added to the scene's performers;
+- when the scene has exactly one composer, chapters without one get its tag;
+  when the scene's composer changes, the chapters that got it follow;
+- what you take away yourself stays away: a composer removed from a
+  chapter isn't added to it again, a performer removed from the scene isn't
+  added to the scene again (remembered in `.composer-sync.json` in the
+  plugin's folder).
+
+Switched off by **Don't keep composers of scene and chapters in step**.
+
 ## Markers and the scene's files
 
 A marker's time belongs to the file it was set on — Stash doesn't keep

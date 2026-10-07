@@ -976,6 +976,22 @@ def main():
             except OSError:
                 out["processes"] = None
             output = out
+        elif mode == "composer_sync_all":
+            import composer_sync
+            output = composer_sync.sync_all(gql, settings, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))
+        elif mode == "composer_sync_scene":
+            import composer_sync
+            output = composer_sync.sync_scene(gql, settings, args.get("scene_id"))
+        elif mode == "marker_suggest":
+            # titles cleaned and composers found, for chapters not saved yet
+            # (the chapter editor): [{title, tags}] → the same with
+            # "title_stripped" and the tags found added
+            items = json.loads(args.get("markers") or "[]")
+            for m in items:
+                m["tags"] = list(m.get("tags") or [])
+                m["title"] = m.get("title") or ""
+            suggest_tags(gql, items, settings)
+            output = items
         elif mode == "marker_progress":
             os.environ.update(env_extra)
             output = scrape_progress(args)
@@ -994,7 +1010,13 @@ def main():
                 marker_files.record({i: (args.get("file_id"), s) for i, s in zip(ids, seconds)})
                 output = {"recorded": len(ids)}
             elif mode == "marker_hook":
-                marker_files.hook(gql, args.get("hookContext") or {})
+                context = args.get("hookContext") or {}
+                if context.get("type", "").startswith("SceneMarker."):
+                    marker_files.hook(gql, context)
+                # composers of scene and chapters in step (unless switched off)
+                if not settings.get("composerSyncOff"):
+                    import composer_sync
+                    composer_sync.hook(gql, settings, context, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))
                 output = None
             else:
                 output = marker_files.remember_all(gql, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))

@@ -18,6 +18,7 @@ plugins/advanced-file-operations/task-history.json
 .frames-cache/
 .progress/
 .marker-files.json
+.composer-sync.json
 
 # Python bytecode
 __pycache__/

@@ -1,6 +1,6 @@
 name: Markers as Chapters
 description: "Imports a scene's chapters as markers, the way Stash scrapes scenes: chapters in the video file or in a file next to it, online chapters (YouTube, ZDF … via yt-dlp; arte.tv / ARTE Concert; ORF ON), a pasted tracklist or text file, or a programme without times placed at the pauses between movements. Every import is checked against the pauses in the audio (shift or snap the markers onto them) in a review dialog before anything is created. Add your own marker scrapers as .yaml files."
-version: 0.0.53
+version: 0.0.54
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/markers-as-chapters
 exec:
   - python
@@ -19,13 +19,18 @@ tasks:
     description: "For every scene with one file: its markers were made on that file. Run it once — before merging scenes or adding files — so that afterwards Markers as Chapters knows which markers belong to which file and can line them up with the primary file. New markers are remembered by themselves."
     defaultArgs:
       mode: marker_remember_all
+  - name: Composers of scenes and chapters in step (all scenes)
+    description: "For every scene with markers: a chapter's composer (a tag under Composers) is added to the scene's performers; when the scene has exactly one composer, chapters without a composer get its tag (and follow when it changes). What you removed yourself — from a chapter or from the scene — isn't added again. Runs by itself when a scene or marker is saved."
+    defaultArgs:
+      mode: composer_sync_all
 hooks:
-  - name: Remember a marker's file
-    description: When a marker is created or its time changed, remember the scene's primary file as the file it was set on — so after merging scenes or changing the primary file its time can be lined up with the new primary file.
+  - name: Remember a marker's file, keep composers in step
+    description: When a marker is created or its time changed, remember the scene's primary file as the file it was set on — so after merging scenes or changing the primary file its time can be lined up with the new primary file. And when a scene or a marker is saved, keep the composers of scene and chapters in step (see the task) unless switched off in the settings.
     triggeredBy:
       - SceneMarker.Create.Post
       - SceneMarker.Update.Post
       - SceneMarker.Destroy.Post
+      - Scene.Update.Post
     defaultArgs:
       mode: marker_hook
 settings:
@@ -85,6 +90,10 @@ settings:
     displayName: TVDB language
     description: "For the TVDB scraper: three letters, e.g. deu, eng. Empty: deu."
     type: STRING
+  composerSyncOff:
+    displayName: Don't keep composers of scene and chapters in step
+    description: "Off (the default): when a scene or a marker is saved, a chapter's composer is added to the scene's performers, and chapters without a composer get the scene's composer (if it has exactly one). On: neither."
+    type: BOOLEAN
   tesseractPath:
     displayName: tesseract
     description: "For Text in the picture (OCR): the path of tesseract on the Stash server. Empty: tesseract on the PATH (Debian / Ubuntu: apt install tesseract-ocr tesseract-ocr-deu; Stash's Docker image: apk add tesseract-ocr tesseract-ocr-data-deu)."
