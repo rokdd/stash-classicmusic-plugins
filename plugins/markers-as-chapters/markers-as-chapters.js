@@ -131,8 +131,19 @@
   }
 
   function applyView() {
+    try {
+      applyViewInner();
+    } catch (err) {
+      console.warn("[Markers as Chapters] chapter view:", err); // never into Stash's own page
+    }
+  }
+
+  function applyViewInner() {
     const panel = findMarkersPanel();
     if (!panel || !sceneId()) return;
+    // only while the Markers tab is shown (phones keep every tab in the
+    // page, hidden): nothing is put into a tab nobody looks at
+    if (!panel.offsetParent && panel.getClientRects().length === 0) return;
     const create = Array.from(panel.querySelectorAll("button.btn-primary")).find(
       (b) => !b.closest("form") && !b.closest("#marker-symbols-timeline") && !b.closest("#mac-inline-editor"));
     const bar = create ? create.parentElement : null;
@@ -183,6 +194,14 @@
   }
 
   function placeButton() {
+    try {
+      placeButtonInner();
+    } catch (err) {
+      console.warn("[Markers as Chapters] button:", err);
+    }
+  }
+
+  function placeButtonInner() {
     if (!sceneId()) return;
     if (!document.getElementById("mac-view-style")) {
       document.head.appendChild(el("style", { id: "mac-view-style", textContent: ".mac-hidden { display: none !important; }" }));
@@ -2772,7 +2791,8 @@
       headers: { "Content-Type": "application/json" }, body }).catch(() => {});
   }
 
-  setInterval(() => {
+  setInterval(() => { try { trackPlay(); } catch (e) { /* never into Stash's page */ } }, 2000);
+  function trackPlay() {
     const id = sceneId();
     if (id !== tracker.scene) {
       flushPlays();
@@ -2802,7 +2822,7 @@
       tracker.counted.add(chapter.id);
       p.play = true;
     }
-  }, 2000);
+  }
   setInterval(() => flushPlays(), 30000);
   window.addEventListener("pagehide", () => flushPlays(true));
 
