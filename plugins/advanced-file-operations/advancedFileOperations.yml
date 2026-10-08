@@ -1,6 +1,6 @@
 name: Scene Improvements
 description: "Video tools for Stash — per scene: H.265 conversion, split at markers, and repair (corrupt files and files that stream badly). On a File Tools page: a torrent check (which videos in your .torrent files are already in the library, with match certainty) and downloads with yt-dlp into your library."
-version: 0.0.20
+version: 0.0.21
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/advanced-file-operations
 exec:
   - python

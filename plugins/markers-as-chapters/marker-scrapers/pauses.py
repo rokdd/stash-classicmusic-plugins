@@ -118,13 +118,32 @@ def check(scene):
     min_pause, drop = CHECK_LEVEL
     threshold = threshold_for(levels, drop)
     loud = [t for t, db in levels if db >= threshold]
-    pauses = [p for p in find_pauses(levels, min_pause, drop)
+    pauses = [p for p in real_pauses(levels, find_pauses(levels, min_pause, drop))
               if loud and p[0] > loud[0] and p[1] < loud[-1] + WINDOW]
     return {
         "music_start": round(loud[0], 1) if loud else 0.0,
         "music_end": round(loud[-1] + WINDOW, 1) if loud else round(end, 1),
         "pauses": [[round(a, 1), round(b, 1)] for a, b in pauses],
     }
+
+
+def real_pauses(levels, found):
+    """The pauses that are pauses — between pieces or movements — not a
+    quiet passage of the music (a pianissimo in a slow movement): at least
+    2 s and 20 dB quieter than the music, or 6 s and 15 dB, or 15 s at all.
+    Pauses less than 3 s apart are one."""
+    music = percentile([db for _t, db in levels], 0.75)
+    kept = []
+    for a, b in found:
+        inside = [db for t, db in levels if a <= t < b]
+        depth = music - (sum(inside) / len(inside) if inside else music)
+        length = b - a
+        if (length >= 2 and depth >= 20) or (length >= 6 and depth >= 15) or length >= 15:
+            if kept and a - kept[-1][1] < 3:
+                kept[-1] = (kept[-1][0], b)
+            else:
+                kept.append((a, b))
+    return kept
 
 
 def percentile(values, p):

@@ -170,10 +170,14 @@ def cue_offsets(cue_path, markers):
     return ""
 
 
+VIDEO_EXT = (".mp4", ".mkv", ".m4v", ".avi", ".mpg", ".mpeg", ".ts", ".vdr", ".webm", ".mov", ".wmv", ".flv")
+
+
 def json_in_folder(video):
     """(markers, file name) from a JSON with chapters in the video's folder:
-    the only one, or the one whose name shares the most words with the
-    video's (two at least). None if there's none, or no clear one."""
+    the only one if the folder holds no other video, else the one whose
+    name or title shares the most words with the video's (two at least).
+    None if there's none, or no clear one."""
     from json_markers import parse_json
     folder = os.path.dirname(video)
     words = lambda t: {w for w in re.split(r"[^a-z0-9]+", t.lower()) if len(w) > 2}  # noqa: E731
@@ -191,10 +195,21 @@ def json_in_folder(video):
             parsed = None
         if parsed and parsed[0]:
             found.append((name, parsed[0]))
-    if len(found) == 1:
+    # the only one: only when the folder is this video's alone — in a folder
+    # of many videos it may be another's (a medici.tv JSON of another concert)
+    videos = [n for n in names if n.lower().endswith(VIDEO_EXT)]
+    if len(found) == 1 and len(videos) <= 1:
         return found[0][1], found[0][0]
     video_words = words(os.path.splitext(os.path.basename(video))[0])
-    scored = sorted(((len(video_words & words(n)), m, n) for n, m in found), key=lambda x: -x[0])
+
+    def their_words(name):
+        try:
+            data = json.loads(read(os.path.join(folder, name)))
+        except (ValueError, OSError):
+            data = {}
+        extra = " ".join(str(data.get(k) or "") for k in ("title", "slug", "name")) if isinstance(data, dict) else ""
+        return words(name) | words(extra)
+    scored = sorted(((len(video_words & their_words(n)), m, n) for n, m in found), key=lambda x: -x[0])
     if scored and scored[0][0] >= 2 and (len(scored) == 1 or scored[0][0] > scored[1][0]):
         return scored[0][1], scored[0][2]
     return None

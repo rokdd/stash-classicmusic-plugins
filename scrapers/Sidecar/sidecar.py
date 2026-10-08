@@ -98,7 +98,10 @@ def medici_file(video):
             data = load_json(os.path.join(folder, name))
             if is_medici(data):
                 found.append((name, data))
-    if len(found) == 1:
+    # the only one: only when the folder is this video's alone (a folder of
+    # many videos: it may be another concert's)
+    videos = [n for n in os.listdir(folder) if n.lower().endswith((".mp4", ".mkv", ".m4v", ".avi", ".mpg", ".mpeg", ".ts", ".vdr", ".webm", ".mov", ".wmv", ".flv"))]
+    if len(found) == 1 and len(videos) <= 1:
         return found[0][1]
     video_words = words(os.path.basename(stem))
     scored = sorted(((len(video_words & (words(n) | words(d.get("title")) | words(d.get("slug")))), d) for n, d in found),

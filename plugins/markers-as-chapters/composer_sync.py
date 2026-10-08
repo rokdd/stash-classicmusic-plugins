@@ -22,6 +22,7 @@ ids]}}, "scenes": {id: {"auto": [performer ids], "removed": [performer ids]}}}.
 
 import json
 import os
+import re
 import threading
 import unicodedata
 
@@ -31,7 +32,7 @@ _lock = threading.Lock()
 
 SCENE = """query($id: ID!) { findScene(id: $id) { id
   performers { id name alias_list }
-  scene_markers { id tags { id name } } } }"""
+  scene_markers { id title tags { id name } } } }"""
 
 
 def plain(text):
@@ -75,6 +76,23 @@ def composer_tags(gql, settings):
     tags = gql("query($ids: [ID!]) { findTags(tag_filter: { parents: { value: $ids, modifier: INCLUDES, depth: -1 } }, "
                "filter: { per_page: -1 }) { tags { id name aliases } } }", {"ids": [parent[0]["id"]]})["findTags"]["tags"]
     return {str(t["id"]): t for t in tags}
+
+
+NAMED = re.compile(r"^\s*((?:[A-ZÄÖÜ][\w.'’-]+\s+){0,3}[A-ZÄÖÜ][\w'’-]+)\s*(?::|\s[–-])\s")
+
+
+def names_someone_else(title, tag):
+    """The chapter's title begins with someone's name ("Anton Bruckner:
+    Symphonie Nr. 9", "Elgar – Nimrod") who isn't the composer of `tag`:
+    then the scene's composer isn't this chapter's."""
+    m = NAMED.match(title or "")
+    if not m:
+        return False
+    named = plain(m.group(1))
+    for name in names_of_tag(tag):
+        if named in name or name in named or named.split()[-1] == name.split()[-1]:
+            return False
+    return True
 
 
 def names_of_tag(tag):
@@ -163,7 +181,7 @@ def sync_scene(gql, settings, scene_id, log=lambda line: None, tags=None):
                         mrec["removed"].append(tid)
             composers_here = [tid for tid in have if tid in tags]
             new = None
-            if not composers_here and only and only not in mrec["removed"]:
+            if not composers_here and only and only not in mrec["removed"] and not names_someone_else(m.get("title"), tags[only]):
                 new = have + [only]
                 mrec["auto"].append(only)
                 changes["markers_tagged"] += 1

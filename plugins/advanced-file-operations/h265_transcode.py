@@ -1184,6 +1184,21 @@ def joined_name(path, scene):
     return out
 
 
+def joined_before(path, scene, total):
+    """A joined file of these parts made before (a join whose attaching
+    failed): the same name, about as long as the parts together."""
+    first = joined_name(path, scene)
+    base = re.sub(r"( \d+)?\.mkv$", "", first)
+    for candidate in [base + ".mkv"] + [f"{base} {n}.mkv" for n in range(2, 6)]:
+        if os.path.isfile(candidate):
+            try:
+                if abs(get_duration_seconds(candidate) - total) <= 0.03 * total:
+                    return candidate
+            except Exception:  # noqa: BLE001
+                continue
+    return None
+
+
 def run_join_parts(client, args):
     scene_id = args.get("scene_id")
     scene = client.get_scene(scene_id) if scene_id else None
@@ -1201,6 +1216,21 @@ def run_join_parts(client, args):
         except Exception as exc:  # noqa: BLE001
             write_plugin_output(error=f"Couldn't read {os.path.basename(path)}: {exc}")
             return
+    earlier = joined_before(parts[0], scene, sum(durations))
+    if earlier:
+        # joined before — only the attaching is left to do
+        log_info(f"{os.path.basename(earlier)} is there already (joined before): attaching it")
+        offsets, start = [], 0.0
+        for path, length in zip(parts, durations):
+            offsets.append([client.find_scene_by_path(path), round(start, 3)])
+            start += length
+        client.rescan_paths([earlier])
+        client.run_plugin_task(f"Attach the joined {os.path.basename(earlier)}",
+                               {"mode": "join_finalize", "scene_id": str(scene["id"]), "new_path": earlier,
+                                "parts": json.dumps(offsets),
+                                "move_scenes": "true" if str(args.get("move_scenes", "true")).lower() == "true" else "false"})
+        write_plugin_output(output=f"{earlier} was joined before — queued: attaching it to {scene_label(scene)}.")
+        return
     out = joined_name(parts[0], scene)
     tmp = out + ".joining.mkv"
     log_info(f"Joining {len(parts)} parts ({', '.join(os.path.basename(p) for p in parts)}) into {os.path.basename(out)}")
@@ -1246,6 +1276,16 @@ def run_join_finalize(client, args):
     if not scene:
         write_plugin_output(error=f"Scene {args.get('scene_id')} no longer exists; {new_path} stays its own scene")
         return
+    # the scan of the new file may not be done yet (it ran 5 s after the join
+    # once): wait for its scene, up to ten minutes
+    for attempt in range(60):
+        if client.find_scene_by_path(new_path):
+            break
+        if attempt == 0:
+            log_info("Waiting for Stash to scan the joined file …")
+        if attempt == 30:
+            client.rescan_paths([new_path])
+        time.sleep(10)
     if not link_converted_file_to_scene(client, scene, new_path):
         write_plugin_output(error="Couldn't attach the joined file — see the warnings above.")
         return

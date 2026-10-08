@@ -513,7 +513,8 @@ def json_beside(scene_id):
                 data = _load_json(os.path.join(folder, name))
                 if looks_like_medici(data):
                     found.append((name, data))
-        if len(found) == 1:
+        videos = [n for n in os.listdir(folder) if n.lower().endswith((".mp4", ".mkv", ".m4v", ".avi", ".mpg", ".mpeg", ".ts", ".vdr", ".webm", ".mov", ".wmv", ".flv"))]
+        if len(found) == 1 and len(videos) <= 1:  # only when the folder is this video's alone
             return medici_scene(found[0][1])
         video_words = _words(os.path.basename(stem))
         scored = sorted(((len(video_words & (_words(name) | _words(d.get("title")) | _words(d.get("slug")))), d)

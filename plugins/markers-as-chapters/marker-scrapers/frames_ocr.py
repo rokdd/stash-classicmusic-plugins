@@ -265,6 +265,17 @@ def caption_like(line):
 REAL_WORD = re.compile(r"^[^\W\d_]{3,}[.,!?'’…:;]*$")
 
 
+def roman(line):
+    """Roman numerals as OCR reads them — "Il." for II., "Ill." for III.,
+    "lV." for IV. — put right (only with their full stop: "Il barbiere"
+    stays)."""
+    def fix(m):
+        word = m.group(1)
+        fixed = word.replace("l", "I")
+        return (fixed if "l" in word and re.fullmatch(r"[IVX]+", fixed) else word) + "."
+    return re.sub(r"(?<![\w])([IlVX]{1,5})\.(?=\s|$)", fix, line)
+
+
 def good_line(line):
     words = [w.strip("\"“”„'’()[]«»") for w in line.split()]
     real = [w for w in words if REAL_WORD.match(w)]
@@ -396,7 +407,7 @@ def texts(path, duration):
     # left out — applause is remembered, it ends a piece
     applause = sorted({at for at, text in read for line in text.splitlines()
                        if subtitles.is_sound(line) and subtitles.is_applause(line)})
-    read = [[at, "\n".join(lines)] for at, text in read
+    read = [[at, "\n".join(roman(line) for line in lines)] for at, text in read
             for lines in [[line for line in text.splitlines() if not subtitles.is_sound(line) and good_line(line)]]
             if lines]
     try:
