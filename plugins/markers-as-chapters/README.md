@@ -455,7 +455,7 @@ them there as needed.
 
 ## The chapter editor
 
-**Scrape markers… → Chapter editor** — one panel for a scene's chapters:
+The **Markers tab** shows it in place of Stash's marker list (switch **Chapters | Stash's list** next to the buttons, remembered in the browser; while Stash's own marker form is open — Create Marker, editing one — the tab is Stash's). Also as a dialog: **Scrape markers… → Chapter editor** — one panel for a scene's chapters:
 
 - **All sources in one table:** the markers in Stash, and with **Add from**
   whatever a scraper finds (the file's chapters, a chapter file, ARTE,

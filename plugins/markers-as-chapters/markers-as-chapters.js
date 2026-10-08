@@ -111,8 +111,83 @@
 
   // Next to Stash's "Create Marker" button: the panel's primary button
   // outside any form and outside this plugin's marker list.
+  // -- the Markers tab as the chapter editor ---------------------------------
+  //
+  // "Chapters" (the default): Stash's marker list is hidden, the chapter
+  // editor shown in its place (Marker Improvements' timeline stays). "Stash's
+  // list": the tab as Stash has it. While Stash's own marker form is open
+  // (Create Marker, editing one) the tab is Stash's; when it closes, the
+  // editor loads the chapters again.
+  const VIEW_KEY = "markersAsChapters.markersView";
+  const inline = { scene: null, box: null, formOpen: false };
+
+  function markersView() {
+    try { return window.localStorage.getItem(VIEW_KEY) || "chapters"; } catch (e) { return "chapters"; }
+  }
+
+  function setMarkersView(view) {
+    try { window.localStorage.setItem(VIEW_KEY, view); } catch (e) { /* this page only */ }
+    applyView();
+  }
+
+  function applyView() {
+    const panel = findMarkersPanel();
+    if (!panel || !sceneId()) return;
+    const create = Array.from(panel.querySelectorAll("button.btn-primary")).find(
+      (b) => !b.closest("form") && !b.closest("#marker-symbols-timeline") && !b.closest("#mac-inline-editor"));
+    const bar = create ? create.parentElement : null;
+    if (bar && !bar.querySelector("#mac-view-switch")) {
+      const pick = (view, label) => el("button", { type: "button", className: "btn btn-sm btn-secondary", "data-view": view,
+        textContent: label, onclick: () => setMarkersView(view) });
+      bar.append(el("div", { id: "mac-view-switch", className: "btn-group ml-2" },
+        pick("chapters", "Chapters"), pick("stash", "Stash's list")));
+    }
+    if (create && !create.dataset.macView) {
+      create.dataset.macView = "1";
+      create.addEventListener("click", () => { inline.formOpen = true; }, true); // Stash's form: shown as Stash has it
+    }
+    const form = !!panel.querySelector("form:not(#mac-inline-editor form)");
+    const chapters = markersView() === "chapters" && !form;
+    panel.querySelectorAll("#mac-view-switch button").forEach((b) => {
+      b.className = `btn btn-sm ${(b.dataset.view === "chapters") === chapters ? "btn-primary" : "btn-secondary"}`;
+    });
+    // show / hide: everything in the tab but the path to the buttons, the
+    // editor and Marker Improvements' timeline
+    panel.querySelectorAll(".mac-hidden").forEach((n) => n.classList.remove("mac-hidden"));
+    if (!chapters) {
+      if (inline.box && inline.box.isConnected) inline.box.remove();
+      if (form) inline.formOpen = true;
+      return;
+    }
+    if (!inline.box || inline.scene !== sceneId() || inline.formOpen) {
+      inline.box = inline.box && inline.scene === sceneId() ? inline.box : el("div", { id: "mac-inline-editor", className: "mt-2" });
+      inline.scene = sceneId();
+      inline.formOpen = false;
+      chapterEditor(inline.box);
+    }
+    if (!inline.box.isConnected) {
+      if (bar && bar.parentElement) bar.insertAdjacentElement("afterend", inline.box);
+      else panel.prepend(inline.box);
+    }
+    const keep = new Set([inline.box, bar, panel.querySelector("#marker-symbols-timeline")].filter(Boolean));
+    keep.forEach((node) => {
+      // its ancestors up to the tab stay; their other children go
+      let n = node;
+      while (n && n !== panel && n.parentElement) {
+        Array.from(n.parentElement.children).forEach((sib) => {
+          if (sib !== n && ![...keep].some((k) => sib.contains(k) || k.contains(sib))) sib.classList.add("mac-hidden");
+        });
+        n = n.parentElement;
+      }
+    });
+  }
+
   function placeButton() {
     if (!sceneId()) return;
+    if (!document.getElementById("mac-view-style")) {
+      document.head.appendChild(el("style", { id: "mac-view-style", textContent: ".mac-hidden { display: none !important; }" }));
+    }
+    applyView();
     const panel = findMarkersPanel();
     if (!panel || panel.querySelector(`#${BUTTON_ID}`)) return;
     const create = Array.from(panel.querySelectorAll("button.btn-primary")).find(
@@ -2094,8 +2169,16 @@
   const EDITOR_COLUMNS = [["time", "Time"], ["title", "Title"], ["primary", "Primary tag"], ["tags", "Tags"],
     ["source", "Source"], ["audio", "Audio"]];
 
-  async function chapterEditor() {
-    const dialog = openDialog("Chapter editor");
+  // Inline (the Markers tab): the editor's body and buttons in `target`.
+  function inlineFrame(target) {
+    const body = el("div", {});
+    const footer = el("div", { className: "d-flex justify-content-end mt-2", style: { gap: "8px" } });
+    target.replaceChildren(body, footer);
+    return { body, footer, close: () => {} };
+  }
+
+  async function chapterEditor(target) {
+    const dialog = target ? inlineFrame(target) : openDialog("Chapter editor");
     dialog.body.append(el("p", { textContent: "Loading the scene's chapters …" }));
     let scene, scrapers, settings = {};
     try {
@@ -2422,6 +2505,7 @@
             + (problems.length ? `\nNot done:\n${problems.join("\n")}` : "") }));
         save.remove();
         await refreshStash();
+        if (target) setTimeout(() => chapterEditor(target), 1200); // the tab: the chapters as saved
       } catch (err) {
         save.disabled = false;
         say(String(err.message || err), "bad");
