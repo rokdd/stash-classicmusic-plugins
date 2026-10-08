@@ -470,8 +470,16 @@ The **Markers tab** shows it in place of Stash's marker list (switch **Chapters 
 - **Overview:** the whole scene as a bar — chapters in Stash blue, changed
   orange, new green, to be deleted red, the pauses light blue; click one to
   get to its row.
-- **Columns** (time, title, primary tag, tags, source, audio) can be hidden;
-  remembered in the browser.
+- **Combine duplicates:** chapters less than 10 s apart — the fuller one
+  stays (in Stash, with an end, the longer title), the other becomes its
+  alternative (one click takes its title, times or tags; its tags aren't
+  merged by themselves — a duplicate may carry a wrong composer).
+- **Played:** how often each chapter was played, how long in all, and when
+  last — counted while the scene's video plays (a chapter counts once per
+  visit, after a minute of it or half of a shorter one), kept on the server
+  (`.chapter-plays.json` in the plugin's folder).
+- **Columns** (time, title, primary tag, tags, source, audio, played) can be
+  hidden; remembered in the browser.
 - **Save** creates, updates and deletes in one go; tags that don't exist
   yet are asked about first, as when importing.
 

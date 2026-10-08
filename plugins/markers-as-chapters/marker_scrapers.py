@@ -976,6 +976,12 @@ def main():
             except OSError:
                 out["processes"] = None
             output = out
+        elif mode == "chapter_play":
+            import chapter_plays
+            output = chapter_plays.add(json.loads(args.get("plays") or "{}"))
+        elif mode == "chapter_stats":
+            import chapter_plays
+            output = chapter_plays.stats(gql, args.get("scene_id"))
         elif mode == "composer_sync_all":
             import composer_sync
             output = composer_sync.sync_all(gql, settings, lambda line: sys.stderr.write("\x01i\x02" + line + "\n"))

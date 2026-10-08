@@ -2167,7 +2167,7 @@
 
   const EDITOR_COLS_KEY = "markersAsChapters.editorHiddenColumns";
   const EDITOR_COLUMNS = [["time", "Time"], ["title", "Title"], ["primary", "Primary tag"], ["tags", "Tags"],
-    ["source", "Source"], ["audio", "Audio"]];
+    ["source", "Source"], ["audio", "Audio"], ["plays", "Played"]];
 
   // Inline (the Markers tab): the editor's body and buttons in `target`.
   function inlineFrame(target) {
@@ -2206,6 +2206,14 @@
       return row;
     };
     let rows = (scene.scene_markers || []).map(fromStash);
+    let plays = {}; // marker id → {plays, seconds, last}
+    runOperation({ mode: "chapter_stats", scene_id: sceneId() }).then((p) => { plays = p || {}; render(); }).catch(() => {});
+    const playedText = (r) => {
+      const p = r.id && plays[String(r.id)];
+      if (!p) return r.id ? "not yet" : "";
+      const ago = p.last ? Math.round((Date.now() - new Date(p.last).getTime()) / 86400000) : null;
+      return `${p.plays}× · ${formatTime(p.seconds)}` + (ago == null ? "" : ` · ${ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`}`);
+    };
     let audio = null; // the pauses, once asked for
     const getAudio = async () => {
       if (!audio) audio = await runOperation({ mode: "marker_pauses", scene_id: sceneId() });
@@ -2296,6 +2304,7 @@
       cells.push(td("source", el("div", { className: "small", textContent:
         r.deleted ? "deleted when saved" : !r.id ? `new — ${r.source}` : changed(r) ? "in Stash — changed" : "in Stash" }), ...alts));
       cells.push(td("audio", el("div", { className: "small" }, audioNote(r))));
+      cells.push(td("plays", el("div", { className: "small text-muted", style: { whiteSpace: "nowrap" }, textContent: playedText(r) })));
       cells.push(el("td", {}, el("button", { type: "button", className: "btn btn-link btn-sm p-0", style: { whiteSpace: "nowrap" },
         textContent: r.deleted ? "restore" : "delete", onclick: () => {
           if (!r.id && !r.deleted) rows = rows.filter((x) => x !== r);
@@ -2415,6 +2424,25 @@
       render();
       say(`${n} start${n === 1 ? "" : "s"} moved onto a pause.`, "good");
     });
+    const dupTool = tool("Combine duplicates", "Chapters less than 10 s apart: the fuller one stays, the other becomes its alternative (title, times, tags to take over)", async () => {
+      const list = sorted().filter((r) => !r.deleted);
+      const score = (r) => (r.id ? 1000 : 0) + (r.end != null ? 100 : 0) + r.title.length + r.tags.length;
+      let n = 0;
+      for (let i = 0; i + 1 < list.length; i += 1) {
+        const a = list[i], b = list[i + 1];
+        if (a.deleted || b.deleted || Math.abs(b.seconds - a.seconds) >= 10) continue;
+        const [keep, other] = score(a) >= score(b) ? [a, b] : [b, a];
+        keep.alts.push({ source: other.id ? "duplicate in Stash" : other.source, seconds: other.seconds, end: other.end,
+          title: other.title, tags: [...other.tags] }, ...other.alts);
+        if (other.id) other.deleted = true;
+        else rows = rows.filter((x) => x !== other);
+        list[i + 1] = keep; // a third close behind compares with the one kept
+        n += 1;
+      }
+      render();
+      say(n ? `${n} duplicate${n === 1 ? "" : "s"} combined — the other one is the kept chapter's alternative now${rows.some((r) => r.id && r.deleted) ? " (those in Stash are deleted when saving; restore to keep them)" : ""}.`
+        : "No chapters less than 10 s apart.", n ? "good" : undefined);
+    });
     const shiftBox = el("input", { type: "number", step: "0.5", value: "0", className: "form-control form-control-sm d-inline-block", style: { width: "5.5em" } });
     const shiftTool = el("button", { type: "button", className: "btn btn-secondary btn-sm", textContent: "Shift all", onclick: () => {
       const d = parseFloat(shiftBox.value) || 0;
@@ -2457,7 +2485,7 @@
         el("strong", { className: "small", textContent: "Add from" }), sourceSelect, addButton),
       pasteBox,
       el("div", { className: "d-flex flex-wrap align-items-center mb-2", style: { gap: "6px" } },
-        cleanTool, extendTool, snapTool, shiftBox, shiftTool, atPlayer),
+        cleanTool, dupTool, extendTool, snapTool, shiftBox, shiftTool, atPlayer),
       el("div", { className: "d-flex flex-wrap align-items-center", style: { gap: "10px" } }, columnChips, counts),
       overview, status, table);
     render();
@@ -2711,6 +2739,72 @@
         el("tbody", {}, ...rows.map((x) => x.tr))),
       apply);
   }
+
+  // -- play statistics per chapter ------------------------------------------------------------------
+  //
+  // While the scene's video plays, the seconds are counted for the chapter
+  // they're in; a chapter counts as played once per visit after a minute of
+  // it (or half of a shorter one). Sent every half minute and when the page
+  // goes (chapter_plays.py keeps it).
+  const tracker = { scene: null, chapters: [], loaded: 0, last: null, pending: {}, counted: new Set(), watched: {} };
+
+  async function trackerChapters(id) {
+    try {
+      const data = await gql("query($id: ID!) { findScene(id: $id) { files { duration } scene_markers { id seconds end_seconds } } }", { id });
+      const scene = data.findScene || {};
+      const end = Math.max(0, ...((scene.files || []).map((f) => f.duration || 0)));
+      const list = (scene.scene_markers || []).slice().sort((a, b) => a.seconds - b.seconds);
+      tracker.chapters = list.map((m, i) => ({ id: String(m.id), from: m.seconds,
+        to: m.end_seconds != null ? m.end_seconds : (list[i + 1] ? list[i + 1].seconds : end || Infinity) }));
+    } catch (e) {
+      tracker.chapters = [];
+    }
+    tracker.loaded = Date.now();
+  }
+
+  function flushPlays(leaving) {
+    const plays = tracker.pending;
+    if (!Object.keys(plays).length) return;
+    tracker.pending = {};
+    const body = JSON.stringify({ query: "mutation($plugin_id: ID!, $args: Map) { runPluginOperation(plugin_id: $plugin_id, args: $args) }",
+      variables: { plugin_id: PLUGIN_ID, args: { mode: "chapter_play", plays: JSON.stringify(plays) } } });
+    fetch("/graphql", { method: "POST", credentials: "include", keepalive: !!leaving,
+      headers: { "Content-Type": "application/json" }, body }).catch(() => {});
+  }
+
+  setInterval(() => {
+    const id = sceneId();
+    if (id !== tracker.scene) {
+      flushPlays();
+      tracker.scene = id;
+      tracker.chapters = [];
+      tracker.counted = new Set();
+      tracker.watched = {};
+      tracker.last = null;
+      if (id) trackerChapters(id);
+      return;
+    }
+    if (!id) return;
+    if (Date.now() - tracker.loaded > 60000) trackerChapters(id); // chapters changed meanwhile
+    const video = document.querySelector("video");
+    if (!video || video.paused || video.seeking) { tracker.last = null; return; }
+    const t = video.currentTime;
+    const step = tracker.last == null ? 0 : t - tracker.last;
+    tracker.last = t;
+    if (step <= 0 || step > 5) return; // a jump, not playing
+    const chapter = tracker.chapters.find((c) => t >= c.from && t < c.to);
+    if (!chapter) return;
+    const p = tracker.pending[chapter.id] || (tracker.pending[chapter.id] = { seconds: 0, play: false });
+    p.seconds += step;
+    tracker.watched[chapter.id] = (tracker.watched[chapter.id] || 0) + step;
+    const needed = Math.min(60, Math.max(5, (chapter.to - chapter.from) / 2));
+    if (!tracker.counted.has(chapter.id) && tracker.watched[chapter.id] >= needed) {
+      tracker.counted.add(chapter.id);
+      p.play = true;
+    }
+  }, 2000);
+  setInterval(() => flushPlays(), 30000);
+  window.addEventListener("pagehide", () => flushPlays(true));
 
   let lastScene = null;
   setInterval(() => {
