@@ -1,0 +1,45 @@
+name: Face Identifier
+description: "Who's in a scene, by their faces: learns your performers' faces from their portraits, looks at frames of the video and shows who's recognised (add them to the scene), the faces nobody's known by (say who it is — added and learnt), and optionally Visage's answer. Like starIdentifier, with a dialog. Needs OpenCV on the Stash server: pip install opencv-python-headless numpy."
+version: 0.0.1
+url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/face-identifier
+exec:
+  - python
+  - "{pluginDir}/face_identifier.py"
+interface: raw
+ui:
+  javascript:
+    - face-identifier.js
+  csp:
+    img-src:
+      - "https://stashdb.org"
+      - "https://javstash.org"
+tasks:
+  - name: Learn the performers' faces
+    description: "Every performer's portrait is read once and the face in it remembered (portraits changed since are read again). Run it after adding performers or portraits."
+    defaultArgs:
+      mode: learn
+  - name: Identify the tagged scenes
+    description: "Scenes tagged \"Identify faces\" (or the tag in the settings): performers recognised in at least two frames and clearly alike are added, the tag is taken off — as starIdentifier does."
+    defaultArgs:
+      mode: tagged
+settings:
+  framesPerScene:
+    displayName: Frames per scene
+    description: "How many frames, spread over the video, are looked at. Empty: 40. More finds more, takes longer."
+    type: NUMBER
+  autoAddLikeness:
+    displayName: Likeness to add by itself (tag task)
+    description: "0.36 – 1; empty: 0.45. A performer seen in two frames at least this alike is added by the tag task."
+    type: STRING
+  tagToIdentify:
+    displayName: Tag of scenes to identify
+    description: "For the task \"Identify the tagged scenes\". Empty: Identify faces."
+    type: STRING
+  visageUrl:
+    displayName: Visage service
+    description: "The Visage face search (Gradio) to ask. Empty: https://cc1234-stashface-onnx.hf.space (public; the scene's preview sprite is sent there). Your own: e.g. http://localhost:7860."
+    type: STRING
+  visageThreshold:
+    displayName: Visage — confidence at least
+    description: "Visage's matches below this (%) aren't shown. Empty: 70."
+    type: NUMBER

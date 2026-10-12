@@ -9,6 +9,7 @@ and classical music recordings — but useful for any library.
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
 | [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers: from the video file or a file next to it, YouTube, ARTE Concert, a pasted tracklist or programme — checked against the pauses in the audio |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, scraping that adds tags instead of replacing them, and composer tags kept in step with performers |
+| [Face Identifier](plugins/face-identifier/) | Who's in a scene, by their faces: learns your performers' faces from their portraits, shows who's recognised in the video (add them), the unknown faces (say who — learnt), and optionally Visage's answer |
 
 They're independent of each other — install any of them.
 
