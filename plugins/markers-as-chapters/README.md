@@ -455,33 +455,10 @@ them there as needed.
 
 ## The chapter editor
 
-The **Markers tab** shows it in place of Stash's marker list (switch **Chapters | Stash's list** next to the buttons, remembered in the browser; while Stash's own marker form is open — Create Marker, editing one — the tab is Stash's). Also as a dialog: **Scrape markers… → Chapter editor** — one panel for a scene's chapters:
-
-- **All sources in one table:** the markers in Stash, and with **Add from**
-  whatever a scraper finds (the file's chapters, a chapter file, ARTE,
-  subtitles, text in the picture, pasted text …). A chapter at the same
-  time (±5 s) gets it as an alternative — take its **title**, **times** or
-  **tags** with one click — the rest come in as new chapters.
-- **Tools for all chapters:** **Clean titles & composers** (composers named
-  in the titles become tags, the titles lose their names), **Extend to the
-  next pause** (each chapter ends where the audio's next pause begins, never
-  past the next chapter), **Starts onto the pauses**, **Shift all**, and a
-  new chapter **at the player**'s position.
-- **Overview:** the whole scene as a bar — chapters in Stash blue, changed
-  orange, new green, to be deleted red, the pauses light blue; click one to
-  get to its row.
-- **Combine duplicates:** chapters less than 10 s apart — the fuller one
-  stays (in Stash, with an end, the longer title), the other becomes its
-  alternative (one click takes its title, times or tags; its tags aren't
-  merged by themselves — a duplicate may carry a wrong composer).
-- **Played:** how often each chapter was played, how long in all, and when
-  last — counted while the scene's video plays (a chapter counts once per
-  visit, after a minute of it or half of a shorter one), kept on the server
-  (`.chapter-plays.json` in the plugin's folder).
-- **Columns** (time, title, primary tag, tags, source, audio, played) can be
-  hidden; remembered in the browser.
-- **Save** creates, updates and deletes in one go; tags that don't exist
-  yet are asked about first, as when importing.
+Editing and importing the chapters in one table — in the Markers tab or as a
+dialog — is the plugin [Marker Editor for Chapters](../marker-editor-for-chapters/),
+which uses this one. With it installed, **Scrape markers… → Chapter editor**
+opens it too.
 
 ## Composers of scene and chapters in step
 

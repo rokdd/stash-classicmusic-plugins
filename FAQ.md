@@ -10,6 +10,7 @@ plugin or scraper does what; the details are in their READMEs.
 | [Scene Improvements](plugins/advanced-file-operations/) (plugin) | the video files: convert to H.265, split at markers, repair; torrent check, yt-dlp downloads, task history |
 | [Marker Improvements](plugins/marker-improvements-plugin/) (plugin) | markers on the seek bar and in the Markers tab, editing them |
 | [Markers as Chapters](plugins/markers-as-chapters/) (plugin) | importing chapters as markers, from anywhere — and composers in their titles |
+| [Marker Editor for Chapters](plugins/marker-editor-for-chapters/) (plugin) | the chapters in one table — editing and importing in the Markers tab |
 | [Tag Improvements](plugins/tag-improvements/) (plugin) | tag search and tree; a tag of their own for every composer and soloist |
 | [Classical Music](scrapers/ClassicalMusic/) (performer scraper) | composers, soloists, conductors, orchestras from Wikidata |
 | [Classical Concerts](scrapers/ClassicalConcerts/) (scene scraper) | a concert's page at ARTE, ORF ON, ARD, ZDF, 3sat, BBC, medici.tv |

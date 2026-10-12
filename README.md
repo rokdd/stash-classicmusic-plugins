@@ -8,6 +8,7 @@ and classical music recordings — but useful for any library.
 | [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
 | [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers: from the video file or a file next to it, YouTube, ARTE Concert, a pasted tracklist or programme — checked against the pauses in the audio |
+| [Marker Editor for Chapters](plugins/marker-editor-for-chapters/) | A scene's chapters in one table — in the Markers tab: add from every source, combine duplicates, clean titles and composers, extend to the next pause, play statistics, save at once (uses Markers as Chapters) |
 | [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, scraping that adds tags instead of replacing them, and composer tags kept in step with performers |
 | [Face Identifier](plugins/face-identifier/) | Who's in a scene, by their faces: learns your performers' faces from their portraits, shows who's recognised in the video (add them), the unknown faces (say who — learnt), and optionally Visage's answer |
 

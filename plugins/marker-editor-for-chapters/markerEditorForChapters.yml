@@ -1,0 +1,10 @@
+name: Marker Editor for Chapters
+# requires: markersAsChapters
+description: "The scene's chapters (markers) in one table — in the Markers tab or as a dialog: add from every source (file chapters, CUE / JSON, ARTE, subtitles, text in the picture, pasted text …), combine duplicates, clean the titles and find the composers, extend to the next pause, move starts onto the pauses, see how often each chapter was played, and save it all at once. Uses Markers as Chapters (installed with it)."
+version: 0.0.1
+url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/marker-editor-for-chapters
+ui:
+  requires:
+    - markersAsChapters
+  javascript:
+    - chapter-editor.js
