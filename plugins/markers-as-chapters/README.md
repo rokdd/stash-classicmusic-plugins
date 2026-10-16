@@ -611,7 +611,9 @@ Updating the plugin leaves it alone.
   markers when the scraper doesn't name one (empty: `Chapter`).
 - **Marker scrapers folder** — a folder with your own scrapers (above).
 - **Path to yt-dlp** — for the online chapters; empty: Scene
-  Improvements' setting, else yt-dlp on the PATH.
+  Improvements' setting, else yt-dlp on the PATH. The online chapters and
+  subtitle scrapers impersonate Chrome (`--impersonate chrome`) when that
+  yt-dlp has curl_cffi.
 - **Skip the check against the audio** — no pause check in the review
   dialog.
 - **Fill in tags under** — parent tags whose tags are filled in from the

@@ -157,10 +157,24 @@ def embedded(video):
     return decode_bytes(out.stdout)
 
 
+def impersonate_args(ytdlp):
+    """["--impersonate", "chrome"] when this yt-dlp can do it (curl_cffi is
+    installed), else []. Some sites turn plain yt-dlp requests away."""
+    try:
+        out = subprocess.run([ytdlp, "--list-impersonate-targets"], capture_output=True,
+                             text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    for line in ((out.stdout or "") + (out.stderr or "")).splitlines():
+        if line.strip().lower().startswith("chrome") and "unavailable" not in line.lower():
+            return ["--impersonate", "chrome"]
+    return []
+
+
 def online(url):
     ytdlp = os.environ.get("STASH_YTDLP") or "yt-dlp"
     with tempfile.TemporaryDirectory() as tmp:
-        cmd = [ytdlp, "--skip-download", "--write-subs", "--no-warnings", "--no-playlist",
+        cmd = [ytdlp, *impersonate_args(ytdlp), "--skip-download", "--write-subs", "--no-warnings", "--no-playlist",
                "--sub-langs", "de.*,deu.*,ger.*,en.*,eng.*,und,fr.*", "--sub-format", "vtt/srt/best",
                "-o", os.path.join(tmp, "subs.%(ext)s"), url]
         ffmpeg = os.environ.get("STASH_FFMPEG") or ""

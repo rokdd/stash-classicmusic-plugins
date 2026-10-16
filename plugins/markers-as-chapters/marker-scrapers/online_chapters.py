@@ -2,7 +2,8 @@
 
 stdin: {"scene": {...}, "url": optional}  → stdout: a JSON list of markers.
 Without "url" it tries the scene's URLs in turn and takes the first one
-with chapters. yt-dlp: STASH_YTDLP, else the one on the PATH."""
+with chapters. yt-dlp: STASH_YTDLP, else the one on the PATH;
+it impersonates Chrome when yt-dlp can (curl_cffi)."""
 
 import json
 import os
@@ -10,9 +11,23 @@ import subprocess
 import sys
 
 
+def impersonate_args(ytdlp):
+    """["--impersonate", "chrome"] when this yt-dlp can do it (curl_cffi is
+    installed), else []. Some sites turn plain yt-dlp requests away."""
+    try:
+        out = subprocess.run([ytdlp, "--list-impersonate-targets"], capture_output=True,
+                             text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    for line in ((out.stdout or "") + (out.stderr or "")).splitlines():
+        if line.strip().lower().startswith("chrome") and "unavailable" not in line.lower():
+            return ["--impersonate", "chrome"]
+    return []
+
+
 def chapters(url, ytdlp):
     out = subprocess.run(
-        [ytdlp, "--dump-single-json", "--skip-download", "--no-playlist", "--no-warnings", url],
+        [ytdlp, *impersonate_args(ytdlp), "--dump-single-json", "--skip-download", "--no-playlist", "--no-warnings", url],
         capture_output=True, text=True, timeout=150,
     )
     if out.returncode != 0:
