@@ -1,6 +1,6 @@
 name: Scene Improvements
 description: "Video tools for Stash — per scene: H.265 conversion, split at markers, and repair (corrupt files and files that stream badly). On a File Tools page: a torrent check (which videos in your .torrent files are already in the library, with match certainty) and downloads with yt-dlp into your library."
-version: 0.0.21
+version: 0.0.22
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/advanced-file-operations
 exec:
   - python
@@ -51,5 +51,5 @@ settings:
     type: STRING
   extraArgs:
     displayName: Extra yt-dlp options
-    description: "Optional: more options passed to yt-dlp as they are, e.g. --limit-rate 5M --embed-subs."
+    description: "Optional: more options passed to yt-dlp as they are, e.g. --limit-rate 5M --embed-subs. Browser impersonation (--impersonate chrome) is on by default when yt-dlp has curl_cffi; give your own --impersonate target, or --no-impersonate, to change that."
     type: STRING

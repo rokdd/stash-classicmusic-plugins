@@ -210,6 +210,23 @@ def ytdlp_command(settings):
     return shlex.split(path)
 
 
+def default_impersonate_args(cmd, extra):
+    """["--impersonate", "chrome"] when this yt-dlp can do it (curl_cffi
+    installed) and the user's own options don't choose a target; else []."""
+    if "--impersonate" in extra or "--no-impersonate" in extra:
+        return []
+    try:
+        out = subprocess.run(cmd + ["--list-impersonate-targets"], capture_output=True,
+                             text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    text = (out.stdout or "") + (out.stderr or "")
+    for line in text.splitlines():
+        if line.strip().lower().startswith("chrome") and "unavailable" not in line.lower():
+            return ["--impersonate", "chrome"]
+    return []
+
+
 def run_download(stash, args):
     urls = [u.strip() for u in (args.get("urls") or "").splitlines() if u.strip()]
     dest = (args.get("dest") or "").strip()
@@ -255,6 +272,7 @@ def run_download(stash, args):
     if cookies:
         cmd += ["--cookies", cookies]
     extra = (settings.get("extraArgs") or "").strip()
+    cmd += default_impersonate_args(ytdlp_command(settings), extra)
     if extra:
         cmd += shlex.split(extra)
 

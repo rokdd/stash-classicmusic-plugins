@@ -189,7 +189,7 @@ Settings → Plugins → Scene Improvements:
 |---|---|
 | Path to yt-dlp | Leave empty if `yt-dlp` is on the server's PATH; otherwise its full path. |
 | Cookies file | A `cookies.txt` on the server, for sites that need a login. |
-| Extra yt-dlp options | Passed to yt-dlp as they are, e.g. `--limit-rate 5M --embed-subs`. |
+| Extra yt-dlp options | Passed to yt-dlp as they are, e.g. `--limit-rate 5M --embed-subs`. `--impersonate chrome` is added by default when yt-dlp has curl_cffi (`pip install "yt-dlp[default,curl-cffi]"`); set your own `--impersonate` target or `--no-impersonate` here to change that. |
 
 ### Requirements
 
