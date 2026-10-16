@@ -25,3 +25,6 @@ plugins/advanced-file-operations/task-history.json
 __pycache__/
 *.pyc
 DEV.md
+
+# Personal session routine for Claude Code
+CLAUDE.local.md
