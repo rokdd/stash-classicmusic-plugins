@@ -24,3 +24,4 @@ plugins/advanced-file-operations/task-history.json
 # Python bytecode
 __pycache__/
 *.pyc
+DEV.md

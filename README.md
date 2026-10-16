@@ -5,11 +5,11 @@ and classical music recordings — but useful for any library.
 
 | Plugin | What it's for |
 |---|---|
-| [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file; a torrent check and yt-dlp downloads |
+| [Scene Improvements](plugins/advanced-file-operations/) | Convert to H.265, split a scene at its markers, repair a broken file, join a recording's parts (VDR); a torrent check, yt-dlp downloads and a task history |
 | [Marker Improvements](plugins/marker-improvements-plugin/) | Tag images on the video's seek bar, click-to-edit markers |
-| [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers: from the video file or a file next to it, YouTube, ARTE Concert, a pasted tracklist or programme — checked against the pauses in the audio |
+| [Markers as Chapters](plugins/markers-as-chapters/) | Import chapters as markers from anywhere — the video file or a file next to it, YouTube, ARTE Concert, ORF ON, subtitles (also OpenSubtitles), text in the picture (OCR), a pasted tracklist or programme — checked against the pauses in the audio; composers from the titles, kept in step with the scene; markers lined up after merging scenes |
 | [Marker Editor for Chapters](plugins/marker-editor-for-chapters/) | A scene's chapters in one table — in the Markers tab: add from every source, combine duplicates, clean titles and composers, extend to the next pause, play statistics, save at once (uses Markers as Chapters) |
-| [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, tag descriptions from StashDB, scraping that adds tags instead of replacing them, and composer tags kept in step with performers |
+| [Tag Improvements](plugins/tag-improvements/) | A tag tree on the Tags page, a better tag search (also as a grid of tiles), tag descriptions from StashDB, scraping that adds tags instead of replacing them, and a tag for every composer and soloist kept in step with the performers |
 | [Face Identifier](plugins/face-identifier/) | Who's in a scene, by their faces: learns your performers' faces from their portraits, shows who's recognised in the video (add them), the unknown faces (say who — learnt), and optionally Visage's answer |
 
 They're independent of each other — install any of them.
@@ -121,6 +121,9 @@ under Settings → Tasks.
   the original's details, performers, tags, studio, URLs and markers.
 - **Repair** finds decode errors and fixes them (lossless remux first,
   re-encode only if needed), and also fixes files that don't stream well.
+- **Join recording parts** (VDR's `001.vdr`, `002.vdr` … / `00001.ts` …):
+  one `.mkv` without re-encoding, made the scene's primary file, the parts'
+  scenes moved into it with their markers shifted.
 - New files are scanned with covers and phashes, and tasks are named
   after the scene with live progress.
 - **Run in the background** (optional, per task): the work runs outside
@@ -167,22 +170,58 @@ Details: [Marker Improvements README](plugins/marker-improvements-plugin/README.
 ### Markers as Chapters
 
 - **Scrape markers…** next to Create Marker in the Markers tab imports
-  markers the way Stash scrapes scenes.
-- **Built-in scrapers**: chapters in the video file; a chapter file next to
-  it (CUE, OGM, Matroska XML, ffmetadata, yt-dlp info, tracklist); chapters
-  online (YouTube, ZDF … via yt-dlp); arte.tv / ARTE Concert (one marker
-  per work); ORF ON (its segments); plain text — paste a tracklist or pick a text/CUE file.
+  markers the way Stash scrapes scenes — in sections: from the video and its
+  files, from the scene's web pages, from text, tools. Entries that would
+  find nothing for the scene are greyed out with the reason.
+- **Sources**: chapters in the video file; a chapter file next to it (CUE,
+  OGM, Matroska XML, ffmetadata, medici.tv / yt-dlp JSON, tracklist);
+  chapters online (YouTube, ZDF … via yt-dlp); arte.tv / ARTE Concert; ORF
+  ON; subtitles next to / in the video or online, and from OpenSubtitles (by
+  the file's fingerprint); **text in the picture** (captions read with
+  tesseract, as a Stash task); plain text — a tracklist, a table, a CUE
+  sheet, JSON, a programme with or without times.
 - **Checked against the audio**: the review dialog shows which markers
-  start at a pause in the audio, suggests a shift when most would fit
-  better, and snaps markers onto the pauses.
-- **A programme without times** (ARD, BBC … list the pieces but no times):
-  paste the titles, and they're placed at the pauses between movements.
-- **Composers filled in**: tags under **Composers** are found in the
-  titles — by name, alias or just the surname.
-- **Review dialog**: pick, rename, tag, shift all times, then create.
-- **Your own scrapers** as .yaml files in Stash's scraper format.
+  start at a real pause, suggests a shift, snaps markers onto the pauses;
+  titles without times are placed at the pauses between movements.
+- **Chapters offered by themselves** when a scene without markers has some
+  (a chapter file, the video's own, ARTE / ORF ON, subtitles made for the
+  file).
+- **Composers**: tags under **Composers** found in the titles (name, alias,
+  surname) and the names taken out; missing composers imported from
+  Wikidata; composers of scene (performer) and chapters (tag) kept in step.
+- **Markers and the scene's files**: after merging scenes or changing the
+  primary file, markers set on another file are lined up with the primary
+  one — by the audio or by the picture, following cuts and PAL speed.
+- **Copy as text** (tracklist, CUE, ffmetadata, JSON …) and **your own
+  scrapers** as .yaml files in Stash's scraper format.
 
 Details: [Markers as Chapters README](plugins/markers-as-chapters/README.md)
+
+### Marker Editor for Chapters
+
+- **The Markers tab as one table** of the scene's chapters (switch back to
+  Stash's list any time), also as a dialog.
+- **Add from every source** (Markers as Chapters' scrapers): a chapter at
+  the same time gets it as an alternative — title, times or tags to take
+  over — the rest come in as new chapters.
+- **Combine duplicates**, **clean titles & composers**, **extend to the
+  next pause**, **starts onto the pauses**, shift, a chapter at the player.
+- **Overview bar** of the whole scene, columns to hide, **play statistics**
+  per chapter, one **Save** for everything.
+
+Details: [Marker Editor for Chapters README](plugins/marker-editor-for-chapters/README.md)
+
+### Face Identifier
+
+- **Learns your performers' faces** from their portraits (OpenCV's YuNet
+  and SFace, on the Stash server).
+- **⋮ → Who's in this scene?**: frames of the video looked at (as a Stash
+  task); the recognised performers to add, the unknown faces to name —
+  learnt for next time — and optionally **Visage**'s answer (StashDB /
+  JavStash performers only).
+- **Tagged scenes** task as starIdentifier: recognised performers added.
+
+Details: [Face Identifier README](plugins/face-identifier/README.md)
 
 ### Tag Improvements
 
@@ -211,11 +250,12 @@ Tag Merge** plugin.
 - Tags can still be removed in the dialog before applying; unmatched
   scraped tags keep their create/link buttons.
 - A setting switches back to Stash's usual replace behaviour.
-- **Composer tags**: every performer with a `composer` custom field — or
-  the performer tag **Composer**, as the Classical Music scraper gives it —
-  gets a tag of their own under **Composers** (name, aliases, image,
-  details), kept in step when the performer is saved — so markers can
-  carry composers.
+- **Tags for composers and soloists** (**Performer roles**, e.g.
+  `Composers: Composer; Soloists: Pianist, Violinist, …`): every performer
+  with one of the roles — a performer tag (as the Classical Music scraper
+  gives them) or the custom field `roles` — gets a tag of their own under
+  the matching parent (name, aliases, image, details), kept in step when
+  the performer is saved — so markers can carry composers and soloists.
 
 Details: [Tag Improvements README](plugins/tag-improvements/README.md)
 

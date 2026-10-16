@@ -244,8 +244,11 @@ Whatever the scraper, the review dialog also checks the markers against
 the **pauses in the scene's own audio** — where pieces and movements
 usually start. The pauses are found with ffmpeg (a few seconds to a
 minute for a concert, the first time; it's remembered per file, so
-scraping the same scene again is instant). How quiet counts as a pause
-follows the recording, so the audience's quiet between movements counts.
+scraping the same scene again is instant). How quiet counts follows the
+recording, so the audience's quiet between movements counts — but only a
+real pause: at least 2 s and 20 dB quieter than the music, or 6 s and
+15 dB, or 15 s of quiet; pauses less than 3 s apart are one. A pianissimo
+in a slow movement isn't a pause.
 
 - The **Audio** column shows per marker: **✓ at a pause**, **pause
   +4.0 s** (with **move +4.0 s**: the whole marker, start and end, moves
@@ -615,9 +618,15 @@ Updating the plugin leaves it alone.
   titles (above); empty: `Composers`, `-` switches it off.
 - **OpenSubtitles API key / username / password / languages** — for
   Subtitles from OpenSubtitles (above).
+- **TMDB API key / language**, **TVDB API key / subscriber PIN /
+  language** — for the TMDB and TVDB scene scrapers of this repository
+  (Stash has no settings for scrapers, so they're kept here).
+- **Don't keep composers of scene and chapters in step** — switches the
+  composer sync off (above).
 - **tesseract** — its path, for Text in the picture; empty: on the PATH.
 - **Languages of text in the picture** — e.g. `de,en` (each needs
-  tesseract's language pack); empty: the OpenSubtitles languages.
+  tesseract's language pack; each one more makes it slower); empty: the
+  first OpenSubtitles language.
 
 These were Marker Improvements' settings before this became a plugin of
 its own; values set there are still used until you set them here.
