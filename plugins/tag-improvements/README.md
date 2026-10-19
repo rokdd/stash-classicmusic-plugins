@@ -79,6 +79,11 @@ start of its **description**. It closes as soon as you've picked a tag;
 **⤡ Smaller** switches back. The arrow keys still move through the tags. Your browser remembers the choice for all tag
 dropdowns; the **Large tag dropdown** setting is how they start.
 
+All tiles have the same fixed size, so hovering a tag never makes it grow
+and push the others out of sight. The **Large tag dropdown opacity (%)**
+setting makes the panel's background see-through (e.g. 80): the page shows
+behind it and is dimmed less. Empty or 100: solid.
+
 ## StashDB descriptions
 
 For every tag with a StashDB ID, Tag Tree also copies the tag's description

@@ -237,6 +237,12 @@
     const LIST = '[class*="react-select__menu-list"]';
     const OPTION = '[class*="react-select__option"]';
     const large_ = `.${LARGE_CLASS} .${MENU_CLASS}`;
+    // Background of the large panel: "Large dropdown opacity" in percent
+    // (100 = solid; lower lets the page show through, and dims it less).
+    let opacity = parseFloat(s.largeTagDropdownOpacity);
+    if (!(opacity >= 0)) opacity = 100;
+    const alpha = Math.min(100, Math.max(10, opacity)) / 100;
+    const dim = (0.55 * alpha).toFixed(2);
     const style = document.createElement("style");
     style.textContent = [
       // Large: a panel the whole height of the window, in front of the page
@@ -247,8 +253,8 @@
         " z-index: 2000 !important; display: flex !important; flex-direction: column;" +
         // Stash's dropdown colour, set outright: the panel stands in front
         // of the page, which is dimmed behind it.
-        " background-color: #394b59 !important; color: #f5f8fa; border-radius: 6px; overflow: hidden;" +
-        " box-shadow: 0 0 0 100vmax rgba(0,0,0,.55), 0 8px 32px rgba(0,0,0,.6) !important; }",
+        ` background-color: rgba(57,75,89,${alpha}) !important; color: #f5f8fa; border-radius: 6px; overflow: hidden;` +
+        ` box-shadow: 0 0 0 100vmax rgba(0,0,0,${dim}), 0 8px 32px rgba(0,0,0,.6) !important; }`,
       `${large_} ${LIST} { max-height: none !important; flex: 1 1 auto; min-height: 0; position: static !important; }`,
       `.${SWITCH_CLASS} { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 0.8em;` +
         " border-bottom: 1px solid rgba(128,128,128,.3); }",
@@ -261,16 +267,21 @@
       ".tag-search-parents { margin-left: 6px; opacity: .6; font-size: .85em; }",
       ".tag-search-extra > .tag-search-image, .tag-search-extra > .tag-search-description { display: none; }",
       // Large: a grid of tiles — image on top, name, parents and description below.
-      // grid-auto-rows: max-content — in a list of fixed height, rows of
-      // tiles that clip their overflow would otherwise be squeezed to share
-      // the height (with hundreds of tags: a few pixels each).
+      // Every tile has the same fixed height (grid-auto-rows and the tile's
+      // own height): a tile that grew on hover pushed the others out of sight,
+      // and rows squeezed to share the list's height would be a few pixels each.
       `${large_} ${LIST} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));` +
-        " grid-auto-rows: max-content; gap: 6px; padding: 6px !important; align-content: start; }",
+        " grid-auto-rows: 200px; gap: 6px; padding: 6px !important; align-content: start; }",
       `${large_} ${OPTION} { display: block !important; padding: 6px !important; border-radius: 4px; overflow: hidden;` +
-        " white-space: normal !important; word-break: break-word; min-height: min-content;" +
+        " white-space: normal !important; word-break: break-word; height: 200px !important; max-height: 200px !important;" +
+        " min-height: 0 !important; box-sizing: border-box;" +
         " background-color: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }",
       `${large_} ${OPTION}[class*="--is-focused"] { background-color: rgba(138,155,168,.3) !important; border-color: rgba(255,255,255,.35); }`,
       `.${LARGE_CLASS} .${MENU_CLASS} .${SWITCH_CLASS} { background-color: rgba(0,0,0,.2); }`,
+      // Hovering or focusing a tile never changes its size: whatever Stash
+      // shows on hover (full image, whole description) stays inside the tile.
+      `${large_} ${OPTION}:hover, ${large_} ${OPTION}[class*="--is-focused"] { height: 200px !important; max-height: 200px !important; overflow: hidden !important; }`,
+      `${large_} ${OPTION} img:not(.tag-search-image) { max-height: 90px !important; max-width: 100% !important; }`,
       `${large_} .tag-search-extra > .tag-search-image { display: block; width: 100%; height: 90px; min-height: 90px;` +
         " object-fit: contain; background: #fff; margin-bottom: 4px; border-radius: 3px; }",
       `${large_} .tag-search-extra > .tag-search-description { display: -webkit-box; margin-top: 2px; font-size: 0.75em;` +
