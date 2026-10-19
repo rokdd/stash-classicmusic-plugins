@@ -1162,6 +1162,48 @@
     if (video) video.currentTime = marker.start;
   }
 
+  // Stash's own page keeps the markers it loaded: ask it to load them again.
+  async function refreshStashData() {
+    try {
+      const service = window.PluginApi && window.PluginApi.utils && window.PluginApi.utils.StashService;
+      const client = service && service.getClient && service.getClient();
+      if (client && client.refetchQueries) {
+        await client.refetchQueries({ include: "active" });
+        return;
+      }
+    } catch (err) {
+      console.warn("[Marker Symbols] Couldn't refresh Stash's data:", err);
+    }
+    refreshForCurrentPage();
+  }
+
+  // A new marker with the title, primary tag and tags of `m`, starting at the
+  // video's current position (and as long as `m` if that has an end time).
+  async function cloneMarker(m, button) {
+    const video = findVideoEl();
+    const sceneId = currentSceneId();
+    if (!video || !sceneId) return;
+    const seconds = Math.round(video.currentTime * 1000) / 1000;
+    const input = { scene_id: sceneId, title: m.title || "", seconds };
+    if (m.primary_tag) input.primary_tag_id = m.primary_tag.id;
+    input.tag_ids = (m.tags || []).filter((t) => !m.primary_tag || t.id !== m.primary_tag.id).map((t) => t.id);
+    if (m.end_seconds != null && m.end_seconds > m.seconds) {
+      input.end_seconds = Math.round((seconds + (m.end_seconds - m.seconds)) * 1000) / 1000;
+    }
+    const label = button.textContent;
+    button.disabled = true;
+    try {
+      await callGQL("mutation($input: SceneMarkerCreateInput!) { sceneMarkerCreate(input: $input) { id } }", { input });
+      button.textContent = "Cloned ✓";
+      await refreshStashData();
+    } catch (err) {
+      console.warn("[Marker Symbols] Couldn't clone the marker:", err);
+      button.textContent = "Failed";
+      button.title = String(err.message || err);
+    }
+    setTimeout(() => { button.textContent = label; button.disabled = false; }, 2000);
+  }
+
   function buildMarkerRow(m) {
     const name = m.title || (m.primary_tag && m.primary_tag.name) || "Marker";
     const row = document.createElement("div");
@@ -1209,7 +1251,7 @@
     edit.type = "button";
     edit.className = "btn btn-link btn-sm marker-symbols-edit";
     edit.textContent = "Edit";
-    edit.style.cssText = "margin-left:auto;padding:0;flex:none;";
+    edit.style.cssText = "padding:0;flex:none;";
     edit.addEventListener("click", (e) => {
       e.stopPropagation();
       // Clicking Edit on the row whose form is open closes it again.
@@ -1217,6 +1259,17 @@
       seekTo(m);
       openMarkerEditor(m);
     });
+    const clone = document.createElement("button");
+    clone.type = "button";
+    clone.className = "btn btn-link btn-sm marker-symbols-clone";
+    clone.textContent = "Clone";
+    clone.title = "New marker with the same title and tags, starting at the video's current position";
+    clone.style.cssText = "margin-left:auto;padding:0;flex:none;";
+    clone.addEventListener("click", (e) => {
+      e.stopPropagation();
+      cloneMarker(m, clone);
+    });
+    head.appendChild(clone);
     head.appendChild(edit);
     details.appendChild(head);
 
