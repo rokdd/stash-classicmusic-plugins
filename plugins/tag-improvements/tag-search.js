@@ -415,6 +415,34 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
 
+    // In the large dropdown the tags are a grid: left / right move to the
+    // neighbouring tile, up / down a whole row. react-select itself only
+    // knows "previous" and "next" (its up / down), so those are sent to it
+    // as many times as it takes. Enter picks, as before.
+    document.addEventListener("keydown", (e) => {
+      if (!large || e.isTrusted === false || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (!/^Arrow(Left|Right|Up|Down)$/.test(e.key)) return;
+      const input = e.target;
+      const menu = input && input.closest && input.tagName === "INPUT" ? document.querySelector(`.${MENU_CLASS}`) : null;
+      if (!menu) return;
+      const list = menu.querySelector(LIST);
+      if (!list) return;
+      const options = Array.from(list.querySelectorAll(OPTION));
+      if (!options.length) return;
+      const current = options.findIndex((o) => /--is-focused/.test(o.className));
+      const columns = Math.max(1, getComputedStyle(list).gridTemplateColumns.split(" ").filter(Boolean).length);
+      const step = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" ? -columns : columns;
+      e.preventDefault();
+      e.stopPropagation();
+      const target = current < 0 ? 0 : current + step;
+      if (target < 0 || target >= options.length) return; // no wrapping round the ends
+      const times = current < 0 ? 1 : Math.abs(step);
+      const key = step < 0 ? "ArrowUp" : "ArrowDown";
+      for (let i = 0; i < times; i++) {
+        input.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, keyCode: key === "ArrowUp" ? 38 : 40, bubbles: true, cancelable: true }));
+      }
+    }, true);
+
     // In the large dropdown, close it once a tag is picked — also in fields
     // that pick several tags, which normally stay open.
     document.addEventListener("click", (e) => {
