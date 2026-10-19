@@ -1162,46 +1162,80 @@
     if (video) video.currentTime = marker.start;
   }
 
-  // Stash's own page keeps the markers it loaded: ask it to load them again.
-  async function refreshStashData() {
-    try {
-      const service = window.PluginApi && window.PluginApi.utils && window.PluginApi.utils.StashService;
-      const client = service && service.getClient && service.getClient();
-      if (client && client.refetchQueries) {
-        await client.refetchQueries({ include: "active" });
-        return;
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Types `text` into a react-select of Stash's form and picks the option
+  // that is that tag / title (a tag option's own name comes first in it,
+  // followed by its parent tags). Resolves when picked, false if none came.
+  async function fillSelect(container, text, createOk) {
+    const input = container && container.querySelector("input");
+    if (!input || !text) return false;
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const want = text.trim().toLowerCase();
+    const nameOf = (o) => {
+      const named = o.querySelector(".react-select-image-option > span:first-child");
+      return (named ? named.textContent : o.firstChild ? o.firstChild.textContent : o.textContent).trim().toLowerCase();
+    };
+    for (let tries = 0; tries < 30; tries++) {
+      await sleep(100);
+      const options = Array.from(document.querySelectorAll('[class*="react-select__option"]'));
+      const wanted = options.find((o) => nameOf(o) === want) ||
+        (createOk && options.find((o) => /^create\b/i.test(o.textContent.trim()) && o.textContent.toLowerCase().includes(want)));
+      if (wanted) {
+        wanted.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+        await sleep(100);
+        input.blur();
+        return true;
       }
-    } catch (err) {
-      console.warn("[Marker Symbols] Couldn't refresh Stash's data:", err);
     }
-    refreshForCurrentPage();
+    input.blur();
+    return false;
   }
 
-  // A new marker with the title, primary tag and tags of `m`, starting at the
-  // video's current position (and as long as `m` if that has an end time).
+  // "Clone": opens Stash's own Create Marker form (which starts at the
+  // video's current position, with no end) and fills in the title, primary
+  // tag and other tags of `m`. Nothing is created until it is saved there.
   async function cloneMarker(m, button) {
-    const video = findVideoEl();
-    const sceneId = currentSceneId();
-    if (!video || !sceneId) return;
-    const seconds = Math.round(video.currentTime * 1000) / 1000;
-    const input = { scene_id: sceneId, title: m.title || "", seconds };
-    if (m.primary_tag) input.primary_tag_id = m.primary_tag.id;
-    input.tag_ids = (m.tags || []).filter((t) => !m.primary_tag || t.id !== m.primary_tag.id).map((t) => t.id);
-    if (m.end_seconds != null && m.end_seconds > m.seconds) {
-      input.end_seconds = Math.round((seconds + (m.end_seconds - m.seconds)) * 1000) / 1000;
-    }
     const label = button.textContent;
     button.disabled = true;
     try {
-      await callGQL("mutation($input: SceneMarkerCreateInput!) { sceneMarkerCreate(input: $input) { id } }", { input });
-      button.textContent = "Cloned ✓";
-      await refreshStashData();
+      if (cancelOpenForm()) await sleep(300);
+      const panel = findMarkersPanel();
+      const create = panel && Array.from(panel.querySelectorAll("button.btn-primary")).find((b) => !b.closest("form"));
+      if (!create) throw new Error("Couldn't find Stash's Create Marker button in the Markers tab");
+      create.click();
+      let form = null;
+      for (let i = 0; i < 30 && !form; i++) {
+        await sleep(100);
+        form = findStashMarkerForm(panel);
+      }
+      if (!form) throw new Error("Stash's marker form didn't open");
+      form.scrollIntoView({ block: "start", behavior: "smooth" });
+      await sleep(200);
+      const selects = Array.from(form.querySelectorAll('[class*="react-select__control"]')).map((c) => c.parentElement);
+      const multi = (c) => !!c.querySelector('[class*="--is-multi"]');
+      const title = form.querySelector(".select-suggest");
+      const primary = selects.find((c) => c !== title && !multi(c));
+      const tags = selects.find(multi);
+      const missing = [];
+      if (m.title && title && !(await fillSelect(title, m.title, true))) missing.push(m.title);
+      if (m.primary_tag && primary && !(await fillSelect(primary, m.primary_tag.name))) missing.push(m.primary_tag.name);
+      const others = (m.tags || []).filter((t) => !m.primary_tag || t.id !== m.primary_tag.id);
+      for (const t of others) {
+        if (tags && !(await fillSelect(tags, t.name))) missing.push(t.name);
+      }
+      if (missing.length) console.warn("[Marker Symbols] Clone: couldn't fill in", missing);
+      button.title = missing.length ? `Not filled in: ${missing.join(", ")}` : button.title;
     } catch (err) {
       console.warn("[Marker Symbols] Couldn't clone the marker:", err);
       button.textContent = "Failed";
       button.title = String(err.message || err);
+      await sleep(2000);
     }
-    setTimeout(() => { button.textContent = label; button.disabled = false; }, 2000);
+    button.textContent = label;
+    button.disabled = false;
   }
 
   function buildMarkerRow(m) {
@@ -1263,7 +1297,7 @@
     clone.type = "button";
     clone.className = "btn btn-link btn-sm marker-symbols-clone";
     clone.textContent = "Clone";
-    clone.title = "New marker with the same title and tags, starting at the video's current position";
+    clone.title = "Open a new marker with the same title and tags, starting at the video's current position (saved only when you save it)";
     clone.style.cssText = "margin-left:auto;padding:0;flex:none;";
     clone.addEventListener("click", (e) => {
       e.stopPropagation();

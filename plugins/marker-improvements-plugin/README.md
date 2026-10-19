@@ -170,10 +170,11 @@ Stash's:
   the sidebar. It holds still while you edit, while the list is
   collapsed, for a few seconds after you scroll yourself, and on phones
   (where it would scroll the video out of view).
-- **Clone** (next to Edit) makes a new marker with the same title, primary
-  tag and other tags, starting at the video's current position — and as
-  long as the original, if that has an end time. Seek to where the next
-  piece begins, press Clone on a similar marker, then Edit it.
+- **Clone** (next to Edit) opens Stash's Create Marker form filled in with
+  the same title, primary tag and other tags, at the video's current
+  position and with no end time. Nothing is created until you save the
+  form. Seek to where the next piece begins, press Clone on a similar
+  marker, adjust, save.
 - **Hide / Show** collapses the list; your browser remembers the choice.
 
 Stash's own marker list is hidden — only the list itself: its **Create
