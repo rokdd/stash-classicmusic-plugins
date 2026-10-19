@@ -265,7 +265,9 @@
       // the name a flex block; inline, the parents stay on its line.
       `.${MENU_CLASS} ${OPTION} > .react-select-image-option { display: inline-flex !important; }`,
       ".tag-search-parents { margin-left: 6px; opacity: .6; font-size: .85em; }",
-      ".tag-search-extra > .tag-search-image, .tag-search-extra > .tag-search-description { display: none; }",
+      // Styled by their own classes, not by one on the option: React resets an
+      // option's classes when it is hovered or focused.
+      ".tag-search-image, .tag-search-description { display: none; }",
       // Large: a grid of tiles — image on top, name, parents and description below.
       // Every tile has the same fixed height (grid-auto-rows and the tile's
       // own height): a tile that grew on hover pushed the others out of sight,
@@ -282,9 +284,9 @@
       // shows on hover (full image, whole description) stays inside the tile.
       `${large_} ${OPTION}:hover, ${large_} ${OPTION}[class*="--is-focused"] { height: 200px !important; max-height: 200px !important; overflow: hidden !important; }`,
       `${large_} ${OPTION} img:not(.tag-search-image) { max-height: 90px !important; max-width: 100% !important; }`,
-      `${large_} .tag-search-extra > .tag-search-image { display: block; width: 100%; height: 90px; min-height: 90px;` +
+      `${large_} ${OPTION} > .tag-search-image { display: block; width: 100%; height: 90px; min-height: 90px;` +
         " object-fit: contain; background: #fff; margin-bottom: 4px; border-radius: 3px; }",
-      `${large_} .tag-search-extra > .tag-search-description { display: -webkit-box; margin-top: 2px; font-size: 0.75em;` +
+      `${large_} ${OPTION} > .tag-search-description { display: -webkit-box; margin-top: 2px; font-size: 0.75em;` +
         " opacity: 0.75; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }",
     ].join("\n");
     document.head.appendChild(style);
