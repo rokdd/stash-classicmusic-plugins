@@ -1,0 +1,11 @@
+# Markers where the picture goes black — the cuts between pieces, fades
+# between movements, the black before a new item — found with ffmpeg's
+# blackdetect on the Stash server. Reads the whole picture once (remembered).
+name: Black frames
+description: "Splits the video where the picture goes black (fades and cuts between pieces). A marker starts where the picture comes back and ends where the next black begins."
+markerByFragment:
+  action: script
+  timeout: 3600
+  script:
+    - python
+    - black_frames.py

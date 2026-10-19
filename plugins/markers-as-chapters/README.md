@@ -131,6 +131,15 @@ Built in:
   languages** (default `de,en`). Live concerts are rarely there; operas and
   films are. The dialog says which subtitles were used and how many
   downloads are left today.
+- **Black frames** — splits the video where the picture goes black: the
+  fade or cut between pieces. ffmpeg reads a small copy of the whole
+  picture once (remembered per file, so scraping again is instant); a
+  marker starts where the picture comes back and ends where the next black
+  begins ("Part 1", "Part 2" …; name them in the review dialog or the
+  Marker Editor). The video's own fade-in and fade-out give no marker.
+  **Shortest black (seconds)** in the settings (default 1) sets how long a
+  black has to be. Use it to split a recording into markers first, then
+  split the file at them with Scene Improvements. Needs no extra tools.
 - **Text in the picture (OCR)** — reads what's written in the video
   itself: the captions broadcasters show when a piece begins ("HOMEWARD
   BOUND", "Sergej Rachmaninow / Klavierkonzert Nr. 3"), title cards,
