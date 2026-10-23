@@ -1200,6 +1200,14 @@
   async function cloneMarker(m, button) {
     const label = button.textContent;
     button.disabled = true;
+    // The dropdowns open while the tags are typed in; kept invisible meanwhile.
+    if (!document.getElementById("marker-symbols-quiet-style")) {
+      const quiet = document.createElement("style");
+      quiet.id = "marker-symbols-quiet-style";
+      quiet.textContent = 'html.marker-symbols-filling [class*="react-select__menu"] { visibility: hidden !important; box-shadow: none !important; }';
+      document.head.appendChild(quiet);
+    }
+    document.documentElement.classList.add("marker-symbols-filling");
     try {
       if (cancelOpenForm()) await sleep(300);
       const panel = findMarkersPanel();
@@ -1234,6 +1242,7 @@
       button.title = String(err.message || err);
       await sleep(2000);
     }
+    document.documentElement.classList.remove("marker-symbols-filling");
     button.textContent = label;
     button.disabled = false;
   }
