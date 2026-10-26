@@ -131,6 +131,12 @@ Built in:
   languages** (default `de,en`). Live concerts are rarely there; operas and
   films are. The dialog says which subtitles were used and how many
   downloads are left today.
+- **Pauses between movements** — splits the video at the pauses in its
+  audio: a marker starts where the music starts again and ends where the
+  next pause begins ("Part 1", "Part 2" …). Paste the titles of the pieces
+  (one per line) to name them; the longest pauses then split the video
+  into that many pieces. Needs no extra tools beyond ffmpeg; the audio
+  reading is remembered per file.
 - **Black frames** — splits the video where the picture goes black: the
   fade or cut between pieces. ffmpeg reads a small copy of the whole
   picture once (remembered per file, so scraping again is instant); a
