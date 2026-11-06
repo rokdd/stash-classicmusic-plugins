@@ -429,7 +429,9 @@
     }
 
     function applyViewInner() {
-      const panel = findMarkersPanel();
+      const found = findMarkersPanel();
+      // the whole tab: Stash's .scene-markers-panel can be just the list inside it, without the buttons above
+      const panel = found && (found.closest(".tab-pane") || found);
       if (!panel || !sceneId()) return;
       // only while the Markers tab is shown (phones keep every tab in the
       // page, hidden): nothing is put into a tab nobody looks at
@@ -454,7 +456,7 @@
       });
       // show / hide: everything in the tab but the path to the buttons, the
       // editor and Marker Improvements' timeline
-      panel.querySelectorAll(".mac-hidden").forEach((n) => n.classList.remove("mac-hidden"));
+      document.querySelectorAll(".mac-hidden").forEach((n) => n.classList.remove("mac-hidden"));
       if (!chapters) {
         if (inline.box && inline.box.isConnected) inline.box.remove();
         if (form) inline.formOpen = true;
@@ -470,11 +472,12 @@
         if (bar && bar.parentElement) bar.insertAdjacentElement("afterend", inline.box);
         else panel.prepend(inline.box);
       }
-      const keep = new Set([inline.box, bar, panel.querySelector("#marker-symbols-timeline")].filter(Boolean));
+      // only what is inside the tab: never hide anything outside it (navbar, player, other tabs)
+      const keep = new Set([inline.box, bar, panel.querySelector("#marker-symbols-timeline")].filter((n) => n && panel.contains(n)));
       keep.forEach((node) => {
         // its ancestors up to the tab stay; their other children go
         let n = node;
-        while (n && n !== panel && n.parentElement) {
+        while (n && n !== panel && panel.contains(n) && n.parentElement) {
           Array.from(n.parentElement.children).forEach((sib) => {
             if (sib !== n && ![...keep].some((k) => sib.contains(k) || k.contains(sib))) sib.classList.add("mac-hidden");
           });
