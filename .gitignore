@@ -31,3 +31,4 @@ CLAUDE.local.md
 
 # Decision log kept next to DEV.md (personal)
 .claude/decisions.md
+/.secrets/
