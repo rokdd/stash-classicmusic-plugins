@@ -1,0 +1,34 @@
+# Builds the plugin index (build_site.sh) on every push that changes a plugin or scraper and publishes it to the
+# `pages` branch. Stash reads it from
+#   https://git.rokdd.xyz/internal-tools/stash-classicmusic-plugins/raw/branch/pages/main/index.yml
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['plugins/**', 'scrapers/**', 'build_site.sh', '.forgejo/workflows/pages.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Build the index
+        run: |
+          chmod +x build_site.sh
+          ./build_site.sh /tmp/site/main
+
+      - name: Publish to the pages branch
+        run: |
+          cd /tmp/site
+          git init -q -b pages
+          git config user.name "forgejo-actions"
+          git config user.email "forgejo-actions@git.rokdd.xyz"
+          git add -A
+          git commit -q -m "Index of ${GITHUB_SHA}"
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraheader="Authorization: token ${{ secrets.GITHUB_TOKEN }}" push -f origin pages
