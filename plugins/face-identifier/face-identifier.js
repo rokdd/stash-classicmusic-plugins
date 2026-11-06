@@ -9,7 +9,7 @@
   const DIALOG_ID = "face-identifier-dialog";
 
   function gql(query, variables) {
-    return fetch("/graphql", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+    return fetch("graphql", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }) })
       .then((r) => r.json())
       .then((json) => { if (json.errors) throw new Error(json.errors.map((e) => e.message).join("; ")); return json.data; });
@@ -144,8 +144,8 @@
         return el("div", { className: `fi-card ${h.sure ? "" : "fi-maybe"}` },
           el("div", { className: "fi-pics" },
             h.crop ? el("img", { src: h.crop, title: "in the video" }) : "",
-            el("img", { src: `/performer/${h.performer_id}/image`, title: "their portrait" })),
-          el("div", {}, el("a", { href: `/performers/${h.performer_id}`, target: "_blank", textContent: h.name })),
+            el("img", { src: `performer/${h.performer_id}/image`, title: "their portrait" })),
+          el("div", {}, el("a", { href: `performers/${h.performer_id}`, target: "_blank", textContent: h.name })),
           el("div", { className: "small text-muted", textContent:
             `${h.sure ? "" : "maybe — "}seen in ${h.count} frame${h.count === 1 ? "" : "s"} · ${Math.round(h.best * 100)} % alike` }),
           times(h.times || []), action);

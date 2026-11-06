@@ -27,7 +27,7 @@
   if (typeof originalFetch !== "function" || originalFetch.__scrapeTagMergeWrapped) return;
 
   function gql(query, variables) {
-    return originalFetch("/graphql", {
+    return originalFetch("graphql", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

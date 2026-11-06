@@ -511,7 +511,7 @@
       tracker.pending = {};
       const body = JSON.stringify({ query: "mutation($plugin_id: ID!, $args: Map) { runPluginOperation(plugin_id: $plugin_id, args: $args) }",
         variables: { plugin_id: PLUGIN_ID, args: { mode: "chapter_play", plays: JSON.stringify(plays) } } });
-      fetch("/graphql", { method: "POST", credentials: "include", keepalive: !!leaving,
+      fetch("graphql", { method: "POST", credentials: "include", keepalive: !!leaving,
         headers: { "Content-Type": "application/json" }, body }).catch(() => {});
     }
 

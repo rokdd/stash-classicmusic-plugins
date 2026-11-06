@@ -57,7 +57,7 @@
   // -- data ---------------------------------------------------------------
 
   function callGQL(query, variables) {
-    return fetch("/graphql", {
+    return fetch("graphql", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

@@ -34,7 +34,7 @@
   const LOST = "Lost the connection to the Stash server.";
 
   function gql(query, variables) {
-    return fetch("/graphql", {
+    return fetch("graphql", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -1236,7 +1236,7 @@
           done.existed
             ? `${done.name} was there already and is now tagged ${done.marker}. `
             : `${done.name} created, tagged ${done.marker} — Tag Improvements makes the composer tag. `,
-          el("a", { href: `/performers/${done.id}`, textContent: "Open" })));
+          el("a", { href: `performers/${done.id}`, textContent: "Open" })));
       } catch (err) {
         status.replaceChildren(el("div", { className: "alert alert-danger", textContent: String(err.message || err) }));
       }

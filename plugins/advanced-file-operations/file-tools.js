@@ -28,7 +28,7 @@
   const REMEMBER_KEY = "advancedFileOperations.fileTools";
 
   function gql(query, variables) {
-    return fetch("/graphql", {
+    return fetch("graphql", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

@@ -1,6 +1,6 @@
 name: Face Identifier
 description: "Who's in a scene, by their faces: learns your performers' faces from their portraits, looks at frames of the video and shows who's recognised (add them to the scene), the faces nobody's known by (say who it is — added and learnt), and optionally Visage's answer. Like starIdentifier, with a dialog. Needs OpenCV on the Stash server: pip install opencv-python-headless numpy."
-version: 0.0.1
+version: 0.0.2
 url: https://github.com/rokdd/stash-classicmusic-plugins/tree/main/plugins/face-identifier
 exec:
   - python

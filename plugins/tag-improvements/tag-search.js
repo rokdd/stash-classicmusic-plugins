@@ -47,7 +47,7 @@
   let settings = null;
   function loadSettings() {
     if (!settings) {
-      settings = originalFetch("/graphql", {
+      settings = originalFetch("graphql", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -94,7 +94,7 @@
       query,
       variables: { filter: { per_page: -1, sort: "name", direction: "ASC" } },
     });
-    const response = await originalFetch("/graphql", { ...init, body });
+    const response = await originalFetch("graphql", { ...init, body });
     const json = await response.json();
     const found = json.data.findTags;
     const byId = new Map(found.tags.map((t) => [String(t.id), t]));

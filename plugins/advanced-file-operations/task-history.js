@@ -25,7 +25,7 @@
   const CHANGED_EVENT = "afo:taskHistoryChanged";
 
   function gql(query, variables) {
-    return fetch("/graphql", {
+    return fetch("graphql", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
