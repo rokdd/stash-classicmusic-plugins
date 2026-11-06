@@ -468,12 +468,17 @@
         inline.formOpen = false;
         chapterEditor(inline.box);
       }
+      // Stash 0.32: the buttons sit right inside the tab's panel, next to Stash's list — keep the buttons, not the whole bar
+      const mixed = !!bar && !!bar.querySelector(":scope > .wall, :scope > .container, :scope > .row");
+      const switchEl = bar ? bar.querySelector("#mac-view-switch") : null;
       if (!inline.box.isConnected) {
-        if (bar && bar.parentElement) bar.insertAdjacentElement("afterend", inline.box);
+        if (mixed && switchEl) switchEl.insertAdjacentElement("afterend", inline.box);
+        else if (bar && bar.parentElement) bar.insertAdjacentElement("afterend", inline.box);
         else panel.prepend(inline.box);
       }
       // only what is inside the tab: never hide anything outside it (navbar, player, other tabs)
-      const keep = new Set([inline.box, bar, panel.querySelector("#marker-symbols-timeline")].filter((n) => n && panel.contains(n)));
+      const barParts = mixed ? Array.from(bar.children).filter((c) => c.matches("button, .btn-group")) : [bar];
+      const keep = new Set([inline.box, ...barParts, panel.querySelector("#marker-symbols-timeline")].filter((n) => n && panel.contains(n)));
       keep.forEach((node) => {
         // its ancestors up to the tab stay; their other children go
         let n = node;
