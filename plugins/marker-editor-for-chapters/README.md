@@ -6,10 +6,11 @@ the audio, the composers and the tags; Stash installs it with this plugin.
 
 ## Where
 
-- **The Markers tab** shows it in place of Stash's marker list — switch
-  **Chapters | Stash's list** next to the buttons (remembered in the
-  browser). While Stash's own marker form is open (Create Marker, editing
-  one) the tab is Stash's; afterwards the editor loads the chapters again.
+- **The Markers tab** shows it in place of Stash's marker list. Turn on
+  **Show Stash's own marker list** in Settings → Plugins to get Stash's list
+  back (it's read again with every scene). While Stash's own marker form is
+  open (Create Marker, editing one) the tab is Stash's; afterwards the
+  editor loads the chapters again.
 - **Scrape markers… → Chapter editor** — the same as a dialog.
 
 ## What it does

@@ -1,6 +1,6 @@
 // Marker Editor for Chapters — the scene's chapters (markers) in one table:
-// in the Markers tab (in place of Stash's list; switch "Chapters | Stash's
-// list"), or as a dialog. Add from every source (the scrapers of Markers as
+// in the Markers tab (in place of Stash's list, unless the setting "Show
+// Stash's own marker list" is on), or as a dialog. Add from every source (the scrapers of Markers as
 // Chapters), combine duplicates, clean the titles and find the composers,
 // extend to the next pause, see how often each chapter was played — and
 // save it all at once.
@@ -408,20 +408,33 @@
     // list": the tab as Stash has it. While Stash's own marker form is open
     // (Create Marker, editing one) the tab is Stash's; when it closes, the
     // editor loads the chapters again.
-    const VIEW_KEY = "markersAsChapters.markersView";
+    const OWN_ID = "markerEditorForChapters";
     const inline = { scene: null, box: null, formOpen: false };
 
-    function markersView() {
-      try { return window.localStorage.getItem(VIEW_KEY) || "chapters"; } catch (e) { return "chapters"; }
+    // Setting "Show Stash's own marker list" (off = the chapter editor). Read
+    // again on every scene, so a change in Settings shows up on the next one.
+    let showStashList = false;
+    let settingsFor = null;
+    function loadSettings() {
+      const scene = sceneId();
+      if (!scene || settingsFor === scene) return;
+      settingsFor = scene;
+      gql("query { configuration { plugins } }")
+        .then((data) => {
+          const mine = ((data.configuration || {}).plugins || {})[OWN_ID] || {};
+          const now = mine.showStashMarkerList === true;
+          if (now !== showStashList) { showStashList = now; applyView(); }
+        })
+        .catch(() => { /* keep what it was */ });
     }
 
-    function setMarkersView(view) {
-      try { window.localStorage.setItem(VIEW_KEY, view); } catch (e) { /* this page only */ }
-      applyView();
+    function markersView() {
+      return showStashList ? "stash" : "chapters";
     }
 
     function applyView() {
       try {
+        loadSettings();
         applyViewInner();
       } catch (err) {
         console.warn("[Markers as Chapters] chapter view:", err); // never into Stash's own page
@@ -439,21 +452,12 @@
       const create = Array.from(panel.querySelectorAll("button.btn-primary")).find(
         (b) => !b.closest("form") && !b.closest("#marker-symbols-timeline") && !b.closest("#mac-inline-editor"));
       const bar = create ? create.parentElement : null;
-      if (bar && !bar.querySelector("#mac-view-switch")) {
-        const pick = (view, label) => el("button", { type: "button", className: "btn btn-sm btn-secondary", "data-view": view,
-          textContent: label, onclick: () => setMarkersView(view) });
-        bar.append(el("div", { id: "mac-view-switch", className: "btn-group ml-2" },
-          pick("chapters", "Chapters"), pick("stash", "Stash's list")));
-      }
       if (create && !create.dataset.macView) {
         create.dataset.macView = "1";
         create.addEventListener("click", () => { inline.formOpen = true; }, true); // Stash's form: shown as Stash has it
       }
       const form = !!panel.querySelector("form:not(#mac-inline-editor form)");
       const chapters = markersView() === "chapters" && !form;
-      panel.querySelectorAll("#mac-view-switch button").forEach((b) => {
-        b.className = `btn btn-sm ${(b.dataset.view === "chapters") === chapters ? "btn-primary" : "btn-secondary"}`;
-      });
       // show / hide: everything in the tab but the path to the buttons, the
       // editor and Marker Improvements' timeline
       document.querySelectorAll(".mac-hidden").forEach((n) => n.classList.remove("mac-hidden"));
@@ -470,14 +474,14 @@
       }
       // Stash 0.32: the buttons sit right inside the tab's panel, next to Stash's list — keep the buttons, not the whole bar
       const mixed = !!bar && !!bar.querySelector(":scope > .wall, :scope > .container, :scope > .row");
-      const switchEl = bar ? bar.querySelector("#mac-view-switch") : null;
+      const barParts = mixed ? Array.from(bar.children).filter((c) => c.matches("button, .btn-group")) : [bar];
       if (!inline.box.isConnected) {
-        if (mixed && switchEl) switchEl.insertAdjacentElement("afterend", inline.box);
+        const last = barParts[barParts.length - 1];
+        if (mixed && last) last.insertAdjacentElement("afterend", inline.box);
         else if (bar && bar.parentElement) bar.insertAdjacentElement("afterend", inline.box);
         else panel.prepend(inline.box);
       }
       // only what is inside the tab: never hide anything outside it (navbar, player, other tabs)
-      const barParts = mixed ? Array.from(bar.children).filter((c) => c.matches("button, .btn-group")) : [bar];
       const keep = new Set([inline.box, ...barParts, panel.querySelector("#marker-symbols-timeline")].filter((n) => n && panel.contains(n)));
       keep.forEach((node) => {
         // its ancestors up to the tab stay; their other children go
